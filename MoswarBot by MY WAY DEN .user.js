@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.7.2
+// @version      1.7.3
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -9829,9 +9829,14 @@
               container.innerHTML = '';
               const addedPetAbiKeys = new Set();
               const registerPetAbiKey = (type, petId, abilityIdOrType) => {
-                  const key = type === 'pet'
-                      ? `pet:${petId}:${abilityIdOrType}`
-                      : `petd:${petId}:${abilityIdOrType}`;
+                  let key;
+                  if (type === 'pet') {
+                      key = `pet:${petId}:${abilityIdOrType}`;
+                  } else if (type === 'pet-generic') {
+                      key = `petg:${petId}:${abilityIdOrType}`;
+                  } else {
+                      key = `petd:${petId}:${abilityIdOrType}`;
+                  }
                   if (addedPetAbiKeys.has(key)) return false;
                   addedPetAbiKeys.add(key);
                   return true;
@@ -9853,12 +9858,14 @@
 
                               const isAbility = onclick.toLowerCase().includes('petarenaactivateability') || onclick.toLowerCase().includes('petuseabil');
                               const isCd = !!thumb.querySelector('.timer, .cooldown, .timeout');
+                              let foundAbility = false;
 
                               if (isAbility) {
                                   // 1. Training abilities
                                   let m = onclick.match(/petarenaActivateAbility\s*\(\s*['"]?(\d+)['"]?\s*,\s*['"]?(\d+)['"]?.*?\)/i);
                                   if (m) {
                                       if (!registerPetAbiKey('pet', m[1], m[2])) return;
+                                      foundAbility = true;
                                       const item = document.createElement('div');
                                       item.className = 'fd-item' + (isCd ? ' inactive done' : '');
                                       item.dataset.type = 'pet';
@@ -9889,6 +9896,26 @@
 
                                       el.innerHTML = `<div class="fd-icon-wrapper" title="${petName}: ${abName}"><img src="${abImg}"></div>`;
                                       container.appendChild(el);
+                                      foundAbility = true;
+                                  }
+
+                                  // 3. Fallback: общий парсер для любых способностей с onclick (если не распознаны выше)
+                                  if (!foundAbility) {
+                                      const imgInThumb = thumb.querySelector('img');
+                                      const isInfoBtn = onclick.includes('/petarena/train/') && onclick.includes('goToUrl');
+                                      if (imgInThumb && onclick && !isInfoBtn) {
+                                          if (registerPetAbiKey('pet-generic', petId, onclick.substring(0, 60))) {
+                                              const abName = imgInThumb.getAttribute('title') || imgInThumb.getAttribute('alt') || petName + ' Ability';
+                                              const abImg = imgInThumb.src || petImg;
+                                              const item = document.createElement('div');
+                                              item.className = 'fd-item' + (isCd ? ' inactive done' : '');
+                                              item.dataset.type = 'pet-generic';
+                                              item.dataset.petId = petId;
+                                              item.dataset.abilityOnclick = onclick.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                                              item.innerHTML = `<div class="fd-icon-wrapper" title="${petName}: ${abName}"><img src="${abImg}"></div>`;
+                                              container.appendChild(item);
+                                          }
+                                      }
                                   }
                               }
                           });
@@ -10245,7 +10272,7 @@
               const id = String(rocketId);
               return document.getElementById(`fly${id}`) || document.querySelector(`button[onclick*="Cosmodrome.doFly(${id})"]`);
           };
-          const waitForFlyButton = async (rocketId, tries = 12, delay = 400) => {
+          const waitForFlyButton = async (rocketId, tries = 6, delay = 300) => {
               for (let t = 0; t < tries; t++) {
                   const b = findFlyButton(rocketId);
                   if (b) return b;
@@ -10291,7 +10318,7 @@
                   return null;
               };
 
-              const waitForLiveAbilityBtn = async (tries = 18, delay = 350) => {
+              const waitForLiveAbilityBtn = async (tries = 8, delay = 250) => {
                   for (let i = 0; i < tries; i++) {
                       const b = findLiveAbilityBtn();
                       if (b) return b;
@@ -10364,16 +10391,12 @@
                   case 'dope':
                       await request('/player/json/use-many/', { ids: task.dataId });
                       logs.push(`💊 Допинг: ${task.dataId}`);
-                      await sleep(700);
-                      logs.push(`💊 Допинги: OK`);
-                      await sleep(200);
+                      await sleep(300);
                       break;
                   case 'pet':
                       await request(`/petarena/train/${task.petId}/`, { action: 'activate_ability', ability: task.abilityId });
                       logs.push(`🐾 Питомец: ${task.abilityId}`);
-                      await sleep(900);
-                      logs.push(`🐾 Питомец: OK`);
-                      await sleep(300);
+                      await sleep(500);
                       break;
                   case 'pet-direct': {
                       const petAct = await activatePetDirectAbility(task);
@@ -10386,18 +10409,41 @@
                       } else {
                           logs.push(`🐾 Пет-способность: ${task.abilityType}`);
                       }
-                      await sleep(1100);
-                      await sleep(300);
+                      await sleep(600);
+                      break;
+                  }
+                  case 'pet-generic': {
+                      // Общий обработчик: пробуем выполнить onclick напрямую
+                      const pid = String(task.petId);
+                      const trainPath = `/petarena/train/${pid}/`;
+                      const onTrainPage = () => location.pathname.replace(/\/+$/, '') === trainPath.replace(/\/+$/, '');
+                      if (!onTrainPage()) {
+                          if (!task._petTrainNavPending) task._petTrainNavPending = true;
+                          location.href = trainPath;
+                          return 'NAVIGATE';
+                      }
+                      delete task._petTrainNavPending;
+                      const abilityOnclick = task.abilityOnclick || '';
+                      if (abilityOnclick) {
+                          try {
+                              const fn = new pw.Function('event', abilityOnclick);
+                              fn.call(document.body, document.createElement('div'));
+                              logs.push(`🐾 Питомец (generic): OK`);
+                              await sleep(600);
+                              return true;
+                          } catch (e) {
+                              console.warn('[FullDope] generic ability exec failed:', e);
+                              logs.push(`⚠️ Питомец (generic): ошибка выполнения`);
+                          }
+                      }
+                      await sleep(600);
                       break;
                   }
                   case 'ride':
                       await request(`/automobile/buypetrol/${parseInt(task.car, 10) || 0}/`, { ajax: 1 });
-                      await sleep(200);
-                      await sleep(100);
                       await request('/automobile/ride_many/', { rides: JSON.stringify([{ car: parseInt(task.car, 10), direction: parseInt(task.dir, 10) }]) });
                       logs.push(`🚗 Поездка: ${task.car}/${task.dir}`);
-                      await sleep(800);
-                      await sleep(300);
+                      await sleep(600);
                       break;
                   case 'rocket': {
                       const pages = getRocketPageList(task);
@@ -10413,16 +10459,13 @@
                       const flyBtn = await waitForFlyButton(task.dataId);
                       if (flyBtn) {
                           if (invokeOnclickFromAttribute(flyBtn, 'onclick')) {
-                              await sleep(1200);
-                              await sleep(600);
+                              await sleep(800);
                           } else if (typeof flyBtn.click === 'function') {
                               flyBtn.click();
-                              await sleep(1200);
-                              await sleep(600);
+                              await sleep(800);
                           }
                           logs.push(`🚀 Ракета: ${task.dataId}`);
-                          await sleep(800);
-                          await sleep(300);
+                          await sleep(500);
                           delete task._rocketTryPath;
                           break;
                       }
@@ -10430,12 +10473,10 @@
                       const cosObj = pw.Cosmodrome;
                       if (cosObj && typeof cosObj.doFly === 'function') {
                           cosObj.doFly(parseInt(task.dataId, 10));
-                          await sleep(1400);
-                          await sleep(700);
+                          await sleep(1000);
                           logs.push(`🚀 Ракета (doFly): ${task.dataId}`);
                           delete task._rocketTryPath;
-                          await sleep(800);
-                          await sleep(300);
+                          await sleep(500);
                           break;
                       }
 
@@ -10455,7 +10496,7 @@
                   case 'labubu':
                       await request('/labubu/', { action: 'activate', code: task.dataId });
                       logs.push(`🐻 Лабубу: ${task.dataId}`);
-                      await sleep(1200);
+                      await sleep(500);
                       break;
                   case 'nuck':
                       if (pw.Cosmodrome && typeof pw.Cosmodrome.doNuck === 'function') {
@@ -10468,31 +10509,44 @@
                           }
                           console.warn('[FullDope] Cosmodrome.doNuck not found on cosmodrome page');
                           logs.push('⚠️ Ядерка недоступна');
-                          await sleep(400);
+                          await sleep(200);
                           break;
                       }
                       logs.push('☢️ Ядерный удар');
-                      await sleep(2000);
+                      await sleep(800);
                       break;
                   case 'misc':
                       if (task.id === 'fd-moscowpoly') {
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
+                          const mp = window.Moscowpoly;
                           for (let i = 0; i < count; i++) {
-                              const r = await request('/home/moscowpoly_roll/', { action: 'moscowpoly_roll' });
-                              if (!r || r.result === 0) break;
-                              await sleep(2000);
-                              await request('/home/moscowpoly_activate/', { action: 'moscowpoly_activate' });
+                              // Быстрый бросок: прямой вызов функции игры (без анимации)
+                              if (mp && typeof mp.dropDices === 'function' && !mp.inAction) {
+                                  mp.dropDices();
+                                  // Ждём завершения анимации (~1-1.5 сек)
+                                  await sleep(1200);
+                              } else {
+                                  // Fallback: AJAX
+                                  const r = await request('/home/moscowpoly_roll/', { action: 'moscowpoly_roll' });
+                                  if (!r || r.result === 0) break;
+                                  await sleep(800);
+                              }
+                              // Активация бонуса
+                              if (mp && typeof mp.doActivate === 'function' && !mp.inAction) {
+                                  mp.doActivate();
+                                  await sleep(400);
+                              } else {
+                                  await request('/home/moscowpoly_activate/', { action: 'moscowpoly_activate' });
+                                  await sleep(400);
+                              }
                               done++;
-                              await sleep(1500);
                           }
                           logs.push(`🎲 Москвополия: ${done}`);
                       } else if (task.id === 'fd-stash') {
                           await request('/home/business/', { action: 'activate' });
-                          await sleep(400);
                           await request('/home/business/activate/', { ajax: 1, action: 'activate' });
-                          await sleep(400);
                           await request('/home/business/', { action: 'get' });
                           logs.push('💰 Бизнес');
                       } else if (task.id === 'fd-autopilot') {
@@ -10551,17 +10605,17 @@
                               for (let i = 0; i < limit; i++) {
                                   const res = await request(evt.url, { action: 'activate-talant' });
                                   if (!res || res.result === 0) break;
-                                  await sleep(1500);
+                                  await sleep(800);
                               }
                           } else {
                               await request(evt.url, { action: 'activate-talant' });
                           }
                           logs.push(evt.name);
                       }
-                      await sleep(1000);
+                      await sleep(500);
                       break;
                   default:
-                      await sleep(200);
+                      await sleep(100);
                       break;
               }
           };
