@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.7.3
+// @version      1.7.4
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -936,7 +936,8 @@
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'minibot', name: 'МиниБот', icon: '<img src="/@/images/pers/n26/1.png" style="background: transparent url(/@/images/pers/n26/1_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'Хаос, Противостояние, Дуэли, Патруль, Шаурма, Пахан, Дэпс, ИИ - Полные стратегии боя с предметами/способностями (1-10 ход)', version: '0.7.11' },
-      { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' }
+      { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
+      { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
   
 
@@ -1335,7 +1336,8 @@
       'flag': 'flag-panel',
       'fulldope': 'fulldope-modal',
       'minibot': 'zk-panel',
-      'omon': 'omon-panel'
+      'omon': 'omon-panel',
+      'omniscience': 'mw-omniscience-panel'
   };
 
   function getPanelEl(id) {
@@ -1823,7 +1825,8 @@
               'satellite': 'sat-stop',
               'flag': 'flag-stop',
               'minibot': 'mb-stop',
-              'omon': 'omon-stop'
+              'omon': 'omon-stop',
+              'omniscience': 'omniscience-stop-btn'
           };
           const btnId = stopMap[id];
           if (btnId) {
@@ -19922,7 +19925,7 @@ function updatePanelUI() {
           if (!btnId) return reply(`⚠️ Команда ${cmd} не поддерживается для ${cfg.name}`);
 
           const btn = document.getElementById(btnId);
-          if (btn) {
+      if (btn) {
               btn.click();
               reply(`✅ Выполнено: <b>${cmd} ${cfg.name}</b>`);
           } else {
@@ -19930,6 +19933,273 @@ function updatePanelUI() {
           }
       }
   }
+
+  // === МОДУЛЬ: ОКО ПРОВИДЕНИЯ (OMNISCIENCE) ===
+  BotModules.omniscience = function() {
+      console.log('[Omniscience] Запуск модуля');
+      try {
+          initOmniscienceUI();
+      } catch(e) {
+          console.error('[Omniscience] Ошибка запуска:', e);
+      }
+  };
+
+  MoswarLib.modules['omniscience'] = {
+      init: function() {
+          try {
+              BotModules.omniscience();
+          } catch(e) {
+              console.error('[Omniscience] Ошибка init:', e);
+          }
+      }
+  };
+
+  function initOmniscienceUI() {
+      console.log('[Omniscience] Создание UI...');
+      
+      if (document.getElementById('mw-omniscience-panel')) {
+          console.log('[Omniscience] Панель уже существует');
+          return;
+      }
+
+      try {
+          // Добавляем стили для круглых иконок
+          const styleId = 'omniscience-round-icons';
+          if (!document.getElementById(styleId)) {
+              const style = document.createElement('style');
+              style.id = styleId;
+              style.textContent = `
+                  .omni-round-icon {
+                      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+                      background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+                      border-radius: 50%;
+                      box-shadow: inset 0 0 8px rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.2);
+                      border: 1px solid rgba(255,255,255,0.15);
+                      backdrop-filter: blur(4px);
+                      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                      position: relative; overflow: hidden;
+                  }
+                  .omni-round-icon::after {
+                      content:''; position:absolute; top:4px; left:6px; width:8px; height:4px;
+                      border-radius:50%; background:rgba(255,255,255,0.4); filter:blur(1px); transform:rotate(-45deg);
+                  }
+                  .omni-ability-item:hover .omni-round-icon {
+                      transform: scale(1.15);
+                      background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1));
+                      box-shadow: inset 0 0 12px rgba(255,255,255,0.2), 0 8px 20px rgba(0,0,0,0.3);
+                      border-color: rgba(255,255,255,0.3);
+                      z-index: 10;
+                  }
+                  .omni-ability-item.selected .omni-round-icon {
+                      background: rgba(46, 204, 113, 0.25);
+                      border-color: rgba(46, 204, 113, 0.6);
+                      box-shadow: inset 0 0 15px rgba(46, 204, 113, 0.1), 0 4px 12px rgba(0,0,0,0.2);
+                  }
+              `;
+              document.head.appendChild(style);
+          }
+
+          const panel = document.createElement('div');
+          panel.id = 'mw-omniscience-panel';
+          panel.style.cssText = `
+              position: fixed; top: 100px; right: 440px; z-index: 9999999;
+              width: 340px; max-height: 80vh;
+              background: rgba(20, 25, 35, 0.65);
+              backdrop-filter: blur(12px);
+              -webkit-backdrop-filter: blur(12px);
+              border: 1px solid rgba(255,255,255,0.1);
+              border-radius: 24px;
+              color: #fff;
+              font-size: 12px;
+              display: flex;
+              flex-direction: column;
+              box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+              cursor: move;
+              user-select: none;
+          `;
+
+          panel.innerHTML = `
+              <div style="padding: 10px 15px; background: rgba(255,255,255,0.05); border-radius: 24px 24px 0 0; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                  <span style="font-weight: 600; letter-spacing: 0.5px;">👁️ Око Провидения</span>
+                  <span class="toggle-btn" style="font-size: 20px; opacity: 0.7; cursor: pointer;">▾</span>
+              </div>
+              <div class="panel-body" style="padding: 10px; overflow-y: auto; flex: 1;">
+                  <div id="omniscience-abilities" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;"></div>
+              </div>
+          `;
+
+          document.body.appendChild(panel);
+          console.log('[Omniscience] Панель создана');
+
+          const toggle = panel.querySelector('.toggle-btn');
+          const body = panel.querySelector('.panel-body');
+          let collapsed = false;
+
+          toggle.onclick = () => {
+              collapsed = !collapsed;
+              body.style.display = collapsed ? 'none' : 'block';
+              toggle.textContent = collapsed ? '▸' : '▾';
+          };
+
+          // Dragging logic
+          let isDragging = false, offsetX, offsetY;
+          panel.onmousedown = (e) => {
+              if (e.target.classList.contains('toggle-btn')) return;
+              isDragging = true;
+              offsetX = e.clientX - panel.offsetLeft;
+              offsetY = e.clientY - panel.offsetTop;
+          };
+          document.onmousemove = (e) => {
+              if (!isDragging) return;
+              panel.style.left = (e.clientX - offsetX) + 'px';
+              panel.style.top = (e.clientY - offsetY) + 'px';
+              panel.style.right = 'auto';
+          };
+          document.onmouseup = () => isDragging = false;
+
+          // Обновление абилок
+          let lastAbilitiesHash = '';
+          const updateAbilities = () => {
+              const container = document.getElementById('omniscience-abilities');
+              if (!container) return;
+
+              const slots = document.querySelectorAll('.fight-slots-ability img[data-id]');
+              if (slots.length === 0) {
+                  container.innerHTML = '';
+                  return;
+              }
+
+              // Создаем хеш для проверки изменений
+              const currentHash = Array.from(slots).map(img => img.dataset.id).join(',');
+              if (currentHash === lastAbilitiesHash) return; // Нет изменений
+              lastAbilitiesHash = currentHash;
+
+              // Очищаем и пересоздаем кнопки
+              container.innerHTML = '';
+              
+              slots.forEach(img => {
+                  const id = img.dataset.id;
+                  const label = img.closest('label');
+                  if (!label) return;
+                  const input = label.querySelector('input[type="radio"]');
+                  if (!input) return;
+                  const name = input.getAttribute('rel') || `Абилка ${id}`;
+                  const iconSrc = img.src || '';
+
+                  const btn = document.createElement('div');
+                  btn.className = 'omni-ability-item';
+                  btn.dataset.id = id;
+                  btn.title = name;
+                  btn.style.cssText = `
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      padding: 4px;
+                      border-radius: 8px;
+                      cursor: pointer;
+                      transition: all 0.2s;
+                      background: transparent;
+                      border: 1px solid transparent;
+                  `;
+
+                  // Круглая обертка для иконки
+                  const iconWrapper = document.createElement('div');
+                  iconWrapper.className = 'omni-round-icon';
+                  iconWrapper.style.marginBottom = '0';
+
+                  const iconImg = document.createElement('img');
+                  iconImg.src = iconSrc;
+                  iconImg.style.cssText = `
+                      width: 70%; height: 70%; object-fit: contain;
+                      pointer-events: none;
+                      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+                  `;
+                  iconWrapper.appendChild(iconImg);
+                  btn.appendChild(iconWrapper);
+
+                  btn.onclick = () => {
+                      // Убираем выделение со всех
+                      container.querySelectorAll('.omni-ability-item').forEach(item => {
+                          item.classList.remove('selected');
+                      });
+
+                      // Выделяем текущую
+                      btn.classList.add('selected');
+
+                      try {
+                          const id = btn.dataset.id;
+                          const radio = document.querySelector(`input[type="radio"][value="${id}"]`);
+                          if (radio) {
+                              radio.click();
+                              const li = radio.closest('li');
+                              if (li) {
+                                  li.style.transition = 'all 0.3s';
+                                  li.style.background = 'rgba(100, 255, 150, 0.5)';
+                                  li.style.borderRadius = '50%';
+                                  setTimeout(() => {
+                                      li.style.background = '';
+                                      li.style.borderRadius = '';
+                                  }, 1000);
+                              }
+                          }
+
+                          // КЛИКАЕМ ПО КНОПКЕ ДЕЙСТВИЯ (useabl-{id})
+                          const actionBtn = document.getElementById(`useabl-${id}`);
+                          if (actionBtn) {
+                              console.log('[Omniscience] Нажимаю кнопку действия:', actionBtn);
+                              actionBtn.click();
+                          } else {
+                              console.log('[Omniscience] Кнопка действия не найдена для id:', id);
+                          }
+
+                          console.log('[Omniscience] Выбрана и применена абилка:', name, id);
+                      } catch(e) {
+                          console.error('[Omniscience] Ошибка выбора:', e);
+                      }
+                  };
+                  container.appendChild(btn);
+              });
+          };
+
+          // Периодическая проверка вместо MutationObserver
+          setInterval(() => {
+              try {
+                  updateAbilities();
+              } catch(e) {
+                  console.error('[Omniscience] Ошибка обновления:', e);
+              }
+          }, 1500);
+
+          // Обработка клика на строку модуля в меню - сворачивание/разворачивание панели
+          const observerMenu = new MutationObserver(() => {
+              const modRow = document.querySelector('.mw-mod-row[data-id="omniscience"]');
+              if (modRow && !modRow._omniscienceBound) {
+                  modRow._omniscienceBound = true;
+                  modRow.addEventListener('click', () => {
+                      setTimeout(() => {
+                          const panel = document.getElementById('mw-omniscience-panel');
+                          if (panel) {
+                              const body = panel.querySelector('.panel-body');
+                              const toggle = panel.querySelector('.toggle-btn');
+                              if (body && toggle) {
+                                  const isHidden = body.style.display === 'none';
+                                  body.style.display = isHidden ? 'block' : 'none';
+                                  toggle.textContent = isHidden ? '▾' : '▸';
+                              }
+                          }
+                      }, 100);
+                  });
+              }
+          });
+          observerMenu.observe(document.body, { childList: true, subtree: true });
+
+          console.log('[Omniscience] Модуль инициализирован успешно');
+      } catch(e) {
+          console.error('[Omniscience] Критическая ошибка:', e);
+      }
+  }
+
   const Core = {
       ui: null,
       init: function() {
