@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.7.4
+// @version      1.7.5
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -72,7 +72,7 @@
   const SecurityContext = (function() {
       // Hardcoded encrypted values (Base64) to prevent simple text search
       const _roots = ['REVO', 'Q2FzcGVy']; // DEN, Casper
-      const _clans = ['MjI0ODc=', 'MTE4OTk=', 'MTMyNw==']; // 22487, 11899, 1327
+      const _clans = ['MjI0ODc=', 'MTMyNw==']; // 22487, 1327
 
       // Load config securely
       let _cfg = { tgToken: '', tgChatId: '' };
@@ -97,10 +97,12 @@
           get tgChatId() { return _cfg.tgChatId; },
           set tgChatId(v) { _cfg.tgChatId = v; this._save(); },
           whitelistUrl: 'https://pastebin.com/raw/Gh9YfRkq',
+          // Локально разрешенные ID игроков (дополнительно к remote whitelist)
+          allowedPlayerIds: ['7173951'],
           _save: () => localStorage.setItem('moswar_bot_config_admin', JSON.stringify(_cfg)),
           // API Compatibility layer for existing code
           root: ['DEN', 'Casper'],
-          clan: ['22487', '11899', '1327', _homeClan].filter(Boolean)
+          clan: ['22487', '1327', _homeClan].filter(Boolean)
       };
 
       // [SECURITY] Freeze context to prevent runtime modification
@@ -627,13 +629,13 @@
       get chatId() { try { return atob(this._c); } catch(e) { return ''; } }
   };
 
-  let authState = { isRoot: false, isMember: false, authorized: false, playerName: 'Unknown', clanName: '' };
+  let authState = { isRoot: false, isMember: false, authorized: false, playerName: 'Unknown', clanName: '', blocked: false, blockReason: '' };
 
   function updateHubHeader() {
       const container = document.getElementById('mw-player-info');
       if (!container) return;
 
-      const { isRoot, isMember, authorized, playerName, clanName, isDemo, demoExpired } = authState;
+      const { isRoot, isMember, authorized, playerName, clanName, blocked } = authState;
       const displayName = playerName || 'Unknown';
       const displayClan = clanName ? `<div style="font-size:0.85em;opacity:0.8;margin-top:2px;">${clanName}</div>` : '';
 
@@ -649,22 +651,14 @@
           statusLabel = 'CLAN';
           statusClass = 'mw-player-clan';
           statusTextClass = 'mw-text-clan';
+      } else if (blocked) {
+          statusLabel = 'BLOCKED';
+          statusClass = 'mw-player-unauthorized';
+          statusTextClass = 'mw-text-unauthorized';
       } else if (!authorized) {
-          if (demoExpired) {
-              statusLabel = 'EXPIRED';
-              statusClass = 'mw-player-unauthorized';
-              statusTextClass = 'mw-text-unauthorized';
-          } else if (isDemo) {
-              statusLabel = 'DEMO';
-              statusClass = 'mw-player-guest';
-              statusTextClass = 'mw-text-guest';
-          } else if (playerName === 'Unknown') {
-              statusLabel = 'LOADING...';
-          } else {
-              statusLabel = 'UNAUTHORIZED';
-              statusClass = 'mw-player-unauthorized';
-              statusTextClass = 'mw-text-unauthorized';
-          }
+          statusLabel = 'UNAUTHORIZED';
+          statusClass = 'mw-player-unauthorized';
+          statusTextClass = 'mw-text-unauthorized';
       }
 
       container.className = `mw-player-info ${statusClass}`;
@@ -838,72 +832,87 @@
           authState.authorized = true;
       }
 
-      // 4. Проверка УДАЛЕННОГО списка (если не в клане и не DEN)
-      // myId уже определен выше
-      try {
-          if (!authState.authorized && myId) {
-              // Обновляем белый список, если он пуст или устарел (10 мин)
-              const lastUpdate = localStorage.getItem('den_bot_whitelist_ts');
-              if (!lastUpdate || Date.now() - parseInt(lastUpdate) > 10 * 60 * 1000) {
-                  try {
-                      const response = await crossFetch(ADMIN.whitelistUrl + '?t=' + Date.now()); // Анти-кэш
-                      if (response.ok) {
-                          const text = await response.text();
-                          localStorage.setItem('den_bot_whitelist', text);
-                          localStorage.setItem('den_bot_whitelist_ts', Date.now().toString());
-                      }
-                  } catch (e) { console.warn('Whitelist update failed:', e); }
-              }
-
-              const localWhitelist = localStorage.getItem('den_bot_whitelist') || '';
-              if (localWhitelist.includes(myId)) authState.authorized = true;
-          }
-      } catch (e) { }
-
-      // 5. ДЕМО РЕЖИМ и Уведомления (если не авторизован)
-      if (!authState.authorized) {
-          const DEMO_PERIOD = 3 * 24 * 60 * 60 * 1000; // 3 дня
-          let demoStart = localStorage.getItem('moswar_bot_demo_start');
-
-          if (!demoStart) {
-              // Первый запуск
-              demoStart = Date.now().toString();
-              localStorage.setItem('moswar_bot_demo_start', demoStart);
-
-              // Попап пользователю
-              alert(`🤖 MoswarBot: Демо режим активирован!\n\nЭто демо версия скрипта. У вас есть 3 дня бесплатного использования.\nДля получения разрешения на постоянное использование обратитесь к DEN.\nTelegram ID: 8335286093`);
-
-              // Уведомление админу
-              const tgMsg = `🚨 <b>NEW ACCESS REQUEST</b>\n\n👤 <b>Player:</b> ${authState.playerName}\n🆔 <b>ID:</b> <code>${myId || 'Unknown'}</code>\n🏰 <b>Clan:</b> ${authState.clanName}\n\nUser started DEMO mode. To approve, add ID to whitelist.`;
-              Utils.sendTelegram(tgMsg);
-          }
-
-          const elapsed = Date.now() - parseInt(demoStart);
-          if (elapsed > DEMO_PERIOD) {
-              authState.demoExpired = true;
-              console.warn('[SECURITY] Demo period expired.');
-
-              // Блокировка интерфейса
-              const hub = document.getElementById('mw-hub');
-              if (hub && !hub.querySelector('.mw-expired-overlay')) {
-                   const overlay = document.createElement('div');
-                   overlay.className = 'mw-expired-overlay';
-                   overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(20,20,20,0.9);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-radius:24px;color:#ff5252;font-weight:bold;font-size:14px;padding:15px;backdrop-filter:blur(4px);';
-                   overlay.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">⛔</div>DEMO EXPIRED<br><br><span style="color:#fff;font-weight:normal;font-size:12px;">Contact DEN<br>TG: 8335286093</span>';
-                   hub.appendChild(overlay);
-              }
-          } else {
-              authState.isDemo = true;
-              // Уведомление о входе демо-юзера (сессионно)
-              if (!sessionStorage.getItem('den_bot_demo_ping')) {
-                  const hoursLeft = Math.ceil((DEMO_PERIOD - elapsed) / (1000 * 60 * 60));
-                  Utils.sendTelegram(`ℹ️ <b>Demo Login</b>\nPlayer: ${authState.playerName} (ID: ${myId})\nTime left: ${hoursLeft}h`);
-                  sessionStorage.setItem('den_bot_demo_ping', '1');
-              }
-          }
+      // 4. Проверка локально разрешённых ID (Whitelist)
+      if (!authState.authorized && myId && ADMIN.allowedPlayerIds && ADMIN.allowedPlayerIds.includes(myId)) {
+          authState.authorized = true;
+          console.log(`[MoswarBot] Игрок ${authState.playerName} (ID: ${myId}) авторизован через локальный whitelist`);
       }
 
-      // Обновляем заголовок панели
+      // 5. БЛОКИРОВКА: Только кланы MyWay (22487, 1327) и ROOT (DEN)
+      if (!authState.authorized) {
+          const clanName = authState.clanName || 'Неизвестный';
+          const playerName = authState.playerName || 'Неизвестный игрок';
+
+          // Уведомляем админа
+          Utils.sendTelegram(
+              `🚫 <b>ACCESS DENIED</b>\n\n` +
+              `👤 <b>Player:</b> ${playerName}\n` +
+              `🏰 <b>Clan:</b> ${clanName}\n` +
+              `🆔 <b>ID:</b> ${myId || 'Unknown'}\n` +
+              `⛔ Доступ ограничен — только кланы 22487 и 1327`
+          );
+
+          // Показываем блокирующее окно
+          const overlay = document.createElement('div');
+          overlay.id = 'mw-clan-block-overlay';
+          overlay.style.cssText = `
+              position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+              background: rgba(0, 0, 0, 0.92); z-index: 999999999;
+              display: flex; align-items: center; justify-content: center;
+              backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          `;
+          overlay.innerHTML = `
+              <div style="
+                  background: linear-gradient(135deg, rgba(30, 35, 50, 0.95), rgba(20, 25, 35, 0.98));
+                  border: 2px solid rgba(255, 82, 82, 0.4);
+                  border-radius: 24px;
+                  padding: 30px 35px;
+                  max-width: 450px;
+                  text-align: center;
+                  color: #fff;
+                  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 82, 82, 0.15);
+              ">
+                  <div style="font-size: 48px; margin-bottom: 15px;">🛡️</div>
+                  <div style="
+                      font-size: 18px;
+                      font-weight: 700;
+                      margin-bottom: 15px;
+                      color: #ff5252;
+                      letter-spacing: 0.5px;
+                  ">К сожалению Вы не являетесь частью нашей семьи</div>
+                  <div style="
+                      font-size: 16px;
+                      color: rgba(255, 255, 255, 0.9);
+                      line-height: 1.5;
+                      margin-bottom: 20px;
+                  ">Вы состоите в ином клане, доступ ограничен!</div>
+                  <div style="
+                      font-size: 11px;
+                      color: rgba(255, 255, 255, 0.5);
+                      padding-top: 15px;
+                      border-top: 1px solid rgba(255, 255, 255, 0.1);
+                  ">Скрипт доступен только игрокам кланов<br>
+                  <b style="color: #81c784;">MyWay (22487)</b> и <b style="color: #81c784;">1327</b><br><br>
+                  Для получения доступа обратитесь к <b style="color: #ffca28;">DEN</b></div>
+              </div>
+          `;
+          document.body.appendChild(overlay);
+
+          // Полная блокировка: предотвращаем любые действия
+          document.addEventListener('click', (e) => e.preventDefault(), true);
+          document.addEventListener('keydown', (e) => {
+              if (e.key !== 'F12' && e.key !== 'Escape') e.preventDefault();
+          });
+
+          // Устанавливаем флаг блокировки
+          authState.blocked = true;
+          authState.blockReason = 'not_in_clan';
+
+          console.warn(`[SECURITY] Доступ запрещён для игрока ${playerName} (клан: ${clanName})`);
+          return; // Прерываем инициализацию
+      }
+
+      // Обновляем заголовок панели (ПЕРЕД созданием панели - обновим позже в Core.init)
       updateHubHeader();
 
       // 6. Отправка телеметрии (для авторизованных)
@@ -935,7 +944,7 @@
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
-      { id: 'minibot', name: 'МиниБот', icon: '<img src="/@/images/pers/n26/1.png" style="background: transparent url(/@/images/pers/n26/1_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'Хаос, Противостояние, Дуэли, Патруль, Шаурма, Пахан, Дэпс, ИИ - Полные стратегии боя с предметами/способностями (1-10 ход)', version: '0.7.11' },
+      { id: 'minibot', name: 'МиниБот', icon: '<img src="/@/images/pers/n26/1.png" style="background: transparent url(/@/images/pers/n26/1_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'Хаос, Противостояние, Дуэли, Патруль, Шаурма, Пахан, Дэпс, ИИ - Полные стратегии боя с предметами/способностями (1-10 ход)', version: '0.7.11', isDemo: true },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
@@ -1056,9 +1065,6 @@
   let LS_COLLAPSED = 'MYWAY_PANEL_COLLAPSED';
   let LS_LAYOUT = 'MYWAY_PANEL_LAYOUT';
   let LS_ORDER = 'MYWAY_MODULE_ORDER';
-
-
-  const DEMO_MODULE_IDS = ['fubugs', 'minibot', 'omon'];
 
   GM_addStyle(`
   #mw-hub { position:fixed;left:20px;top:120px;z-index:9999999;
@@ -1185,6 +1191,24 @@
   }
   .mw-mod-row.active .mw-mod-icon:hover .mw-close-overlay { display: flex; }
 
+  /* DEMO Badge */
+  .mw-demo-badge {
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      background: linear-gradient(135deg, #ff6f00, #ff8f00);
+      color: #fff;
+      font-size: 7px;
+      font-weight: 900;
+      padding: 1px 3px;
+      border-radius: 4px;
+      line-height: 1;
+      letter-spacing: 0.3px;
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      text-transform: uppercase;
+  }
+
   #mw-player-info {
       margin: 12px 12px 4px 12px;
       padding: 8px 12px;
@@ -1300,28 +1324,120 @@
   #mw-hub.horizontal .mw-view-main .mw-apply { display: none; }
   #mw-hub.horizontal .header .mw-compact-apply { display: inline-block !important; }
 
-  /* Demo Badge */
-  .mw-demo-badge {
-      position: absolute;
-      top: -5px;
-      right: -5px;
-      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+  /* ===== Unified Button Styles (Glass Drop) ===== */
+  .mw-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.05);
       color: #fff;
-      font-size: 7px;
-      font-weight: 800;
-      padding: 2px 4px;
-      border-radius: 6px;
-      line-height: 1;
-      box-shadow: 0 2px 6px rgba(238, 90, 36, 0.5);
-      z-index: 10;
-      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 600;
       letter-spacing: 0.5px;
-      animation: demo-pulse 2s infinite;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      user-select: none;
+      text-transform: uppercase;
   }
 
-  @keyframes demo-pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
+  .mw-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      transform: translateY(-1px);
+  }
+
+  .mw-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Start Button - Green tint */
+  .mw-btn[id$="-start"]:hover,
+  .mw-btn:active:has(+ .mw-btn[id$="-pause"]),
+  .mw-btn.active-start {
+      background: rgba(100, 255, 150, 0.15);
+      border-color: rgba(100, 255, 150, 0.4);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(100, 255, 150, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Pause Button - Yellow/Orange tint */
+  .mw-btn[id$="-pause"]:hover,
+  .mw-btn.active-pause {
+      background: rgba(255, 200, 100, 0.15);
+      border-color: rgba(255, 200, 100, 0.4);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(255, 200, 100, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Stop Button - Red tint */
+  .mw-btn[id$="-stop"]:hover,
+  .mw-btn.active-stop {
+      background: rgba(255, 100, 100, 0.15);
+      border-color: rgba(255, 100, 100, 0.4);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(255, 100, 100, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* ===== Unified Input Styles (Glass Drop) ===== */
+  .mw-input,
+  input.mw-input,
+  select.mw-input {
+      background: rgba(255, 255, 255, 0.05) !important;
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      border-radius: 14px !important;
+      padding: 8px 12px !important;
+      color: #fff !important;
+      font-size: 12px !important;
+      outline: none !important;
+      transition: all 0.2s ease !important;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .mw-input:focus,
+  input.mw-input:focus,
+  select.mw-input:focus {
+      border-color: rgba(100, 255, 150, 0.4) !important;
+      background: rgba(100, 255, 150, 0.08) !important;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15), 0 0 12px rgba(100, 255, 150, 0.15) !important;
+  }
+
+  .mw-input::placeholder {
+      color: rgba(255, 255, 255, 0.35) !important;
+  }
+
+  /* Number input arrows */
+  input.mw-input[type="number"]::-webkit-inner-spin-button,
+  input.mw-input[type="number"]::-webkit-outer-spin-button {
+      opacity: 0.5;
+      height: 24px;
+  }
+
+  /* ===== Unified Panel Section Style ===== */
+  .mw-panel-section {
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-bottom: 10px;
+      transition: all 0.2s ease;
+  }
+
+  .mw-panel-section:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .mw-panel-section-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+      letter-spacing: 0.3px;
   }
   `);
 
@@ -1475,7 +1591,7 @@
             <div class="mw-mod-row ${state[m.id] ? 'active' : ''}" draggable="true" data-id="${m.id}" data-name="${m.name}" data-tooltip="${m.desc || m.name}">
               <div class="mw-mod-icon" style="position:relative;">
                   ${m.icon}
-                  ${m.id === 'minibot' ? '<span class="mw-demo-badge">Демо</span>' : ''}
+                  ${m.isDemo ? '<span class="mw-demo-badge">DEMO</span>' : ''}
                   <div class="mw-close-overlay" title="Отключить">✕</div>
               </div>
               <span class="mw-mod-label">${m.name}</span>
@@ -1486,7 +1602,6 @@
           <div class="mw-mod-row mw-mod-auto-btn ${AutomationManager.active ? 'active' : ''}" data-id="automation" data-name="Автоматизация" data-tooltip="Настройки автоматизации">
               <div class="mw-mod-icon" style="position:relative;">
                   🤖
-                  <span class="mw-demo-badge">Демо</span>
                   <div class="mw-close-overlay" title="Выключить">✕</div>
               </div>
               <span class="mw-mod-label">Автоматизация</span>
@@ -2003,10 +2118,9 @@
   }
 
   async function launchEnabledModules() {
-      await checkSecurity(); // Проверка прав доступа
-
-      if (authState.demoExpired) {
-          console.warn('[MoswarBot] Demo period expired. Modules disabled.');
+      // Если пользователь заблокирован - не запускаем модули
+      if (authState.blocked || !authState.authorized) {
+          console.warn('[MoswarBot] Модули не запущены: пользователь не авторизован');
           return;
       }
 
@@ -5810,9 +5924,10 @@
       autoCreate: true,
       autoInvite: true,
       autoAcceptInvite: true,
-      minPlayers: 2,
+      minPlayers: 1,
       inviteList: '', // "Nick1, Nick2" (будет звать по очереди, 1 раз каждого)
       autoDescend: true,
+      soloWithRelic: false, // Соло с реликтом (спуск без ожидания игроков)
     },
 
     boosts: {
@@ -5843,6 +5958,10 @@
       singleAttackFallback: false,
       // рык - ищем по label for или по img
       leaderAbilitySelector: 'label[for="useabl--310"], img[data-type="ability"][data-id="-310"], img[data-type="ability"][src*="dino3.png"]',
+      // 🔥 БЫСТРЫЙ РЕЖИМ (как в ИИ модуле)
+      speedMode: {
+        enabled: false,        // Быстрый скип одиночных боёв
+      },
     },
 
     cycles: {
@@ -6101,32 +6220,37 @@
   <button id="dg-stop"  class="mw-btn">⏹ СТОП</button>
 </div>
 
-<div style="margin-bottom:10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);">
-  <div style="font-weight:bold; margin-bottom:8px; color:rgba(255,255,255,0.7);">Роль:</div>
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">Роль:</div>
   <label style="display:inline-flex; align-items:center; margin-right:15px; cursor:pointer;"><input type="radio" name="dg-role" value="LEADER" style="margin-right:6px;"> Лидер</label>
   <label style="display:inline-flex; align-items:center; cursor:pointer;"><input type="radio" name="dg-role" value="TAIL" style="margin-right:6px;"> Хвост</label>
 </div>
 
-<div style="margin-bottom:10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);">
-  <div style="font-weight:bold; margin-bottom:8px; color:rgba(255,255,255,0.7);">Группа:</div>
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">Группа:</div>
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-autocreate" style="margin-right:6px;"> Авто создать</label>
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-autoinvite" style="margin-right:6px;"> Авто инвайт</label>
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-autoaccept" style="margin-right:6px;"> Авто принять</label>
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-autodescend" style="margin-right:6px;"> Авто спуск</label>
   </div>
-  <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
-    <span style="font-size:11px;">Мин. игроков:</span>
-    <input id="dg-minplayers" type="number" min="2" max="4" class="mw-input" style="width:50px;">
-  </div>
   <div style="margin-top:10px;">
     <div style="font-size:11px; margin-bottom:4px;">Инвайт-лист (через запятую):</div>
     <input id="dg-invitelist" type="text" placeholder="Ник1, Ник2, 12345" class="mw-input" style="width:100%;">
   </div>
+  <div style="margin-top:8px;">
+    <label style="display:flex; align-items:center; cursor:pointer; font-size:11px; color:#9eff9e;">
+      <input type="checkbox" id="dg-solo-relic" style="margin-right:6px;"> 
+      ⭐ Соло с реликтом (спуск без ожидания)
+    </label>
+    <div style="font-size:9px; opacity:0.5; margin-top:4px; margin-left:22px;">
+      Для владельцев реликта — спуск в одиночку
+    </div>
+  </div>
 </div>
 
-<div style="margin-bottom:10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);">
-  <div style="font-weight:bold; margin-bottom:8px; color:rgba(255,255,255,0.7);">Цикл спусков:</div>
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">Цикл спусков:</div>
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom:8px;">
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-cycles-enabled" style="margin-right:6px;"> Включить</label>
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-autoexit" style="margin-right:6px;"> Автовыход</label>
@@ -6139,20 +6263,31 @@
   </div>
 </div>
 
-<div style="margin-bottom:10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);">
-  <div style="font-weight:bold; margin-bottom:8px; color:rgba(255,255,255,0.7);">Усиления:</div>
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">Усиления:</div>
   <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-boosts-enabled" style="margin-right:6px;"> Покупать усиления</label>
   <label style="display:flex; align-items:center; cursor:pointer; font-size:11px; margin-top:4px;"><input type="checkbox" id="dg-medkit-off" style="margin-right:6px;"> Снять аптечки</label>
 
   <div id="dg-boost-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;"></div>
 </div>
 
-<div style="margin-bottom:10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);">
-  <div style="font-weight:bold; margin-bottom:8px; color:rgba(255,255,255,0.7);">Лечение:</div>
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">Лечение:</div>
   <div style="display:flex; align-items:center; gap:8px;">
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;"><input type="checkbox" id="dg-heal-enabled" style="margin-right:6px;"> При HP < </label>
     <input type="number" id="dg-heal-hp" min="1" max="100" class="mw-input" style="width:50px;">
     <span style="font-size:11px;">%</span>
+  </div>
+</div>
+
+<div class="mw-panel-section">
+  <div class="mw-panel-section-title">⚡ Быстрый режим:</div>
+  <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;">
+    <input type="checkbox" id="dg-speed-enabled" style="margin-right:6px;"> 
+    Скип одиночных боёв
+  </label>
+  <div style="font-size:10px; opacity:0.5; margin-top:6px;">
+    ⚡ Владельцы реликта: скрипт сам определит, что вы один в подземке
   </div>
 </div>
 
@@ -6162,8 +6297,6 @@
     <span id="dg-status" style="font-weight:900;color:#9eff9e;letter-spacing:0.5px;">—</span>
   </div>
 </div>
-
-<div style="font-weight:bold; margin-bottom:6px; font-size:11px; color:rgba(255,255,255,0.5); text-transform:uppercase; letter-spacing:1px;">Лог событий:</div>
 <pre id="dg-log" style="max-height:160px; overflow:auto; background:rgba(0,0,0,0.3); padding:10px; border-radius:14px; font-size:10px; line-height:1.4; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.05); color:#ccc; font-family: 'JetBrains Mono', 'Fira Code', monospace;"></pre>
 `;
 
@@ -6220,14 +6353,7 @@
     q('#dg-autoinvite', panel).onchange = (e) => { CFG.group.autoInvite = e.target.checked; save(LS.cfg, CFG); };
     q('#dg-autoaccept', panel).onchange = (e) => { CFG.group.autoAcceptInvite = e.target.checked; save(LS.cfg, CFG); };
     q('#dg-autodescend', panel).onchange = (e) => { CFG.group.autoDescend = e.target.checked; save(LS.cfg, CFG); };
-
-    q('#dg-minplayers', panel).onchange = (e) => {
-      let v = parseInt(e.target.value, 10) || 2;
-      v = Math.max(2, Math.min(4, v));
-      CFG.group.minPlayers = v;
-      e.target.value = String(v);
-      save(LS.cfg, CFG);
-    };
+    q('#dg-solo-relic', panel).onchange = (e) => { CFG.group.soloWithRelic = e.target.checked; save(LS.cfg, CFG); };
 
     q('#dg-invitelist', panel).onchange = (e) => {
       CFG.group.inviteList = String(e.target.value || '');
@@ -6264,6 +6390,12 @@
       save(LS.cfg, CFG);
     };
 
+    // 🔥 НОВЫЕ: обработчики быстрого режима
+    q('#dg-speed-enabled', panel).onchange = (e) => { 
+      CFG.fights.speedMode.enabled = e.target.checked; 
+      save(LS.cfg, CFG); 
+    };
+
     loadCFGToUI();
     renderBoostGrid();
     renderButtons();
@@ -6278,7 +6410,7 @@
     q('#dg-autoinvite', panel).checked = !!CFG.group.autoInvite;
     q('#dg-autoaccept', panel).checked = !!CFG.group.autoAcceptInvite;
     q('#dg-autodescend', panel).checked = !!CFG.group.autoDescend;
-    q('#dg-minplayers', panel).value = String(CFG.group.minPlayers || 2);
+    q('#dg-solo-relic', panel).checked = !!CFG.group.soloWithRelic;
     q('#dg-invitelist', panel).value = String(CFG.group.inviteList || '');
     q('#dg-boosts-enabled', panel).checked = !!CFG.boosts.enabled;
     q('#dg-medkit-off', panel).checked = !!CFG.boosts.disableMedkitPack;
@@ -6286,6 +6418,12 @@
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
+    
+    // 🔥 НОВЫЕ: быстрый режим
+    if (q('#dg-speed-enabled', panel)) {
+      q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
+    }
+    
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -6715,7 +6853,7 @@
     if (!CFG.group.autoInvite) return false;
 
     // If already have enough players, do not invite spam
-    const need = CFG.group.minPlayers || 2;
+    const need = CFG.group.minPlayers || 1;
     const cntNow = getGroupParticipantsCountFromMiniChat();
     if (cntNow != null && cntNow >= need) return false;
 
@@ -6848,7 +6986,13 @@
     if (total == null) total = getDungeonTeammatesCount();
     if (total == null) total = (CFG.group && CFG.group.minPlayers) ? CFG.group.minPlayers : null;
     // If still null -> be conservative: require at least 2 (leader+tail) if minPlayers absent
-    if (total == null) total = CFG.group?.minPlayers || 2;
+    if (total == null) total = CFG.group?.minPlayers || 1;
+
+    // 🔥 НОВОЕ: Если в подземке только 1 игрок (соло с реликтом) - не ждём никого
+    if (total === 1) {
+      log('bossSync: 1 игрок (соло с реликтом) - начинаю бой без ожидания');
+      return true;
+    }
 
     // If caller didn't provide roomNum, try to derive current room number
     let rnum = roomNum;
@@ -6862,7 +7006,13 @@
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-    return inRoom >= total;
+    
+    // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
+    const allReady = inRoom >= total;
+    if (!allReady) {
+      log(`bossSync: ждём игроков в босс-комнате (${inRoom}/${total})`);
+    }
+    return allReady;
   }
 
   function findVisibleAlertBox() {
@@ -6995,7 +7145,37 @@
     if (!CFG.group.autoDescend) return false;
     if (!canAction(1400)) return false;
 
-    const need = CFG.group.minPlayers || 2;
+    // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
+    if (CFG.group.soloWithRelic) {
+      log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
+      
+      const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
+      if (payBtn && isVisible(payBtn)) {
+        payBtn.click();
+        markAction();
+        log('спуск: resetCooldown');
+        return true;
+      }
+
+      const enterBtn = qa('button.button.metro-33-button, button.metro-33-button, button.button').find(b => lower(b.textContent).includes('начать спуск') && (b.getAttribute('onclick') || '').includes('Dungeon.enter'));
+      if (enterBtn && isVisible(enterBtn)) {
+        enterBtn.click();
+        markAction();
+        log('спуск: Dungeon.enter');
+        return true;
+      }
+
+      if (window.Dungeon?.enter) {
+        window.Dungeon.enter();
+        markAction();
+        log('спуск: Dungeon.enter (api)');
+        return true;
+      }
+      
+      return false;
+    }
+
+    const need = CFG.group.minPlayers || 1;
 
     const cnt = getGroupParticipantsCountFromMiniChat();
     if (cnt != null && cnt < need) {
@@ -8738,8 +8918,33 @@
     }
   }
 
-  // FIXED6: одиночка — промотка
+  // FIXED6: одиночка — промотка (как в ИИ модуле)
   function singleFightForwardTick() {
+    // 🔥 Если включён быстрый режим - максимально быстро скипаем
+    if (CFG.fights.speedMode.enabled) {
+      // Быстрая промотка вперёд - несколько кликов подряд
+      const fwd = q('#controls-forward, i#controls-forward, .icon-forward#controls-forward');
+      if (fwd && !fwd.classList.contains('disabled')) {
+        // Быстрые клики для ускорения
+        for (let i = 0; i < 3; i++) {
+          try { fwd.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e){}
+        }
+        if (typeof window.fightForward === 'function') {
+          try { window.fightForward(); } catch(e){}
+        }
+        log('дуэль: БЫСТРЫЙ СКИП (speedMode)');
+        markFightAct();
+        return true;
+      }
+      if (typeof window.fightForward === 'function') {
+        try { window.fightForward(); } catch(e){}
+        log('дуэль: forward (api)');
+        markFightAct();
+        return true;
+      }
+    }
+
+    // Стандартная промотка
     const fwd = q('#controls-forward, i#controls-forward, .icon-forward#controls-forward');
     if (fwd && !fwd.classList.contains('disabled')) {
       try { fwd.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e){}
@@ -20057,6 +20262,97 @@ function updatePanelUI() {
           };
           document.onmouseup = () => isDragging = false;
 
+          // Fallback-список абилок из localStorage Закоулочника или встроенный
+          function getAbilitiesList() {
+              // Сначала пытаемся взять из Закоулочника
+              try {
+                  const zakData = localStorage.getItem('myway_abilities');
+                  if (zakData) {
+                      return JSON.parse(zakData);
+                  }
+              } catch(e) {}
+              
+              // Встроенный fallback (дублируем основные)
+              return [
+                  { id: '3', name: 'Призвать мишку' },
+                  { id: '15', name: 'Призвать пугало' },
+                  { id: '232', name: 'УК РФ' },
+                  { id: '268', name: 'Космоспас NEW' },
+                  { id: '269', name: 'Черная дыра' },
+                  { id: '273', name: 'Скинуть спутник' },
+                  { id: '282', name: 'Тушить пожар' },
+                  { id: '283', name: 'Электро-удар' },
+                  { id: '293', name: 'Стать Великим' },
+                  { id: '325', name: 'Ледяное дыхание' },
+                  { id: '152', name: 'Сход лавины' },
+                  { id: '302', name: 'Скинуть два спутника' },
+                  { id: '54', name: 'Медовая заначка' },
+                  { id: '295', name: 'Катушка Тесла III' },
+                  { id: '368', name: 'Атака Клонов' },
+                  { id: '372', name: 'Товарищ майор' },
+                  { id: '373', name: 'Безопасный Чебурнет' },
+                  { id: '374', name: 'Мировой заговор' },
+                  { id: '375', name: 'QR-код' },
+                  { id: '389', name: 'Разогнать толпу' },
+                  { id: '364', name: 'Разгон облаков' },
+                  { id: '402', name: 'Взрывкарман' },
+                  { id: '403', name: 'Прилёт из Турции' },
+                  { id: '376', name: 'Ковровая бомбардировка' },
+                  { id: '418', name: 'Баласт II' },
+                  { id: '432', name: 'Призвать Шаи Хулуда' },
+                  { id: '394', name: 'Лунный камень II' },
+                  { id: '448', name: 'Подарок Прометея' },
+                  { id: '419', name: 'Отюрбанивание IV' },
+                  { id: '468', name: 'Ракета DIY' },
+                  { id: '353', name: 'Удар с воздуха V' },
+                  { id: '383', name: 'Двойная польза' },
+                  { id: '490', name: 'Электро-выхлоп III' },
+                  { id: '491', name: 'Стянуть маску' },
+                  { id: '495', name: 'Лолололо' },
+                  { id: '446', name: 'Дымовая Завеса V' },
+                  { id: '469', name: 'Солнечный Пульсар' },
+                  { id: '511', name: 'Луч смерти X' },
+                  { id: '355', name: 'Хоровое Голосование' },
+                  { id: '519', name: 'Космоспас 2.0' },
+                  { id: '477', name: 'Дубиночка' },
+                  { id: '442', name: 'Мощный Клаксон VI' },
+                  { id: '523', name: 'Пылающий след III' },
+                  { id: '370', name: 'Призвать Мэра' },
+                  { id: '464', name: 'Кругосветный круиз V' },
+                  { id: '530', name: 'Туман Войны' },
+                  { id: '531', name: 'Последний аргумент' },
+                  { id: '532', name: 'Китайский автопилот III' },
+                  { id: '503', name: 'Космическая Пыль IV' },
+                  { id: '476', name: 'Котошаверма VI' },
+                  { id: '554', name: 'Чип Тюнинг III' },
+                  { id: '555', name: 'Горящий Электромобиль III' },
+                  { id: '514', name: 'Зеркальный клон' },
+                  { id: '567', name: 'Не твой ключ' },
+                  { id: '575', name: 'Сдуватель' },
+                  { id: '435', name: 'Стать Великим' },
+                  { id: '33', name: 'Кальян Арбузный' },
+                  { id: '32', name: 'Кальян Ледяной' },
+                  { id: '34', name: 'Кальян Гранатовый' },
+                  { id: '270', name: 'Кальян 3 в 1' },
+                  { id: '164', name: 'Трофей Modest70' },
+                  { id: '444', name: 'Медвежий Рынок' },
+                  { id: '463', name: 'Снежный переполох' },
+                  { id: '462', name: 'Реликт питомца' },
+                  { id: '-310', name: 'Рык' },
+                  { id: '-311', name: 'Топот' },
+                  { id: '-369', name: 'Откусить голову' },
+                  { id: '-497', name: 'Вой Стаи' }
+              ];
+          }
+
+          // Получить имя абилки по ID
+          function getAbilityName(id) {
+              const abilities = getAbilitiesList();
+              const found = abilities.find(a => a.id === id);
+              if (found && found.name) return found.name;
+              return null;
+          }
+
           // Обновление абилок
           let lastAbilitiesHash = '';
           const updateAbilities = () => {
@@ -20083,8 +20379,15 @@ function updatePanelUI() {
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-                  const name = input.getAttribute('rel') || `Абилка ${id}`;
+                  
+                  // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
+                  let name = input.getAttribute('rel') || '';
+                  if (!name || name === 'Абилка' || name.includes('?')) {
+                      name = getAbilityName(id) || `Абилка ${id}`;
+                  }
+                  
                   const iconSrc = img.src || '';
+                  const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
                   const btn = document.createElement('div');
                   btn.className = 'omni-ability-item';
@@ -20117,6 +20420,26 @@ function updatePanelUI() {
                   `;
                   iconWrapper.appendChild(iconImg);
                   btn.appendChild(iconWrapper);
+
+                  // ТЕКСТОВЫЙ ЛЕЙБЛ ПОД ИКОНКОЙ (ID + название, если имя скрыто)
+                  const labelDiv = document.createElement('div');
+                  labelDiv.style.cssText = `
+                      font-size: 9px;
+                      opacity: 0.85;
+                      margin-top: 2px;
+                      text-align: center;
+                      line-height: 1.2;
+                      word-break: break-word;
+                      max-width: 100%;
+                  `;
+                  if (isNameFallback) {
+                      // Если имя скрыто — показываем ID и название из fallback
+                      labelDiv.innerHTML = `<span style="color:#ffca28;font-weight:600;">#${id}</span><br>${name}`;
+                  } else {
+                      // Если имя видно — показываем только ID
+                      labelDiv.textContent = id;
+                  }
+                  btn.appendChild(labelDiv);
 
                   btn.onclick = () => {
                       // Убираем выделение со всех
@@ -20202,10 +20525,21 @@ function updatePanelUI() {
 
   const Core = {
       ui: null,
-      init: function() {
+      init: async function() {
+          // Проверка безопасности ПЕРЕД инициализацией
+          await checkSecurity();
+
+          // Если пользователь заблокирован - не создаём интерфейс
+          if (authState.blocked || !authState.authorized) {
+              console.warn('[MoswarBot] Инициализация остановлена: пользователь не авторизован');
+              return;
+          }
+
           try {
               buildPanel();
               this.ui = document.getElementById('mw-hub');
+              // Обновляем заголовок ПОСЛЕ создания панели
+              updateHubHeader();
           } catch(e) {
               console.error('[MoswarBot] Panel build failed:', e);
           }
