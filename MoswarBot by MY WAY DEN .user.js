@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.7.7
+// @version      1.7.8
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -38,7 +38,7 @@
       }
   })();
 
-  
+
   /*******************************************************
    *  CROSS-ORIGIN FETCH HELPER (FIX FOR CORS)
    *******************************************************/
@@ -274,7 +274,7 @@
       },
       get active() { return localStorage.getItem('mw_bot_auto_active') === '1'; },
       set active(v) { localStorage.setItem('mw_bot_auto_active', v ? '1' : '0'); },
-      
+
       // Инициализация конфигурации с расширенными настройками
       init: function() {
           let cfg = this.config;
@@ -296,38 +296,38 @@
           });
           this.config = cfg;
       },
-      
+
       // Проверка: пора ли запускать модуль по расписанию
       checkScheduledLaunch: function() {
           if (!this.active) {
               console.log('[Automation] Автономный режим выключен');
               return null;
           }
-          
+
           const now = new Date();
           const currentHours = now.getHours().toString().padStart(2, '0');
           const currentMinutes = now.getMinutes().toString().padStart(2, '0');
           const currentTime = `${currentHours}:${currentMinutes}`;
-          
+
           this.lastCheck = currentTime;
-          
+
           // Получаем последнюю проверенную минуту, чтобы не запускать много раз в одну минуту
           const lastChecked = localStorage.getItem('mw_auto_last_minute') || '';
           if (lastChecked === currentTime) {
               return null; // Уже проверяли эту минуту
           }
-          
+
           const modulesToLaunch = [];
           const cfg = this.config;
-          
+
           console.log(`[Automation] Проверка времени: ${currentTime}`);
-          
+
           for (const module of MODULES) {
               const modCfg = cfg[module.id];
               if (!modCfg || !modCfg.enabled || !modCfg.scheduledTime) continue;
-              
+
               console.log(`  • ${module.name}: время=${modCfg.scheduledTime}, enabled=${modCfg.enabled}`);
-              
+
               // Если время совпало и модуль ещё не запущен
               if (modCfg.scheduledTime === currentTime) {
                   const state = loadState();
@@ -344,17 +344,17 @@
                   }
               }
           }
-          
+
           // Сохраняем время проверки
           localStorage.setItem('mw_auto_last_minute', currentTime);
-          
+
           if (modulesToLaunch.length > 0) {
               console.log(`[Automation] ✅ Модули к запуску: ${modulesToLaunch.map(m => m.name).join(', ')}`);
           }
-          
+
           return modulesToLaunch.length > 0 ? modulesToLaunch : null;
       },
-      
+
       // Сохранение настроек модуля для последующего использования
       saveModuleConfig: function(moduleId, moduleConfig) {
           const cfg = this.config;
@@ -366,7 +366,7 @@
           }
           return false;
       },
-      
+
       // Загрузка настроек модуля
       loadModuleConfig: function(moduleId) {
           const cfg = this.config;
@@ -384,7 +384,7 @@
       checkInterval: null,
       lastCheck: null,
       statusUpdateInterval: null,
-      
+
       start: function() {
           if (this.running) {
               console.log('[TimeScheduler] Уже запущен');
@@ -392,7 +392,7 @@
           }
           this.running = true;
           console.log('[TimeScheduler] ✅ Старт мониторинга расписания (проверка каждые 10 сек)');
-          
+
           // Проверяем каждые 10 секунд для более точного запуска
           this.checkInterval = setInterval(() => {
               if (!AutomationManager.active) {
@@ -408,7 +408,7 @@
                   });
               }
           }, 10000); // 10 секунд для более точного запуска
-      
+
           // Обновляем статус в UI каждую минуту
           this.statusUpdateInterval = setInterval(() => {
               const statusEl = document.getElementById('mw-scheduler-status');
@@ -419,7 +419,7 @@
               }
           }, 1000); // Обновляем каждую секунду
       },
-      
+
       stop: function() {
           this.running = false;
           if (this.checkInterval) {
@@ -432,7 +432,7 @@
           }
           console.log('[TimeScheduler] ⏹ Остановлен');
       },
-      
+
       getStatus: function() {
           return {
               running: this.running,
@@ -445,7 +445,7 @@
           console.log('[TimeScheduler] 🧪 ТЕСТ: Проверка конфигурации...');
           const cfg = AutomationManager.config;
           let enabledModules = 0;
-          
+
           console.log('[TimeScheduler] 📋 ВСЕ МОДУЛИ (MODULES массив):');
           MODULES.forEach(m => {
               console.log(`  • ${m.id}: ${m.name}`);
@@ -462,7 +462,7 @@
                   }
               }
           });
-          
+
           for (const module of MODULES) {
               const modCfg = cfg[module.id];
               if (modCfg && modCfg.enabled && modCfg.scheduledTime) {
@@ -470,7 +470,7 @@
                   console.log(`  ✓ ${module.name}: время=${modCfg.scheduledTime}, авто=${modCfg.enabled}`);
               }
           }
-          
+
           if (enabledModules === 0) {
               console.log('[TimeScheduler] ⚠️ Нет модулей с включенным автозапуском и временем');
               alert('⚠️ Нет модулей с включенным автозапуском!\n\n1. Выставите время для модуля (поле ⏰)\n2. Поставьте галочку "Авто" напротив модуля\n3. Нажмите "💾 Сохранить расписание"\n\nПроверь консоль (F12) для подробной информации.');
@@ -479,12 +479,12 @@
               alert(`✅ Конфигурация проверена!\n\nНайдено модулей с расписанием: ${enabledModules}\n\nСписок:\n${MODULES.filter(m => cfg[m.id] && cfg[m.id].enabled && cfg[m.id].scheduledTime).map(m => `  • ${m.name} - ${cfg[m.id].scheduledTime}`).join('\n')}`);
           }
       },
-      
+
       // Запуск модуля с применением настроек
       launchModule: function(moduleData) {
           const moduleId = moduleData.id;
           console.log(`[TimeScheduler] 🚀 АВТО-ЗАПУСК: ${moduleData.name}`);
-          
+
           // 1. Включаем модуль в общем состоянии
           const state = loadState();
           state[moduleId] = true;
@@ -503,11 +503,11 @@
                   }
               }
           }
-          
+
           // 3. Открываем панель модуля
           setTimeout(() => showPanel(moduleId), 300);
           console.log(`[TimeScheduler] ✓ Панель модуля открыта`);
-          
+
           // 4. Инициализируем модуль если нужно
           if (MoswarLib.modules[moduleId] && typeof MoswarLib.modules[moduleId].init === 'function') {
               try {
@@ -517,13 +517,13 @@
                   console.error(`[TimeScheduler] ❌ Ошибка инициализации ${moduleId}:`, e);
               }
           }
-          
+
           // 5. Запускаем модуль (если есть функция запуска)
           if (typeof BotModules[moduleId] === 'function') {
               try {
                   BotModules[moduleId]();
                   console.log(`[TimeScheduler] ✓ Модуль ${moduleId} запущен`);
-                  
+
                   // 6. АВТОМАТИЧЕСКИЙ КЛИК ПО КНОПКЕ "СТАРТ" внутри панели
                   setTimeout(() => {
                       const startBtnId = {
@@ -538,7 +538,7 @@
                           'minibot': 'mb-start',
                           'omon': 'omon-start'
                       }[moduleId];
-                      
+
                       if (startBtnId) {
                           const startBtn = document.getElementById(startBtnId);
                           if (startBtn && (startBtn.textContent.includes('Старт') || startBtn.textContent.includes('START'))) {
@@ -549,7 +549,7 @@
                           }
                       }
                   }, 1000); // Ждём 1 секунду чтобы панель успела открыться
-                  
+
                   // 7. АВТОМАТИЧЕСКОЕ СВОРАЧИВАНИЕ ПАНЕЛИ через 2 секунды
                   setTimeout(() => {
                       const panelId = {
@@ -564,7 +564,7 @@
       'minibot': 'zk-panel',
       'omon': 'omon-panel'
                       }[moduleId];
-                      
+
                       if (panelId) {
                           const panel = document.getElementById(panelId);
                           if (panel) {
@@ -576,7 +576,7 @@
                           }
                       }
                   }, 2000); // Ждём 2 секунды чтобы панель успела открыться
-                  
+
                   // Отправляем уведомление
                   Utils.reportToCreator('Auto Launch', `🕐 По расписанию запущен модуль: ${moduleData.name} в ${moduleData.config.scheduledTime}`);
               } catch(e) {
@@ -589,7 +589,7 @@
   function updateSchedulerStatus(isRunning) {
       const statusEl = document.getElementById('mw-scheduler-status');
       if (!statusEl) return;
-      
+
       if (isRunning) {
           statusEl.style.background = 'rgba(100, 255, 150, 0.15)';
           statusEl.style.borderColor = 'rgba(100, 255, 150, 0.4)';
@@ -948,7 +948,7 @@
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
-  
+
 
   function loadState() {
       try { return JSON.parse(localStorage.getItem(CORE_KEY) || '{}'); } catch (e) { return {}; }
@@ -1630,19 +1630,19 @@
             <h3 style="margin:0;font-size:14px;opacity:0.9;">🤖 Автоматизация</h3>
             <span class="settings-btn-auto" title="Настройки" style="font-size:18px; opacity:0.7; cursor:pointer; transition: transform 0.3s;" onmouseover="this.style.transform='rotate(45deg)'" onmouseout="this.style.transform='rotate(0)'">⚙️</span>
         </div>
-        
+
         <!-- Статус TimeScheduler -->
         <div id="mw-scheduler-status" style="background: rgba(255, 100, 100, 0.15); border: 1px solid rgba(255, 100, 100, 0.4); border-radius: 10px; padding: 10px; margin-bottom: 10px; text-align: center;">
             <div style="font-size: 12px; font-weight: bold; color: #ff6464;">⏸ Остановлен</div>
             <div style="font-size: 10px; opacity: 0.8; margin-top: 4px;">Проверка расписания</div>
         </div>
-        
+
         <div style="display:flex; justify-content:center; margin-bottom:10px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 12px;">
              <label style="font-size:12px; cursor:pointer; display:flex; align-items:center; gap:8px;">
                  <input type="checkbox" id="mw-auto-master-switch" ${AutomationManager.active ? 'checked' : ''}> ✅ Автономный режим
              </label>
         </div>
-        
+
         <div style="background: rgba(100, 255, 150, 0.1); border: 1px solid rgba(100, 255, 150, 0.3); border-radius: 10px; padding: 8px; margin-bottom: 10px;">
             <div style="font-size: 11px; opacity: 0.9;">📋 <b>Как настроить:</b></div>
             <div style="font-size: 10px; opacity: 0.8; line-height: 1.4;">
@@ -1652,7 +1652,7 @@
                 4️⃣ Нажми "💾 Сохранить настройки"
             </div>
         </div>
-        
+
         <div style="max-height: 280px; overflow-y: auto; scrollbar-width: thin;">
             <table class="mw-auto-table">
                 <thead>
@@ -1678,7 +1678,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         <div style="display:flex; gap:8px; margin-top:10px;">
             <button class="mw-btn mw-auto-test" style="flex:1; background: rgba(255, 200, 100, 0.2); border-color: rgba(255, 200, 100, 0.4);" data-id=""><span>🧪 Тест</span></button>
             <button class="mw-btn mw-auto-save-mod" style="flex:1;" data-id=""><span>💾 Сохранить настройки модулей</span></button>
@@ -1756,26 +1756,26 @@
           saveAutoBtn.onclick = (e) => {
               e.stopPropagation();
               const cfg = AutomationManager.config;
-              
+
               // Сохраняем интервалы
               viewAutomation.querySelectorAll('.mw-auto-input').forEach(input => {
                   const id = input.dataset.id;
                   const prop = input.dataset.prop;
                   if (cfg[id]) cfg[id][prop] = parseInt(input.value) || 0;
               });
-              
+
               // Сохраняем время запуска
               viewAutomation.querySelectorAll('.mw-auto-time').forEach(input => {
                   const id = input.dataset.id;
                   if (cfg[id]) cfg[id].scheduledTime = input.value || null;
               });
-              
+
               // Сохраняем включение автозапуска
               viewAutomation.querySelectorAll('.mw-auto-enabled').forEach(checkbox => {
                   const id = checkbox.dataset.id;
                   if (cfg[id]) cfg[id].enabled = checkbox.checked;
               });
-              
+
               AutomationManager.config = cfg;
               AutomationManager.active = document.getElementById('mw-auto-master-switch').checked;
 
@@ -1787,12 +1787,12 @@
                   TimeScheduler.stop();
                   updateSchedulerStatus(false);
               }
-              
+
               const span = saveAutoBtn.querySelector('span');
               const oldText = span.textContent;
               span.textContent = '✅ Применено!';
               Utils.reportToCreator('Automation', `Settings updated. Active: ${AutomationManager.active}, Scheduler: ${TimeScheduler.running ? 'ON' : 'OFF'}`);
-              
+
               setTimeout(() => {
                   span.textContent = oldText;
                   viewAutomation.style.display = 'none';
@@ -1815,13 +1815,13 @@
       if (saveAllModCfgBtn) {
           saveAllModCfgBtn.onclick = async (e) => {
               e.stopPropagation();
-              
+
               console.log('[Automation] ℹ️ Проверка интеграции модулей...');
-              
+
               // Проверяем какие модули имеют интеграцию
               let integratedCount = 0;
               let notSupportedCount = 0;
-              
+
               for (const mod of MODULES) {
                   const modId = mod.id;
                   if (MoswarLib.modules[modId] && typeof MoswarLib.modules[modId].saveAutomationConfig === 'function') {
@@ -1838,7 +1838,7 @@
                       notSupportedCount++;
                   }
               }
-              
+
               // Показываем сообщение
               if (integratedCount === 0) {
                   console.log('[Automation] ⚠️ Ни один модуль не поддерживает автоматическое сохранение настроек');
@@ -1856,7 +1856,7 @@
                   console.log(`[Automation] ✅ Сохранено ${integratedCount} модулей с интеграцией`);
                   alert(`✅ Сохранено настроек для ${integratedCount} модулей!\n\nНе поддерживают: ${notSupportedCount}`);
               }
-              
+
               const oldText = saveAllModCfgBtn.querySelector('span')?.textContent;
               if (saveAllModCfgBtn.querySelector('span')) {
                   saveAllModCfgBtn.querySelector('span').textContent = integratedCount > 0 ? `✅ Сохранено ${integratedCount}` : 'ℹ️ Инфо';
@@ -1871,7 +1871,7 @@
       if (autoModBtn) {
           autoModBtn.onclick = (e) => {
               e.stopPropagation();
-              
+
               // Если еще не активирован - активируем
               if (!AutomationManager.active) {
                   const cb = autoModBtn.querySelector('input');
@@ -1882,12 +1882,12 @@
                   updateSchedulerStatus(true);
                   Utils.reportToCreator('Automation Toggle', '✅ Enabled via main menu');
               }
-              
+
               // Переключаем видимость настроек
               const isVisible = viewAutomation.style.display === 'block';
               viewMain.style.display = isVisible ? 'block' : 'none';
               viewAutomation.style.display = isVisible ? 'none' : 'block';
-              
+
               const status = TimeScheduler.getStatus();
               updateSchedulerStatus(status.running);
           };
@@ -1902,11 +1902,11 @@
                   autoModBtn.classList.remove('active');
                   TimeScheduler.stop();
                   updateSchedulerStatus(false);
-                  
+
                   // Возвращаемся в главное меню если были в настройках
                   viewAutomation.style.display = 'none';
                   viewMain.style.display = 'block';
-                  
+
                   Utils.reportToCreator('Automation Toggle', '❌ Disabled via main menu');
               };
           }
@@ -2135,7 +2135,7 @@
               }
           } catch (e) { console.error('[MoswarBot] Ошибка модуля ' + id + ':', e); }
       });
-      
+
       // Инициализация TimeScheduler при запуске бота
       if (AutomationManager.active) {
           TimeScheduler.start();
@@ -6240,7 +6240,7 @@
   </div>
   <div style="margin-top:8px;">
     <label style="display:flex; align-items:center; cursor:pointer; font-size:11px; color:#9eff9e;">
-      <input type="checkbox" id="dg-solo-relic" style="margin-right:6px;"> 
+      <input type="checkbox" id="dg-solo-relic" style="margin-right:6px;">
       ⭐ Соло с реликтом (спуск без ожидания)
     </label>
     <div style="font-size:9px; opacity:0.5; margin-top:4px; margin-left:22px;">
@@ -6283,7 +6283,7 @@
 <div class="mw-panel-section">
   <div class="mw-panel-section-title">⚡ Быстрый режим:</div>
   <label style="display:flex; align-items:center; cursor:pointer; font-size:11px;">
-    <input type="checkbox" id="dg-speed-enabled" style="margin-right:6px;"> 
+    <input type="checkbox" id="dg-speed-enabled" style="margin-right:6px;">
     Скип одиночных боёв
   </label>
   <div style="font-size:10px; opacity:0.5; margin-top:6px;">
@@ -6391,9 +6391,9 @@
     };
 
     // 🔥 НОВЫЕ: обработчики быстрого режима
-    q('#dg-speed-enabled', panel).onchange = (e) => { 
-      CFG.fights.speedMode.enabled = e.target.checked; 
-      save(LS.cfg, CFG); 
+    q('#dg-speed-enabled', panel).onchange = (e) => {
+      CFG.fights.speedMode.enabled = e.target.checked;
+      save(LS.cfg, CFG);
     };
 
     loadCFGToUI();
@@ -6418,12 +6418,12 @@
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
-    
+
     // 🔥 НОВЫЕ: быстрый режим
     if (q('#dg-speed-enabled', panel)) {
       q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
     }
-    
+
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -7006,7 +7006,7 @@
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-    
+
     // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
     const allReady = inRoom >= total;
     if (!allReady) {
@@ -7148,7 +7148,7 @@
     // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
     if (CFG.group.soloWithRelic) {
       log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
-      
+
       const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
       if (payBtn && isVisible(payBtn)) {
         payBtn.click();
@@ -7171,7 +7171,7 @@
         log('спуск: Dungeon.enter (api)');
         return true;
       }
-      
+
       return false;
     }
 
@@ -9599,6 +9599,23 @@
                   background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #fff; text-shadow: 0 0 5px rgba(46, 204, 113, 0.8);
                   animation: fd-ios-pulse 2s infinite;
               }
+              .fd-header-activate-btn {
+                  padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2);
+                  cursor: pointer; background: rgba(255, 255, 255, 0.05);
+                  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+                  color: rgba(255, 255, 255, 0.9); font-size: 12px; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: 0.5px;
+                  transition: all 0.3s ease; white-space: nowrap;
+                  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+              }
+              .fd-header-activate-btn:hover {
+                  background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.4);
+                  box-shadow: 0 0 10px rgba(255, 255, 255, 0.15); transform: scale(1.05);
+              }
+              .fd-header-activate-btn.running {
+                  background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #fff;
+                  animation: fd-ios-pulse 2s infinite;
+              }
               .fd-item.done, .fd-item.inactive { opacity: 0.2; filter: grayscale(100%); pointer-events: none; }
               @keyframes fd-ios-pulse {
                   0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); border-color: rgba(46, 204, 113, 0.8); }
@@ -9623,7 +9640,7 @@
       modal.innerHTML = `
           <div id="fulldope-header">
               <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.8</span></div>
-              <div id="fulldope-close">×</div>
+              <button class="fd-header-activate-btn" id="fd-run" title="Запустить">Активировать</button><div id="fulldope-close">×</div>
           </div>
           <div id="fulldope-content">
               <!-- Top Bar: Misc -->
@@ -9686,6 +9703,17 @@
                       <div style="font-size:10px;margin-top:2px;">Корона</div>
                   </div>
 
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                      <div class="fd-item" id="fd-natal" data-type="misc">
+                          <div class="fd-icon-wrapper" title="Натальная карта">
+                              <img src="/@/images/loc/natal2026/dog.png" style="width:24px;height:24px;">
+                          </div>
+                          <div style="font-size:10px;margin-top:2px;">Натальная</div>
+                      </div>
+                      <label style="font-size:8px;display:flex;align-items:center;gap:2px;cursor:pointer;color:rgba(255,255,255,0.8);"><input type="checkbox" id="fd-natal-believe" style="margin:0;"> Верю карте</label>
+                      <label style="font-size:8px;display:flex;align-items:center;gap:2px;cursor:pointer;color:rgba(255,255,255,0.8);"><input type="checkbox" id="fd-natal-doubt" style="margin:0;"> Сомневаюсь</label>
+                  </div>
+
                   <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
                       <div class="fd-item" id="fd-robot" data-type="misc">
                           <div class="fd-icon-wrapper" title="Робот"><img src="/@/images/loc/robot/robot_5.png" width="28%" height="28%"></div>
@@ -9693,7 +9721,6 @@
                       </div>
                       <label style="font-size:9px;display:flex;align-items:center;gap:2px;cursor:pointer;color:rgba(255,255,255,0.8);"><input type="checkbox" id="fd-robot-ultra" style="margin:0;"> Ultra</label>
                   </div>
-                  <button class="fd-round-run-btn" id="fd-run" title="Запустить">Активировать</button>
               </div>
 
               <div id="fulldope-columns">
@@ -9922,7 +9949,7 @@
       ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(bindGridToggle);
 
       // Misc items click handler
-      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown'].forEach(id => {
+      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown', 'fd-natal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.onclick = () => { el.classList.toggle('selected'); saveSelections(); };
       });
@@ -10344,7 +10371,8 @@
               { id: 'fd-carlson', url: '/karlsson/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-kosmodromx', url: '/kosmodromx/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-robot', url: '/mech/', check: d => d.querySelector('.robot2017-activate-button-inner') || (d.querySelector('.mech-b-overcharge') && !d.querySelector('.mech-b-overcharge.disabled')) },
-              { id: 'fd-crown', url: '/player/', check: d => d.querySelector('img[src*="crown_box.png"]') }
+              { id: 'fd-crown', url: '/player/', check: d => d.querySelector('img[src*="crown_box.png"]') },
+              { id: 'fd-natal', url: '/natal2026/', check: d => d.querySelector('.dog2017-actions') }
           ];
           checks.forEach(c => setAvailable(c.id, false));
           for (const c of checks) {
@@ -10462,7 +10490,8 @@
               'fd-shaman': { url: '/shaman/', name: '🧟 Гринч' },
               'fd-fake': { url: '/fake/', name: '🎭 Фейк' },
               'fd-carlson': { url: '/karlsson/', name: '🚁 Карлсон' },
-              'fd-kosmodromx': { url: '/kosmodromx/', name: '🚀 Космо X' }
+              'fd-kosmodromx': { url: '/kosmodromx/', name: '🚀 Космо X' },
+              'fd-natal': { url: '/natal2026/', name: '⭐ Натальная карта' }
           };
 
           const ROCKET_PAGE_CANDIDATES = ['/petrun/', '/tverskaya/', '/square/tvtower/', '/kosmodromx/'];
@@ -10790,6 +10819,58 @@
                           const ultra = ultraCh ? ultraCh.checked : false;
                           await request('/mech/', ultra ? { action: 'overcharge', ultra: 1 } : { action: 'overcharge' });
                           logs.push('🤖 Робот');
+                      } else if (task.id === 'fd-natal') {
+                          try {
+                              const believeCh = document.getElementById('fd-natal-believe');
+                              const doubtCh = document.getElementById('fd-natal-doubt');
+                              const believe = believeCh ? believeCh.checked : false;
+                              const doubt = doubtCh ? doubtCh.checked : false;
+
+                              if (!believe && !doubt) {
+                                  logs.push('⚠️ Выберите опцию натальной карты');
+                                  break;
+                              }
+
+                              // Переходим на страницу натальной карты
+                              if (location.pathname !== '/natal2026/') {
+                                  MoswarLib.Navigation.goToUrl('/natal2026/');
+                                  return 'NAVIGATE';
+                              }
+
+                              // Ждём загрузки страницы
+                              await sleep(1500);
+
+                              // Кликаем по кнопкам
+                              const actions = document.querySelector('.dog2017-actions');
+                              if (!actions) {
+                                  logs.push('⚠️ Не найдена панель .dog2017-actions');
+                                  break;
+                              }
+
+                              if (believe) {
+                                  const btnL = actions.querySelector('.dog2017-button--l');
+                                  if (btnL) {
+                                      console.log('[FullDope] Natal: clicking Верю карте');
+                                      if (btnL.onclick) { btnL.onclick(); }
+                                      else { btnL.click(); }
+                                      await sleep(1500);
+                                      logs.push('⭐ Верю карте');
+                                  }
+                              }
+                              if (doubt) {
+                                  const btnR = actions.querySelector('.dog2017-button--r');
+                                  if (btnR) {
+                                      console.log('[FullDope] Natal: clicking Сомневаюсь но жму');
+                                      if (btnR.onclick) { btnR.onclick(); }
+                                      else { btnR.click(); }
+                                      await sleep(1500);
+                                      logs.push('🤔 Сомневаюсь но жму');
+                                  }
+                              }
+                          } catch(e) {
+                              console.warn('[FullDope] Natal error:', e);
+                              logs.push('⚠️ Натальная: ' + e.message);
+                          }
                       } else if (eventMap[task.id]) {
                           const evt = eventMap[task.id];
                           if (evt.multi) {
@@ -12956,7 +13037,7 @@ utils_.init();
     /* ==========================================================================
        SMART BATTLE REGISTRY & NAVIGATION (NEW)
        ========================================================================== */
-    
+
     // Реестр боев: описывает, как записаться и какой это тип боя
     const BATTLE_REGISTRY = {
         // --- АЛЛЕЯ ---
@@ -12983,7 +13064,7 @@ utils_.init();
             signupBtn: { selector: '.phone-call-button, .button[onclick*="join"]', text: 'Принять' },
             waitPage: '/phone/call/',
             strategyKey: 'pahanStrategy',
-            isComplex: true 
+            isComplex: true
         },
         'depEnabled': {
             type: 'dep',
@@ -13010,7 +13091,7 @@ utils_.init();
             waitPage: '/sovet/',
             strategyKey: 'protStrategy'
         },
-        
+
         // --- ДРУГИЕ ---
         'superFlagEnabled': {
             type: 'flag',
@@ -13024,8 +13105,8 @@ utils_.init();
     let smartNav = {
         lastTarget: null,
         lastTime: 0,
-        debounceMs: 2000, 
-        
+        debounceMs: 2000,
+
         go: async function(url) {
             const now = Date.now();
             if (location.href.includes(url) || (now - this.lastTime < this.debounceMs)) {
@@ -13035,7 +13116,7 @@ utils_.init();
             Utils.log(`📍 Умный переход: ${url}`);
             this.lastTarget = url;
             this.lastTime = now;
-            
+
             Utils.go(url);
             return true;
         },
@@ -13052,10 +13133,10 @@ utils_.init();
     // --- СОСТОЯНИЕ БОЯ (Память) ---
     let currentBattleState = {
         active: false,
-        type: null,        
-        moduleId: null,    
-        turn: 0,           
-        waitingForForm: false, 
+        type: null,
+        moduleId: null,
+        turn: 0,
+        waitingForForm: false,
         lastActionAt: 0
     };
 
@@ -13395,12 +13476,12 @@ utils_.init();
     };
 
     function getBubbleText() { const b = Utils.q('#personal > a.bubble span.string span.text'); return b ? Utils.norm(b.textContent) : ''; }
-    
+
     // [SMART CORE] Проверка на групповые бои и очереди
     function isGroupBattleActive() {
         const text = getBubbleText();
         if (!text) return false;
-        
+
         // Ключевые слова, указывающие на занятость в групповых боях/очередях
         const conflictKeywords = ['в бою', 'ожидание', 'задержан', 'подготовка'];
         return conflictKeywords.some(k => text.includes(k));
@@ -14550,7 +14631,7 @@ function updatePanelUI() {
         // Обновляем статус
         const statusEl = document.getElementById('zk-status-text');
         if (statusEl) statusEl.textContent = cfg.running ? (cfg.paused ? 'пауза' : 'запущен') : 'остановлен';
-        
+
         // Обновляем кнопки
         const panel = document.getElementById('zk-panel');
         if (!panel) return;
@@ -14560,12 +14641,12 @@ function updatePanelUI() {
         const stopBtn = panel.querySelector('.zk-stop-btn');
 
         if (!startBtn || !pauseBtn || !stopBtn) return;
-        
+
         // Сбрасываем все состояния
         startBtn.classList.remove('active', 'zk-pulsing', 'zk-pulsing-pause', 'zk-pulsing-stop');
         pauseBtn.classList.remove('active', 'zk-pulsing', 'zk-pulsing-pause', 'zk-pulsing-stop');
         stopBtn.classList.remove('active', 'zk-pulsing', 'zk-pulsing-pause', 'zk-pulsing-stop');
-        
+
         if (cfg.running) {
             if (cfg.paused) {
                 // Пауза — кнопка паузы подсвечена
@@ -16541,7 +16622,7 @@ function updatePanelUI() {
         // Дуэль
         if (fightType === 'duel') {
             Utils.log('👊 Обработка дуэли...');
-            
+
             // Если бой завершен (победа/поражение)
             const endText = document.body?.innerText?.toLowerCase() || '';
             if (endText.includes('победа') || endText.includes('поражен') || endText.includes('задержан')) {
@@ -17694,7 +17775,7 @@ function updatePanelUI() {
     /* ===================== DUELS ===================== */
     async function processDuels() {
         if (!cfg.duelsEnabled) return false;
-        
+
         // [FIX] Глобальная проверка: если мы в бою — выходим немедленно
         if (Utils.onFight() || isCurrentlyFighting()) {
             Utils.log('🛑 Дуэли: уже в бою, игнорирую');
@@ -17791,7 +17872,7 @@ function updatePanelUI() {
                 const on = b.getAttribute('onclick') || '';
                 return on.includes("val('" + type + "')");
             });
-            
+
             if (btn && Utils.isVisible(btn)) {
                 btn.click();
                 Utils.log('Дуэль: поиск противника (' + type + ')');
@@ -18152,7 +18233,7 @@ function updatePanelUI() {
             const activeTimers = Object.entries(runtime.locationTimers)
                 .filter(([, t]) => t.active && t.endTime > now)
                 .sort((a, b) => a[1].endTime - b[1].endTime);
-            
+
             if (activeTimers.length > 0) {
                 const [key, timer] = activeTimers[0];
                 const waitMs = Math.max(5000, Math.min(15000, timer.endTime - now));
@@ -18193,7 +18274,7 @@ function updatePanelUI() {
     /* ==========================================================================
        UNIFIED SMART DISPATCHER (NEW)
        ========================================================================== */
-    
+
     async function processSmartCore() {
         const now = Date.now();
 
@@ -18231,18 +18312,18 @@ function updatePanelUI() {
 
         // 2. Получаем действие для текущего хода
         const action = getActionForTurn(currentBattleState.moduleId.replace('Enabled',''), currentBattleState.turn);
-        
+
         if (action && action.itemId !== 'none') {
             Utils.log(`⚔️ Ход ${currentBattleState.turn}: Используем ${action.itemName}`);
             await executeItem(action.itemId);
             currentBattleState.turn++;
-            await Utils.sleep(3000); 
+            await Utils.sleep(3000);
             return true;
         } else {
             Utils.log(`⚔️ Ход ${currentBattleState.turn}: Нет стратегии, ждем/бьем`);
             const attackBtn = Utils.q('button[type="submit"], .attack-btn');
             if (attackBtn) attackBtn.click();
-            
+
             await Utils.sleep(5000);
             return true;
         }
@@ -18269,7 +18350,7 @@ function updatePanelUI() {
     // Обработка локации (Аллея, Телефон...)
     async function handleSmartLocation() {
         const currentLoc = getCurrentPageModule();
-        
+
         for (const mod of ALL_MODULES) {
             if (!cfg[mod.id]) continue;
             if (mod.type === 'non-battle' && !['patrolEnabled'].includes(mod.id)) continue;
@@ -18292,18 +18373,18 @@ function updatePanelUI() {
             if (btn && Utils.isVisible(btn)) {
                 Utils.log(`👆 Клик по кнопке: ${registry.signupBtn.text}`);
                 btn.click();
-                
+
                 currentBattleState.active = true;
                 currentBattleState.type = registry.type;
                 currentBattleState.moduleId = mod.id;
                 currentBattleState.turn = 1;
-                
+
                 if (registry.isComplex) {
                     currentBattleState.waitingForForm = true;
                     await Utils.sleep(3000);
-                    submitPhoneForm(); 
+                    submitPhoneForm();
                 }
-                
+
                 return true;
             } else {
                 Utils.log(`⏳ Кнопка для ${mod.name} не найдена`);
@@ -18323,10 +18404,10 @@ function updatePanelUI() {
     function checkBattleEnd() {
         const hpBar = Utils.q('.hp-bar, .fighter_hp');
         const turnInfo = Utils.q('.turn-counter, h4');
-        
+
         if (!hpBar && !turnInfo) return true;
         if (document.body.innerText.includes('победа')) return true;
-        
+
         return false;
     }
 
@@ -18671,7 +18752,7 @@ function updatePanelUI() {
                 saveConfig();
             }
             strategyList.innerHTML = '';
-            
+
             for (let i = 1; i <= 10; i++) {
                 const action = currentStrategy.find(a => a.turn === i) || {};
                 const row = document.createElement('div');
@@ -18754,7 +18835,7 @@ function updatePanelUI() {
   },
   omon: function() {
       // Субботний ОМОН v3.1 - Полная интеграция
-      if (window._omonRunning) { 
+      if (window._omonRunning) {
           console.log('[ОМОН] Уже запущен');
           return;
       }
@@ -19950,6 +20031,7 @@ function updatePanelUI() {
               '/fd cosmo - Космодром\n' +
               '/fd labubu - Лабубу\n' +
               '/fd misc - Разное (Бизнес, Акции)\n' +
+              '/fd natal - Натальная карта\n' +
               '/fd robot - Робот\n' +
               '/fd moscowpoly - Москвополия'
           );
@@ -19985,7 +20067,7 @@ function updatePanelUI() {
               // 4. Логика выбора
               if (target === 'all') {
                   ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(selectAllIn);
-                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot'].forEach(selectMisc);
+                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot', 'fd-natal'].forEach(selectMisc);
               } else if (target === 'dope') {
                   const dopeNames = payload.split(',').map(name => name.trim().toLowerCase()).filter(Boolean);
                   const container = document.getElementById('fd-list-dopes');
@@ -20026,7 +20108,7 @@ function updatePanelUI() {
                   }
 
                   if (target === 'misc') {
-                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown'].forEach(selectMisc);
+                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-natal'].forEach(selectMisc);
                   }
               }
 
@@ -20161,7 +20243,7 @@ function updatePanelUI() {
 
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
-      
+
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
           return;
@@ -20271,7 +20353,7 @@ function updatePanelUI() {
                       return JSON.parse(zakData);
                   }
               } catch(e) {}
-              
+
               // Встроенный fallback (дублируем основные)
               return [
                   { id: '3', name: 'Призвать мишку' },
@@ -20372,20 +20454,20 @@ function updatePanelUI() {
 
               // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
-              
+
               slots.forEach(img => {
                   const id = img.dataset.id;
                   const label = img.closest('label');
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-                  
+
                   // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
                   let name = input.getAttribute('rel') || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
                       name = getAbilityName(id) || `Абилка ${id}`;
                   }
-                  
+
                   const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
