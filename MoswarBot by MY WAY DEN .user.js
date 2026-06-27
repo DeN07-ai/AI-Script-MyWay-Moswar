@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.7.9
+// @version      1.8.0
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -18946,12 +18946,11 @@ function updatePanelUI() {
                   'Группа Коммунистов': { 'Вождь': 1 }
               },
               karman: {
-                  'Пробковая каска [Ультра]': 'каска',
-                  'Граната «Элит-ОМОН»': 'омон',
-                  'Трудовая книжка': 'миг',
-                  'Еда Шаманов': 'каска',
-                  'Орех «Кокосовый» 2023': 'каска',
-                  'Орех «Кокосовый»': 'каска'
+                  'каска': 'каска',
+                  'грана': 'омон',
+                  'трудов': 'миг',
+                  'еда шаман': 'каска',
+                  'орех': 'каска'
               },
               super: {
                   'красный': 'Красный суперудар',
@@ -19089,22 +19088,23 @@ function updatePanelUI() {
               },
 
               usekarman: function(type) {
-                  const order = [
-                      'Пробковая каска [Ультра]',
-                      'Еда Шаманов',
-                      'Орех «Кокосовый» 2023',
-                      'Орех «Кокосовый»'
+                  // Порядок приоритета предметов (частичное совпадение)
+                  const orderPatterns = [
+                      /каска/i,
+                      /еда шаман/i,
+                      /орех.*2023/i,
+                      /орех/i
                   ];
 
-                  for (let itemName of order) {
+                  for (let pattern of orderPatterns) {
                       for (let i = 0; i < this.group.karman.length; i++) {
-                          if (this.group.karman[i].name === itemName && this.group.karman[i].quant > 0) {
+                          if (pattern.test(this.group.karman[i].name) && this.group.karman[i].quant > 0) {
                               const id = this.group.karman[i].id;
                               const nn = this.group.karman[i].name;
                               console.log(id + ' используется каска | ' + nn);
                               this.addLog('Использую предмет: ' + nn);
 
-                              if (nn == 'Пробковая каска [Ультра]' || nn == 'Орех «Кокосовый» 2023') {
+                              if (nn.toLowerCase().includes('каска') || (nn.toLowerCase().includes('орех') && nn.includes('2023'))) {
                                   this.def.kas += 2;
                               }
 
@@ -19273,12 +19273,8 @@ function updatePanelUI() {
 
                       // Боевые предметы
                       self.kaskaCount = 0;
-                      const kaskaNames = [
-                          'Пробковая каска [Ультра]',
-                          'Еда Шаманов',
-                          'Орех «Кокосовый» 2023',
-                          'Орех «Кокосовый»'
-                      ];
+                      // Паттерны для подсчёта касок (частичное совпадение)
+                      const isKaskaPattern = /каска|еда шаман|орех.*2023|орех/i;
 
                       stside = data.content._sub('<div class="log-panel-title">Боевые предметы', '</tr></table>');
                       while (stside) {
@@ -19289,14 +19285,21 @@ function updatePanelUI() {
                               const id = st._sub('data-id="', '"');
                               const nn = st._sub('rel="', '"');
                               const co = st._sub('count">#', '<');
-                              const nick = self.karman[nn.toLowerCase().indexOf('каска') !== -1 ? 'каска' : 'омон'];
+                              let nick = null;
+                              for (let key in self.karman) {
+                                  if (nn.toLowerCase().indexOf(key.toLowerCase()) !== -1) {
+                                      nick = self.karman[key];
+                                      break;
+                                  }
+                              }
+                              if (!nick) nick = nn.toLowerCase().includes('каска') ? 'каска' : 'омон';
                               self.group.karman.push({
                                   name: nn,
                                   id: Number(id),
                                   quant: Number(co),
                                   nick: nick
                               });
-                              if (kaskaNames.includes(nn)) {
+                              if (isKaskaPattern.test(nn)) {
                                   self.kaskaCount += Number(co);
                               }
                           }
