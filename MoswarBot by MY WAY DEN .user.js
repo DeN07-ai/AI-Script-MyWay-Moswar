@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.8.0
-// @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
+// @version      1.8.1
+// @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот, ОМОН
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
@@ -940,7 +940,7 @@
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы', version: '1.3.17' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
-      { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство', version: '2.0' },
+      { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство', version: '3.0' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
@@ -10764,30 +10764,60 @@
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
-                          const mp = window.Moscowpoly;
+                          
+                          // Переходим на страницу москвополии если ещё не там
+                          if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
+                              console.log('[FullDope] Moscowpoly: Navigating to /home/');
+                              MoswarLib.Navigation.goToUrl('/home/');
+                              await sleep(3000);
+                          }
+                          
+                          // Ждём инициализации window.Moscowpoly
+                          const mp = await new Promise(function(resolve) {
+                              let tries = 0;
+                              let interval = setInterval(function() {
+                                  tries++;
+                                  if (window.Moscowpoly && typeof window.Moscowpoly.dropDices === 'function') {
+                                      clearInterval(interval);
+                                      console.log('[FullDope] Moscowpoly: Initialized after ' + tries + ' tries');
+                                      resolve(window.Moscowpoly);
+                                  }
+                                  if (tries > 100) {
+                                      clearInterval(interval);
+                                      console.warn('[FullDope] Moscowpoly: Timeout, using AJAX fallback');
+                                      resolve(null);
+                                  }
+                              }, 100);
+                          });
+                          
                           for (let i = 0; i < count; i++) {
                               // Быстрый бросок: прямой вызов функции игры (без анимации)
                               if (mp && typeof mp.dropDices === 'function' && !mp.inAction) {
+                                  console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via API');
                                   mp.dropDices();
                                   // Ждём завершения анимации (~1-1.5 сек)
-                                  await sleep(1200);
+                                  await sleep(1500);
                               } else {
                                   // Fallback: AJAX
+                                  console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via AJAX');
                                   const r = await request('/home/moscowpoly_roll/', { action: 'moscowpoly_roll' });
-                                  if (!r || r.result === 0) break;
-                                  await sleep(800);
+                                  if (!r || r.result === 0) {
+                                      console.warn('[FullDope] Moscowpoly: Roll failed');
+                                      break;
+                                  }
+                                  await sleep(1000);
                               }
                               // Активация бонуса
                               if (mp && typeof mp.doActivate === 'function' && !mp.inAction) {
                                   mp.doActivate();
-                                  await sleep(400);
+                                  await sleep(500);
                               } else {
                                   await request('/home/moscowpoly_activate/', { action: 'moscowpoly_activate' });
-                                  await sleep(400);
+                                  await sleep(500);
                               }
                               done++;
                           }
-                          logs.push(`🎲 Москвополия: ${done}`);
+                          logs.push('🎲 Москвополия: ' + done);
                       } else if (task.id === 'fd-stash') {
                           await request('/home/business/', { action: 'activate' });
                           await request('/home/business/activate/', { ajax: 1, action: 'activate' });
@@ -11252,21 +11282,90 @@
       if (window._satelliteModuleRunning) { return; }
       window._satelliteModuleRunning = true;
 
-      let botRunning = false;
-      let timerId = null;
-      let logBuffer = [];
+      const VERSION = '3.0';
+      const LS_PLAN = 'satbot_plan_v3';
+      const LS_RUNNING = 'satbot_running';
+      const LS_PAUSED = 'satbot_paused';
+      const BUILDING_NAMES = ['Фабрика', 'Цех', 'Завод', 'Комплекс', 'Реактор'];
+      const BUILDING_ICONS = ['1_64.png', '2_64.png', '3_64.png', '4_64.png', '5_64.png'];
+      const SAT_COUNT = 10;
 
-      // Здесь храним текущую задержку
-      var delay = 1;
-      // Счетчик итераций
-      var pass = 1;
+      function defaultBuilding(idx) {
+          const defaults = [10, 20, 30, 50, 1];
+          return { targetLevel: defaults[idx] || 0, mode: 'detail', maxUpgrades: 0 };
+      }
+
+      function defaultSatPlan() {
+          return {
+              enabled: true,
+              smartMode: false,
+              halfPriceCount: 0,
+              autoBoost: false,
+              autoLaunch: true,
+              autoSlot: true,
+              buildings: BUILDING_NAMES.map((_, i) => defaultBuilding(i))
+          };
+      }
+
+      function defaultConfig() {
+          const plans = {};
+          for (let s = 1; s <= SAT_COUNT; s++) plans[s] = defaultSatPlan();
+          return { selectedSat: 1, globalMinGain: 60, sequential: true, plans };
+      }
+
+      let config = defaultConfig();
+      let botRunning = false;
+      let botPaused = false;
+      let timerId = null;
+      let loopBusy = false;
+      let delay = 1;
+      let pass = 1;
+      let logBuffer = [];
+      let liveTimerId = null;
+      let lastSnapshot = null;
+      const runtime = { satIndex: 0, halfPriceUsed: 0, boostUsed: false, upgradeCounts: {} };
+
+      function loadConfig() {
+          try {
+              const raw = localStorage.getItem(LS_PLAN);
+              if (!raw) return;
+              const parsed = JSON.parse(raw);
+              config = { ...defaultConfig(), ...parsed, plans: { ...defaultConfig().plans, ...(parsed.plans || {}) } };
+              for (let s = 1; s <= SAT_COUNT; s++) {
+                  if (!config.plans[s]) config.plans[s] = defaultSatPlan();
+                  config.plans[s].buildings = (config.plans[s].buildings || []).map((b, i) => ({
+                      ...defaultBuilding(i),
+                      ...(b || {})
+                  }));
+                  while (config.plans[s].buildings.length < 5) config.plans[s].buildings.push(defaultBuilding(config.plans[s].buildings.length));
+              }
+          } catch (e) {
+              console.warn('[Satellite] loadConfig', e);
+          }
+      }
+
+      function saveConfig() {
+          localStorage.setItem(LS_PLAN, JSON.stringify(config));
+      }
+
+      function getPlan(satIndex) {
+          return config.plans[satIndex] || config.plans[config.selectedSat] || defaultSatPlan();
+      }
+
+      function resetRuntime(satIndex) {
+          if (runtime.satIndex === satIndex) return;
+          runtime.satIndex = satIndex;
+          runtime.halfPriceUsed = 0;
+          runtime.boostUsed = false;
+          runtime.upgradeCounts = {};
+      }
 
       function addLog(msg) {
           const t = new Date();
-          const stamp = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`;
+          const stamp = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
           console.log(`[Satellite] ${msg}`);
           logBuffer.push(`[${stamp}] ${msg}`);
-          if (logBuffer.length > 50) logBuffer.shift();
+          if (logBuffer.length > 120) logBuffer.shift();
           const el = document.getElementById('sat-log');
           if (el) {
               el.textContent = logBuffer.join('\n');
@@ -11274,448 +11373,704 @@
           }
       }
 
-      function updateStatus(text) {
+      function setStatus(text) {
           const el = document.getElementById('sat-status');
           if (el) el.textContent = text;
           addLog(text);
       }
 
+      function timeFormat(sec) {
+          sec = Math.floor(sec);
+          const sign = sec < 0 ? '-' : '';
+          sec = Math.abs(sec);
+          const days = Math.floor(sec / 86400);
+          const h = Math.floor(sec / 3600 % 24);
+          const m = Math.floor(sec / 60 % 60);
+          const s = sec % 60;
+          const pad = n => (n < 10 ? '0' + n : '' + n);
+          return sign + (days > 0 ? days + ' д ' : '') + pad(h) + ':' + pad(m) + ':' + pad(s);
+      }
+
+      function parseAmount(str) {
+          if (!str) return 0;
+          str = String(str).replace(/\s/g, '').replace(',', '.');
+          if (/M/i.test(str)) return parseFloat(str) * 1e6;
+          if (/B/i.test(str)) return parseFloat(str) * 1e9;
+          if (/k/i.test(str)) return parseFloat(str) * 1e3;
+          return parseFloat(str) || 0;
+      }
+
+      function getLevel(building) {
+          if (!building || !building.mf) return 0;
+          const n = parseInt(String(building.mf).replace(/\D/g, ''), 10);
+          return isNaN(n) ? 0 : n;
+      }
+
+      function formatNum(n) {
+          if (n == null || isNaN(n)) return '—';
+          if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+          if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+          if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+          return Math.round(n).toLocaleString();
+      }
+
       function updateButtonsVisual() {
           const bStart = document.getElementById('sat-start');
-          const bStop = document.getElementById('sat-stop');
-          if (!bStart || !bStop) return;
-
-          if (botRunning) {
-              bStart.textContent = "▶ Работает";
-              bStart.style.background = "rgba(0,200,0,0.8)";
-              bStart.style.color = "#fff";
+          const bPause = document.getElementById('sat-pause');
+          if (!bStart) return;
+          if (botRunning && !botPaused) {
+              bStart.textContent = '▶ Работает';
+              bStart.style.background = 'rgba(0,200,0,0.8)';
+              bStart.style.color = '#fff';
+          } else if (botRunning && botPaused) {
+              bStart.textContent = '▶ Продолжить';
+              bStart.style.background = 'rgba(120,120,120,0.9)';
+              bStart.style.color = '#fff';
           } else {
-              bStart.textContent = "▶ Старт";
-              bStart.style.background = "";
-              bStart.style.color = "";
+              bStart.textContent = '▶ Старт';
+              bStart.style.background = '';
+              bStart.style.color = '';
           }
+          if (bPause) {
+              bPause.style.background = (botRunning && botPaused) ? 'rgba(230,190,30,0.9)' : '';
+              bPause.style.color = (botRunning && botPaused) ? '#000' : '';
+          }
+      }
+
+      function renderPlanEditor() {
+          const host = document.getElementById('sat-plan-editor');
+          if (!host) return;
+          const sat = config.selectedSat;
+          const plan = getPlan(sat);
+          let rows = '';
+          for (let i = 0; i < 5; i++) {
+              const b = plan.buildings[i] || defaultBuilding(i);
+              rows += `
+                <tr>
+                  <td style="padding:4px 2px;white-space:nowrap;">
+                    <img src="https://www.moswar.ru/@/images/loc/satellite/${BUILDING_ICONS[i]}" width="18" height="18" style="vertical-align:middle;border-radius:4px;">
+                    ${BUILDING_NAMES[i]}
+                  </td>
+                  <td style="padding:4px 2px;"><input type="number" min="0" max="99" class="mw-input sat-bld-target" data-idx="${i}" value="${b.targetLevel}" style="width:46px;" title="Цель M (0 = не трогать)"></td>
+                  <td style="padding:4px 2px;"><input type="number" min="0" max="99" class="mw-input sat-bld-maxup" data-idx="${i}" value="${b.maxUpgrades}" style="width:46px;" title="Макс. апгрейдов (0 = до цели)"></td>
+                  <td style="padding:4px 2px;">
+                    <select class="mw-input sat-bld-mode" data-idx="${i}" style="width:78px;font-size:10px;">
+                      <option value="detail" ${b.mode === 'detail' ? 'selected' : ''}>Детали</option>
+                      <option value="honey" ${b.mode === 'honey' ? 'selected' : ''}>Мёд</option>
+                      <option value="auto" ${b.mode === 'auto' ? 'selected' : ''}>Авто</option>
+                      <option value="skip" ${b.mode === 'skip' ? 'selected' : ''}>—</option>
+                    </select>
+                  </td>
+                </tr>`;
+          }
+          host.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <b>План спутника #${sat}</b>
+              <div style="display:flex;gap:8px;">
+                <label style="font-size:11px;"><input type="checkbox" id="sat-plan-smart" ${plan.smartMode ? 'checked' : ''}> Авто-апгрейд</label>
+                <label style="font-size:11px;"><input type="checkbox" id="sat-plan-enabled" ${plan.enabled ? 'checked' : ''}> Активен</label>
+              </div>
+            </div>
+            <table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px;">
+              <thead><tr style="opacity:0.7;">
+                <th style="text-align:left;padding:2px;">Постройка</th>
+                <th>M→</th><th>Макс</th><th>Режим</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
+              <label>Скидки «пополам»: <input type="number" id="sat-half-count" min="0" max="20" class="mw-input" value="${plan.halfPriceCount}" style="width:42px;"></label>
+              <label><input type="checkbox" id="sat-auto-boost" ${plan.autoBoost ? 'checked' : ''}> x2 за 49🍯</label>
+              <label><input type="checkbox" id="sat-auto-launch" ${plan.autoLaunch ? 'checked' : ''}> Авто «ПОЕХАЛИ»</label>
+              <label><input type="checkbox" id="sat-auto-slot" ${plan.autoSlot ? 'checked' : ''}> Авто-слот</label>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" id="sat-copy-plan" class="mw-btn" style="font-size:10px;padding:4px 8px;">Копировать на все</button>
+              <button type="button" id="sat-reset-plan" class="mw-btn" style="font-size:10px;padding:4px 8px;">Сброс #${sat}</button>
+            </div>`;
+
+          const btnSmart = document.getElementById('sat-plan-smart');
+          if (btnSmart) btnSmart.onchange = e => { plan.smartMode = e.target.checked; saveConfig(); renderPlanEditor(); };
+          document.getElementById('sat-plan-enabled').onchange = e => { plan.enabled = e.target.checked; saveConfig(); };
+          document.getElementById('sat-half-count').onchange = e => {
+              plan.halfPriceCount = Math.max(0, parseInt(e.target.value, 10) || 0);
+              e.target.value = plan.halfPriceCount;
+              saveConfig();
+          };
+          document.getElementById('sat-auto-boost').onchange = e => { plan.autoBoost = e.target.checked; saveConfig(); };
+          document.getElementById('sat-auto-launch').onchange = e => { plan.autoLaunch = e.target.checked; saveConfig(); };
+          document.getElementById('sat-auto-slot').onchange = e => { plan.autoSlot = e.target.checked; saveConfig(); };
+          host.querySelectorAll('.sat-bld-target').forEach(inp => {
+              inp.onchange = () => {
+                  const idx = +inp.dataset.idx;
+                  plan.buildings[idx].targetLevel = Math.max(0, parseInt(inp.value, 10) || 0);
+                  inp.value = plan.buildings[idx].targetLevel;
+                  saveConfig();
+              };
+          });
+          host.querySelectorAll('.sat-bld-maxup').forEach(inp => {
+              inp.onchange = () => {
+                  const idx = +inp.dataset.idx;
+                  plan.buildings[idx].maxUpgrades = Math.max(0, parseInt(inp.value, 10) || 0);
+                  inp.value = plan.buildings[idx].maxUpgrades;
+                  saveConfig();
+              };
+          });
+          host.querySelectorAll('.sat-bld-mode').forEach(sel => {
+              sel.onchange = () => {
+                  plan.buildings[+sel.dataset.idx].mode = sel.value;
+                  saveConfig();
+              };
+          });
+          document.getElementById('sat-copy-plan').onclick = () => {
+              const src = JSON.parse(JSON.stringify(getPlan(sat)));
+              for (let n = 1; n <= SAT_COUNT; n++) config.plans[n] = JSON.parse(JSON.stringify(src));
+              saveConfig();
+              addLog('План #' + sat + ' скопирован на все спутники');
+              renderPlanEditor();
+          };
+          document.getElementById('sat-reset-plan').onclick = () => {
+              config.plans[sat] = defaultSatPlan();
+              saveConfig();
+              renderPlanEditor();
+              addLog('План #' + sat + ' сброшен');
+          };
+      }
+
+      function renderSatTabs() {
+          const host = document.getElementById('sat-tabs');
+          if (!host) return;
+          host.innerHTML = '';
+          for (let s = 1; s <= SAT_COUNT; s++) {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'mw-btn';
+              btn.textContent = String(s);
+              btn.style.cssText = `min-width:28px;padding:4px 6px;font-size:11px;${s === config.selectedSat ? 'background:rgba(0,200,0,0.35);border-color:rgba(0,200,0,0.5);' : ''}`;
+              btn.onclick = () => {
+                  config.selectedSat = s;
+                  saveConfig();
+                  renderSatTabs();
+                  renderPlanEditor();
+              };
+              host.appendChild(btn);
+          }
+      }
+
+      function updateDashboard(data) {
+          lastSnapshot = data;
+          const detEl = document.getElementById('sat-details-val');
+          const incEl = document.getElementById('sat-income-val');
+          const goalEl = document.getElementById('sat-goal-val');
+          const barEl = document.getElementById('sat-progress-bar');
+          const etaEl = document.getElementById('sat-eta-val');
+          const curSatEl = document.getElementById('sat-current-num');
+          if (!data) return;
+          if (curSatEl) curSatEl.textContent = '#' + data.satIndex;
+          if (detEl) detEl.textContent = formatNum(data.currentDetails);
+          if (incEl) incEl.textContent = '+' + formatNum(data.income) + '/с';
+          if (goalEl) goalEl.textContent = formatNum(data.goalDetails);
+          if (barEl) {
+              const pct = data.goalDetails > 0 ? Math.min(100, data.currentDetails / data.goalDetails * 100) : 0;
+              barEl.style.width = pct.toFixed(2) + '%';
+          }
+          if (etaEl && data.estimatedEta > 0 && data.goalDetails > data.currentDetails) {
+              etaEl.textContent = timeFormat(data.estimatedEta);
+          } else if (etaEl && data.income > 0 && data.goalDetails > data.currentDetails) {
+              etaEl.textContent = timeFormat((data.goalDetails - data.currentDetails) / data.income);
+          } else if (etaEl) {
+              etaEl.textContent = data.currentDetails >= data.goalDetails ? 'готово' : '—';
+          }
+      }
+
+      function startLiveCounter() {
+          if (liveTimerId) clearInterval(liveTimerId);
+          liveTimerId = setInterval(() => {
+              if (!lastSnapshot || !botRunning || botPaused) return;
+              const elapsed = (Date.now() - lastSnapshot.ts) / 1000;
+              updateDashboard({
+                  ...lastSnapshot,
+                  currentDetails: lastSnapshot.baseDetails + lastSnapshot.income * elapsed,
+                  estimatedEta: lastSnapshot.estimatedEta > 0 ? Math.max(0, lastSnapshot.estimatedEta - elapsed) : 0
+              });
+          }, 500);
       }
 
       function createUI() {
           if (document.getElementById('satellite-panel')) return;
-          const ui = Utils.createPanel("satellite-panel", "🛰️ Satellite Bot v2.0");
+          loadConfig();
+          const ui = Utils.createPanel('satellite-panel', '🛰️ Спутники v' + VERSION);
           if (!ui) return;
-          const panel = ui.panel;
-          const header = ui.header;
-          const body = ui.body;
-          body.id = "satellite-body";
+          const { panel, header, body } = ui;
+          panel.style.width = '430px';
+          body.id = 'satellite-body';
 
           body.innerHTML = `
             <div style="display:flex;gap:8px;margin-bottom:10px;">
               <button id="sat-start" class="mw-btn">▶ Старт</button>
+              <button id="sat-pause" class="mw-btn">⏸ Пауза</button>
               <button id="sat-stop" class="mw-btn">⏹ Стоп</button>
             </div>
 
-            <div style="margin-top:10px;margin-bottom:10px;">
-                <div style="font-weight:700;margin-bottom:6px;">Статус</div>
-                <div><span id="sat-status" style="font-weight:800;">Ожидание...</span></div>
+            <div style="margin-bottom:10px;padding:12px;border-radius:12px;background:rgba(20, 25, 35, 0.4);border:1px solid rgba(255,255,255,0.1);box-shadow:inset 0 0 20px rgba(0,0,0,0.5);">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
+                <span style="opacity:0.9;">Спутник <b id="sat-current-num" style="color:#60a5fa;">—</b></span>
+                <span id="sat-status" style="font-weight:700;letter-spacing:0.5px;">Ожидание…</span>
+              </div>
+              <div style="font-size:11px;margin-bottom:8px;opacity:0.8;">
+                <span id="sat-details-val" style="color:#fff;font-weight:bold;">—</span> / <span id="sat-goal-val">—</span>
+                · <span id="sat-income-val" style="color:#4ade80;">—</span>
+                · ETA <span id="sat-eta-val" style="color:#fbbf24;">—</span>
+              </div>
+              <div style="height:10px;border-radius:999px;background:rgba(0,0,0,0.5);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,0.8);">
+                <div id="sat-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg, #3b82f6, #60a5fa);transition:width 0.6s ease-out;border-radius:999px;box-shadow:0 0 10px rgba(96,165,250,0.5);"></div>
+              </div>
             </div>
 
-            <div>
-                <b>Лог:</b><br>
-                <pre id="sat-log" style="max-height:180px;overflow:auto;background:rgba(0,0,0,0.2);padding:8px;border-radius:10px;font-size:11px;white-space:pre-wrap;border:1px solid rgba(255,255,255,0.1);"></pre>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:11px;margin-bottom:6px;opacity:0.85;">Выбор спутника для плана:</div>
+              <div id="sat-tabs" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
             </div>
+
+            <div id="sat-plan-editor" style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);"></div>
+
+            <div style="margin-bottom:8px;font-size:11px;">
+              <label>Мин. выгода апгрейда (сек): <input type="number" id="sat-min-gain" min="0" max="3600" class="mw-input" value="${config.globalMinGain}" style="width:56px;"></label>
+              <label style="margin-left:8px;"><input type="checkbox" id="sat-sequential" ${config.sequential ? 'checked' : ''}> По очереди (#1→#10)</label>
+            </div>
+
+            <b>Лог:</b>
+            <pre id="sat-log" style="max-height:160px;overflow:auto;background:rgba(0,0,0,0.2);padding:8px;border-radius:10px;font-size:11px;white-space:pre-wrap;border:1px solid rgba(255,255,255,0.1);"></pre>
           `;
 
           document.getElementById('sat-start').onclick = () => startBot(true);
+          document.getElementById('sat-pause').onclick = () => togglePause(true);
           document.getElementById('sat-stop').onclick = () => stopBot(true);
+          document.getElementById('sat-min-gain').onchange = e => {
+              config.globalMinGain = Math.max(0, parseInt(e.target.value, 10) || 0);
+              e.target.value = config.globalMinGain;
+              saveConfig();
+          };
+          document.getElementById('sat-sequential').onchange = e => {
+              config.sequential = e.target.checked;
+              saveConfig();
+          };
 
-          // Drag
-          let ox = 0, oy = 0, drag = false;
+          let drag = false, ox = 0, oy = 0;
           header.addEventListener('mousedown', e => {
               if (e.target.classList.contains('toggle-btn')) return;
-              drag = true; ox = e.clientX - panel.offsetLeft; oy = e.clientY - panel.offsetTop;
+              drag = true;
+              ox = e.clientX - panel.offsetLeft;
+              oy = e.clientY - panel.offsetTop;
           });
           document.addEventListener('mousemove', e => {
               if (!drag) return;
               panel.style.left = (e.clientX - ox) + 'px';
               panel.style.top = (e.clientY - oy) + 'px';
+              panel.style.right = 'auto';
           });
-          document.addEventListener('mouseup', () => drag = false);
+          document.addEventListener('mouseup', () => { drag = false; });
 
-          // Collapse
           const toggle = header.querySelector('.toggle-btn');
-          if(toggle) toggle.onclick = () => {
-              const hidden = body.style.display === "none";
-              body.style.display = hidden ? "block" : "none";
-              toggle.textContent = hidden ? "▾" : "▸";
+          if (toggle) toggle.onclick = () => {
+              const hidden = body.style.display === 'none';
+              body.style.display = hidden ? 'block' : 'none';
+              toggle.textContent = hidden ? '▾' : '▸';
           };
 
+          renderSatTabs();
+          renderPlanEditor();
           updateButtonsVisual();
       }
 
       function startBot(isUser) {
-          if (botRunning) return;
+          if (botRunning && !botPaused) return;
           botRunning = true;
-          localStorage.setItem('satbot_running', '1');
-          updateStatus("Работает");
-          timerId = setInterval(sat, 1000);
+          botPaused = false;
+          localStorage.setItem(LS_RUNNING, '1');
+          localStorage.setItem(LS_PAUSED, '0');
+          if (!timerId) timerId = setInterval(satTick, 1000);
+          setStatus('Работает');
           updateButtonsVisual();
-          if(isUser === true) Utils.reportToCreator('Satellite', 'Started');
+          startLiveCounter();
+          if (isUser) {
+              Utils.reportToCreator('Satellite', 'Started');
+              MoswarLib.events.emit('module:status', { id: 'satellite', status: 'started' });
+          }
+      }
+
+      function togglePause(isUser) {
+          if (!botRunning) return;
+          botPaused = !botPaused;
+          localStorage.setItem(LS_PAUSED, botPaused ? '1' : '0');
+          setStatus(botPaused ? 'Пауза' : 'Работает');
+          updateButtonsVisual();
+          if (isUser) Utils.reportToCreator('Satellite', botPaused ? 'Paused' : 'Resumed');
       }
 
       function stopBot(isUser) {
-          if (!botRunning) return;
           botRunning = false;
-          localStorage.setItem('satbot_running', '0');
-          if (timerId) clearInterval(timerId);
-          updateStatus("Остановлен");
+          botPaused = false;
+          localStorage.setItem(LS_RUNNING, '0');
+          localStorage.setItem(LS_PAUSED, '0');
+          if (timerId) { clearInterval(timerId); timerId = null; }
+          if (liveTimerId) { clearInterval(liveTimerId); liveTimerId = null; }
+          loopBusy = false;
+          setStatus('Остановлен');
           updateButtonsVisual();
-          if(isUser === true) Utils.reportToCreator('Satellite', 'Stopped');
+          if (isUser) {
+              Utils.reportToCreator('Satellite', 'Stopped');
+              MoswarLib.events.emit('module:status', { id: 'satellite', status: 'stopped' });
+          }
       }
 
-      function sat() {
-          if (!botRunning) return;
-          // Управляем ожиданием
-          if (--delay > 0) {
-              // Если время ожидания не вышло, завершаем метод
+      function parseSatIndex(content) {
+          const m = content.match(/satellite-progress__bar-inner state-(\d+)/);
+          if (m) return parseInt(m[1], 10);
+          const active = (content.match(/satellite-progress__bar-item active/g) || []).length;
+          return Math.max(1, active);
+      }
+
+      function buildingAllowed(plan, idx, smartMode = false) {
+          const b = plan.buildings[idx];
+          if (!b || b.mode === 'skip') return false;
+          if (smartMode) return true;
+          if (b.targetLevel <= 0) return false;
+          const key = runtime.satIndex + '_' + idx;
+          const done = runtime.upgradeCounts[key] || 0;
+          if (b.maxUpgrades > 0 && done >= b.maxUpgrades) return false;
+          return true;
+      }
+
+      function pickUpgradeValue(planBuilding, building, currentDetails) {
+          if (!planBuilding || planBuilding.mode === 'skip') return null;
+          if (planBuilding.mode === 'honey') return 'honey';
+          if (planBuilding.mode === 'detail') return 'detail';
+          if (planBuilding.mode === 'auto') {
+              if (currentDetails >= building.price) return 'detail';
+              if (building.honeyPrice > 0) return 'honey';
+              return 'detail';
+          }
+          return 'detail';
+      }
+
+      function postAction(action, extra, cb) {
+          $.post('/satellite/', { action, ...extra }, cb, 'json').fail(() => {
+              addLog('Ошибка POST: ' + action);
+              loopBusy = false;
+              delay = 30;
+          });
+      }
+
+      function satTick() {
+          if (!botRunning || botPaused) return;
+          if (--delay > 0) return;
+          if (loopBusy) return;
+
+          if (window.utils_) {
+              addLog('Конфликт: модуль ИИ активен — пауза');
+              delay = 30;
               return;
-          } else {
-              // Перезагружаем станицу с Ajax, чтобы не остановить скрипт
-              AngryAjax.goToUrl('/satellite/', {});
           }
 
-          // Переменные индексов вхождений строк для парсинга HTML
-          var i, j;
-          // Объект текущего состояния постройки
-          var currentState;
-          // Текущее количество накопленных деталей
-          var currentDetails;
-          // Количество деталей, необходимое для покупки Слота
-          var slotDetails = 0;
-          // Массив Построек
-          var buildings = [];
-
-          // Функция форматирования времени
-          var timeFormat = (function () {
-              function num(val) {
-                  val = Math.floor(val);
-                  return val < 10 ? '0' + val : val;
+          const path = location.pathname.replace(/\/+$/, '');
+          if (path !== '/satellite') {
+              if (typeof MoswarLib !== 'undefined' && MoswarLib.Navigation) {
+                  MoswarLib.Navigation.goToUrl('/satellite/', {});
+              } else if (typeof AngryAjax !== 'undefined') {
+                  AngryAjax.goToUrl('/satellite/', {});
               }
-
-              return function (sec) {
-                  var sign = sec < 0 ? -1 : 1;
-                  sec = Math.abs(sec);
-                  var days = Math.floor(sec / 3600 / 24);
-                  var hours = sec / 3600 % 24;
-                  var minutes = sec / 60 % 60;
-                  var seconds = sec % 60;
-
-                  return (sign == 1 ? '' : '-') + (days > 0 ? days + ' д ' : '') + num(hours) + ":" + num(minutes) + ":" + num(seconds);
-              };
-          })();
-
-          // Функция, печатающая массивы времен
-          var timeArrayFormat = (function () {
-              return function (times) {
-                  var result = '[';
-                  for (var i = 0; i < times.length; i++) {
-                      result += i + ': ';
-                      // В реальности, значение MAX может быть только одно
-                      if (i == 0 && times[i] == 100) {
-                          result += 'MAX';
-                      } else if (i == 1 && times[i] == 1000) {
-                          result += 'MAX';
-                      } else if (i == 2 && times[i] == 10000) {
-                          result += 'MAX';
-                      } else if (i == 3 && times[i] == 100000) {
-                          result += 'MAX';
-                      } else {
-                          result += timeFormat(times[i]);
-                      }
-
-                      if (i < times.length - 1) {
-                          result += ', ';
-                      }
-                  }
-                  result += ']';
-                  return result;
-              }
-          })();
-
-          // @param building - данные по постройке
-          // @return текущий уровень постройки
-          function getLevel(building) {
-              // building.mf - это строка вида М23
-              return Number(building.mf.substring(1, building.mf.length));
+              delay = 5;
+              return;
           }
 
-          // n - номер постройки, начиная с нуля
-          // return - массив разницы времен набора необходимого количества деталей при апдейте соответствующей постройки
-          //      Если разница для апдейта постройки с соответствующим индексом положительна, то считается, что апдейт имеет смысл
-          function getTimeGains(n) {
-              addLog('--- Итерация #' + (pass++) + ' ---');
-
-              var updateDetails;
-              // При n == 0 делаем расчет для самого спутника и покупки слотов целиком
-              if (n == 0) {
-                  // Рассматриваем все постройки
-                  n = buildings.length;
-                  // Необходимая сумма
-                  updateDetails = currentState.max_details + slotDetails;
-                  if (slotDetails == 0) {
-                      addLog('Копим ' + Math.round(updateDetails).toLocaleString() + ' деталей на Спутник');
-                  } else {
-                      addLog('Копим ' + Math.round(updateDetails).toLocaleString() + ' деталей на Спутник и Слот');
-                  }
-              } else {
-                  // Необходимая сумма для покупки следующего уровня постройки с переданным индексом
-                  updateDetails = buildings[n].price;
-                  addLog('Копим ' + Math.round(updateDetails).toLocaleString() + ' деталей на апгрейд постройки №' + n);
-              }
-              // Время для набора деталей на следующий уровень постройки при текущей производительности в секундах
-              var currentCollectTime = (updateDetails - currentDetails) / currentState.income;
-              var timeGains = [];
-              for (var i = 0; i < n; i++) {
-                  var level = getLevel(buildings[i]);
-                  // Не даем избыточно грейдить постройки более низких уровней, пока не построены максимумы
-                  // Это справедливо для апдейта за 99 меда. Без этого меда 9 и 10 спутники строятся на 42 и 40 фабрике без реактора,
-                  // соответственно.
-                  // Также учитываем, что если не знать о существовании Реактора, а скрипт об этом не знает, то начиная с 6-го спутника
-                  // постройка фабрики до 50 уровня (чтобы открылась кнопка апгрейда в detail-4 Реактора) становится невыгодной и скрипт
-                  // останавливается на 48-ом уровне фабрики, не доходя до постройки Реактора
-                  if (i == 0 && level < 10) {
-                      addLog('Достраиваем № 0 c М-' + level + ' до М-10');
-                      timeGains[i] = 100;
-                  } else if (i == 1 && level < 20) {
-                      addLog('Достраиваем № 1 c М-' + level + ' до М-20');
-                      timeGains[i] = Math.max(timeGains[i - 1] + 100, 1000);
-                  } else if (i == 2 && level < 30) {
-                      addLog('Достраиваем № 2 c М-' + level + ' до М-30');
-                      timeGains[i] = Math.max(timeGains[i - 1] + 100, 10000);
-                  } else if (i == 3 && level < 50) {
-                      addLog('Достраиваем № 3 c М-' + level + ' до М-50');
-                      timeGains[i] = Math.max(timeGains[i - 1] + 100, 100000);
-                  } else {
-                      // Новое время производства ВСЕХ необходимых деталей, при условии апдейта i-й постройки в секундах
-                      var newCollectTime = (updateDetails - currentDetails + buildings[i].price) / (currentState.income + buildings[i].plus);
-                      // Все, что дает выигрыш меньше минуты - переводим в отрицательную область и отбрасываем
-                      timeGains[i] = Math.round(currentCollectTime - newCollectTime) - 60;
-                  }
-              }
-              return timeGains;
-          }
-
+          loopBusy = true;
           delay = 10;
-          // Отправляем запрос GET на сервер и пытаемся загрузить страницу Спутников
-          $.get('/satellite/', function (page) {
-              // Если не удалось загрузить страницу
-              if (!page || !page.content) {
-                  // Защита от попадания в групповой бой.
-                  delay = 60;
-                  addLog('Не удалось загрузить страницу');
-                  return;
-              }
-              var content = page.content;
 
-              // Парсим количество деталей для покупки Слота, если существует
-              i = content.indexOf('<span class="satellite-orbit-satellite__price">');
-              if (i != -1) {
-                  i = content.indexOf('<span class="satellite-icon"><i></i>', i);
-                  if (i != -1) {
-                      j = content.indexOf('</span>', i);
-                      slotDetails = Number(content.substring(i + 36, j).replace(/M/, '000000').replace(/B/, '000000000'));
-                      addLog('Для покупки Слота необходимо ' + slotDetails.toLocaleString() + ' деталей');
+          $.get('/satellite/', function(page) {
+              try {
+                  if (!page || !page.content) {
+                      addLog('Не удалось загрузить страницу (бой?)');
+                      delay = 60;
+                      return;
                   }
+                  processPage(page.content);
+              } catch (err) {
+                  addLog('Ошибка: ' + err.message);
+                  delay = 30;
+              } finally {
+                  loopBusy = false;
               }
-
-              // Парсим текущее общее состояние производства
-              i = content.indexOf('Satelite.init(');
-              j = content.indexOf(');', i);
-              // Текущее состояние - парсится со страницы
-              // currentState.details - текущее количество деталей на руках
-              // currentState.income - текущая полная выработка
-              // currentState.time - текущее время в миллисекундах
-              // currentState.lastTime - время, на которое было рассчитано currentState.details
-              currentState = JSON.parse(content.substring(i + 14, j));
-              currentDetails = currentState.details + currentState.income * (currentState.time - currentState.lastTime) / 1000;
-
-              // Если деталей на слот достаточно, покупаем слот
-              if (slotDetails > 0 && currentDetails >= slotDetails) {
-                  addLog('Покупаем Слот за ' + slotDetails.toLocaleString() + ' деталей');
-                  $.post('/satellite/', { action: 'buy-slot' });
-                  delay = 1;
-                  return;
-              }
-
-              addLog('Обновляем информацию о постройках');
-              var buildingIndex = -1;
-              while (true) {
-                  buildingIndex++;
-                  // Вычисляем индекс начала описания постройки с индексом buildingIndex [0..4]
-                  i = content.indexOf('<div id="detail-' + buildingIndex);
-                  if (i == -1) {
-                      // Дошли до постройки максимального уровня (в данном случае проскочили Реактор (detail-4) и искали detail-5)
-                      break;
-                  }
-
-                  // Индекс начала HTML следующей постройки или блока, следующего за блоком построек (если текущая постройка последняя)
-                  j = content.indexOf('<div id="detail-' + (buildingIndex + 1), i);
-                  if (j == -1) {
-                      j = content.indexOf('<div class="satellite-col satellite-col-right">', i);
-                  }
-
-                  var buildingHTML = content.substring(i, j);
-                  if (buildingHTML.indexOf('Satelite.buyUpgrade') == -1) {
-                      // Если мы здесь, то кнопка улучшения на постройке пока отсутствует (постройка недоступна)
-                      break;
-                  }
-
-                  // Заполняем атрибутику текущей постройки
-                  var building = {};
-                  i = buildingHTML.indexOf('div type="detail" amount="');
-                  j = buildingHTML.indexOf('"', i + 26);
-                  // Стоимость постройки следующего уровня в деталях
-                  building.price = Number(buildingHTML.substring(i + 26, j));
-                  i = buildingHTML.indexOf('<div class="satellite-item__mf">');
-                  j = buildingHTML.indexOf('</div>', i + 32);
-                  // Текущий уровень постройки
-                  building.mf = buildingHTML.substring(i + 32, j);
-                  i = buildingHTML.indexOf('<div class="satellite-item__bonus">');
-                  i = buildingHTML.indexOf('<b>+', i + 35);
-                  j = buildingHTML.indexOf('</b>', i + 4);
-                  // Производительность в количестве деталей в секунду
-                  building.profit = buildingHTML.substring(i + 4, j);
-                  if (building.profit.indexOf('k') != -1) {
-                      building.profit = Number(building.profit.substring(0, building.profit.length - 1)) * 1000;
-                  } else {
-                      building.profit = Number(building.profit);
-                  }
-                  i = buildingHTML.indexOf('{i}{/i}');
-                  j = buildingHTML.indexOf('{/span}', i + 7);
-                  // Повышение производительности постройки от апгрейда
-                  building.plus = Number(buildingHTML.substring(i + 7, j)) - building.profit;
-
-                  // Добавляем в массив всех доступных на данный момент построек
-                  buildings.push(building);
-              }
-
-              // Логируем доступные постройки
-              addLog('Доступно построек: ' + buildings.length);
-              for (var i = 0; i < buildings.length; i++) {
-                  addLog('Постройка №' + i + ' уровень М-' + getLevel(buildings[i]));
-              }
-              // Время для набора деталей для постройки Спутника (и покупки Слота, если есть) при текущей производительности
-              // всех построек в секундах
-              var currentCollectTime = (currentState.max_details + slotDetails - currentDetails) / currentState.income;
-              if (slotDetails == 0) {
-                  addLog(currentState.max_details.toLocaleString() + ' деталей на Спутник соберем через ' + timeFormat(Math.round(currentCollectTime) + 1));
-              } else {
-                  addLog((currentState.max_details + slotDetails).toLocaleString() + ' деталей на Спутник и Слот соберем через ' + timeFormat(Math.round(currentCollectTime) + 1));
-              }
-              addLog('Деталей в наличии ' + Math.round(currentDetails).toLocaleString());
-
-              // Вычисляем выигрыши во времени постройки Спутника
-              var timeGains = getTimeGains(0);
-              addLog('Выигрыш времени при апгрейде: ' + timeArrayFormat(timeGains));
-              // Вычисляем индекс постройки с максимальным выигрышем по времени
-              var maxTimeGain = 0, maxTimeGainIndex = -1;
-              // Выбираем максимальный выигрыш по времени среди возможных
-              for (i = 0; i < timeGains.length; i++) {
-                  if (timeGains[i] > maxTimeGain) {
-                      maxTimeGain = timeGains[i];
-                      maxTimeGainIndex = i;
-                  }
-              }
-
-              // Если выигрыши по времени при апдейте всех существующих построек были отрицательны (проигрыши)
-              if (maxTimeGainIndex == -1) {
-                  if (currentCollectTime <= 0) {
-                      addLog('Детали собраны');
-                      if (slotDetails > 0) {
-                          addLog('Жмем кнопку покупки Слота');
-                          // Покупаем Слот
-                          $.post('/satellite/', { action: 'buy-slot' });
-                      } else {
-                          addLog('Жмем кнопку запуска Спутника');
-                          // Строим Спутник
-                          $.post('/satellite/', { action: 'start-build' });
-                      }
-                      delay = 2;
-                  } else {
-                      // Вычисляем время ожидания до следующей проверки
-                      delay = currentCollectTime > 300 ? (currentCollectTime < 1200 ? currentCollectTime / 4 : 300) : (Math.round(currentCollectTime) + 1);
-                      addLog('Дальнейший апгрейд построек не требуется');
-                      addLog('Ожидаем ' + timeFormat(delay));
-                  }
-                  return;
-              }
-
-              // Если мы здесь, то выигрыш по времени есть.
-              var subMaxTimeGain = 0, subMaxTimeGainIndex = -1;
-              addLog('Цель: апгрейд постройки № ' + maxTimeGainIndex);
-              // Количество деталей, необходимое для постройки следующего уровня самой выгодной постройки
-              var detailsToCollect = buildings[maxTimeGainIndex].price - currentDetails;
-              if (buildings[maxTimeGainIndex].price > currentDetails) {
-                  // Если мы здесь, то деталей не хватает
-                  var subTimeGains = getTimeGains(maxTimeGainIndex);
-                  // Время на сбор недостающих деталей для рассматриваемой самой выгодной постройки
-                  var collectTime = detailsToCollect / currentState.income;
-                  addLog('До апгрейда постройки № ' + maxTimeGainIndex + ' осталось ' + timeFormat(Math.round(collectTime)));
-                  addLog('Стоит ли грейдить предыдущие: ' + timeArrayFormat(subTimeGains));
-                  //
-                  for (i = 0; i < subTimeGains.length; i++) {
-                      if (subTimeGains[i] > subMaxTimeGain) {
-                          subMaxTimeGain = subTimeGains[i];
-                          subMaxTimeGainIndex = i;
-                      }
-                  }
-              } else {
-                  // Достаточно деталей для апгрейда. Грейдим постройку
-                  addLog('Жмем кнопку постройки № ' + maxTimeGainIndex);
-                  $.post('/satellite/', { action: 'upgrade-detail', partId: maxTimeGainIndex, value: 'detail' }, function (dd) {
-                      addLog('Улучшили до М-' + (getLevel(buildings[maxTimeGainIndex]) + 1) + ' постройку №' + maxTimeGainIndex);
-                      addLog('Осталось ' + dd.data.details.toLocaleString() + ' деталей');
-                      delay = 1;
-                  }, 'json');
-                  return;
-              }
-
-              if (subMaxTimeGainIndex == -1) {
-                  addLog('Предыдущие постройки улучшать не выгодно');
-                  // Нет более выгодных построек меньшего уровня, но все еще не хватает деталей на выбранную постройку
-                  delay = Math.round(detailsToCollect / currentState.income + 1);
-                  delay = delay > 120 ? 60 : Math.round(delay / 3 + 1);
-                  addLog('Не хватает деталей на постройку №' + maxTimeGainIndex);
-                  addLog('Ожидаем ' + timeFormat(delay));
-              } else {
-                  addLog('Выгодно сначала улучшить постройку №' + subMaxTimeGainIndex);
-                  // Хватает деталей на улучшение промежуточного
-                  if (buildings[subMaxTimeGainIndex].price <= currentDetails) {
-                      addLog('Жмем кнопку апгрейда № ' + subMaxTimeGainIndex);
-                      $.post('/satellite/', { action: 'upgrade-detail', partId: subMaxTimeGainIndex, value: 'detail' }, function (dd) {
-                          addLog('Улучшили до М-' + (getLevel(buildings[subMaxTimeGainIndex]) + 1) + ' постройку №' + subMaxTimeGainIndex);
-                          addLog('Осталось ' + dd.data.details.toLocaleString() + ' деталей');
-                          delay = 1;
-                      }, 'json');
-                  } else {
-                      //не хватает на основной и на промежуточный
-                      //время до нужного при текущих
-                      var subCollectTime = (buildings[subMaxTimeGainIndex].price - currentDetails) / currentState.income;
-                      if (subCollectTime > collectTime) {
-                          delay = detailsToCollect / currentState.income
-                      } else {
-                          delay = (buildings[subMaxTimeGainIndex].price - currentDetails) / currentState.income
-                      }
-                      delay = delay > 120 ? 60 : Math.round(delay / 3 + 1);
-                      addLog('Не хватает деталей на постройку №' + subMaxTimeGainIndex);
-                      addLog('Ожидаем ' + timeFormat(delay));
-                  }
-              }
-          }, 'json')
+          }).fail(function() {
+              addLog('Сеть: ошибка GET /satellite/');
+              loopBusy = false;
+              delay = 30;
+          });
       }
+
+      function processPage(content) {
+          addLog('--- Итерация #' + (pass++) + ' ---');
+
+          let slotDetails = 0;
+          const slotIdx = content.indexOf('<span class="satellite-orbit-satellite__price">');
+          if (slotIdx !== -1) {
+              const i = content.indexOf('<span class="satellite-icon"><i></i>', slotIdx);
+              if (i !== -1) {
+                  const j = content.indexOf('</span>', i);
+                  slotDetails = parseAmount(content.substring(i + 36, j));
+              }
+          }
+
+          const initIdx = content.indexOf('Satelite.init(');
+          if (initIdx === -1) throw new Error('Satelite.init не найден');
+          const initEnd = content.indexOf(');', initIdx);
+          const currentState = JSON.parse(content.substring(initIdx + 14, initEnd));
+          const currentDetails = currentState.details + currentState.income * (currentState.time - currentState.lastTime) / 1000;
+
+          const satIndex = parseSatIndex(content);
+          resetRuntime(satIndex);
+          const plan = getPlan(satIndex);
+
+          if (!plan.enabled) {
+              addLog('План спутника #' + satIndex + ' выключен — жду');
+              delay = 60;
+              updateDashboard({ satIndex, currentDetails, baseDetails: currentDetails, income: currentState.income, goalDetails: currentState.max_details, ts: Date.now() });
+              return;
+          }
+
+          updateDashboard({
+              satIndex,
+              currentDetails,
+              baseDetails: currentDetails,
+              income: currentState.income,
+              goalDetails: currentState.max_details + (plan.autoSlot ? slotDetails : 0),
+              ts: Date.now()
+          });
+
+          const hasHalfBtn = content.indexOf("action: 'get-half'") !== -1 || content.indexOf('action: \'get-half\'') !== -1;
+          const hasBoostBtn = content.indexOf("action: 'get-boost'") !== -1 || content.indexOf('action: \'get-boost\'') !== -1;
+
+          if (plan.autoBoost && !runtime.boostUsed && hasBoostBtn) {
+              addLog('Применяем x2 эффективность (49🍯)');
+              runtime.boostUsed = true;
+              postAction('get-boost', {}, () => { delay = 2; });
+              return;
+          }
+
+          if (runtime.halfPriceUsed < plan.halfPriceCount && hasHalfBtn) {
+              addLog('Скидка «цена пополам» (' + (runtime.halfPriceUsed + 1) + '/' + plan.halfPriceCount + ')');
+              runtime.halfPriceUsed++;
+              postAction('get-half', {}, () => { delay = 2; });
+              return;
+          }
+
+          const buildings = [];
+          let buildingIndex = -1;
+          while (true) {
+              buildingIndex++;
+              let i = content.indexOf('<div id="detail-' + buildingIndex);
+              if (i === -1) break;
+              let j = content.indexOf('<div id="detail-' + (buildingIndex + 1), i);
+              if (j === -1) j = content.indexOf('<div class="satellite-col satellite-col-right">', i);
+              const buildingHTML = content.substring(i, j);
+              if (buildingHTML.indexOf('Satelite.buyUpgrade') === -1) break;
+
+              const building = { index: buildingIndex, html: buildingHTML, price: 0, honeyPrice: 0, mf: '', profit: 0, plus: 0 };
+
+              let pi = buildingHTML.indexOf('div type="detail" amount="');
+              if (pi !== -1) {
+                  let pj = buildingHTML.indexOf('"', pi + 26);
+                  if (pj !== -1) building.price = Number(buildingHTML.substring(pi + 26, pj));
+              }
+
+              pi = buildingHTML.indexOf('div type="honey" amount="');
+              if (pi !== -1) {
+                  let pj = buildingHTML.indexOf('"', pi + 25);
+                  if (pj !== -1) building.honeyPrice = Number(buildingHTML.substring(pi + 25, pj));
+              }
+
+              pi = buildingHTML.indexOf('<div class="satellite-item__mf">');
+              if (pi !== -1) {
+                  let pj = buildingHTML.indexOf('</div>', pi + 32);
+                  if (pj !== -1) building.mf = buildingHTML.substring(pi + 32, pj);
+              }
+
+              const bonusIdx = buildingHTML.indexOf('satellite-item__bonus');
+              if (bonusIdx !== -1) {
+                  pi = buildingHTML.indexOf('<b>+', bonusIdx);
+                  if (pi !== -1) {
+                      let pj = buildingHTML.indexOf('</b>', pi + 4);
+                      if (pj !== -1) building.profit = parseAmount(buildingHTML.substring(pi + 4, pj));
+                  }
+              }
+
+              pi = buildingHTML.indexOf('{i}{/i}');
+              if (pi !== -1) {
+                  let pj = buildingHTML.indexOf('{/span}', pi + 7);
+                  if (pj !== -1) {
+                      const nextProfit = parseAmount(buildingHTML.substring(pi + 7, pj));
+                      building.plus = nextProfit - building.profit;
+                  }
+              }
+
+              buildings.push(building);
+          }
+
+          addLog('Спутник #' + satIndex + ' · построек: ' + buildings.length + ' · детали: ' + formatNum(currentDetails));
+
+          function evaluatePath(buildingsList, pathIndices, curDetails, curIncome, goal) {
+              let time = 0;
+              let det = curDetails;
+              let inc = curIncome;
+              for (let idx of pathIndices) {
+                  let b = buildingsList[idx];
+                  let tWait = Math.max(0, b.price - det) / inc;
+                  time += tWait;
+                  det = Math.max(0, det - b.price);
+                  inc += b.plus;
+              }
+              time += Math.max(0, goal - det) / inc;
+              return time;
+          }
+
+          function getBestPath(buildingsList, allowedIndices, curDetails, curIncome, goal, maxDepth = 3) {
+              let baseTime = evaluatePath(buildingsList, [], curDetails, curIncome, goal);
+              let bestTime = baseTime;
+              let bestPath = [];
+              function permute(currentPath, remainingIndices) {
+                  if (currentPath.length > 0) {
+                      let t = evaluatePath(buildingsList, currentPath, curDetails, curIncome, goal);
+                      if (t < bestTime) {
+                          bestTime = t;
+                          bestPath = [...currentPath];
+                      }
+                  }
+                  if (currentPath.length < maxDepth) {
+                      for (let i = 0; i < remainingIndices.length; i++) {
+                          currentPath.push(remainingIndices[i]);
+                          let nextRemaining = remainingIndices.slice();
+                          nextRemaining.splice(i, 1);
+                          permute(currentPath, nextRemaining);
+                          currentPath.pop();
+                      }
+                  }
+              }
+              permute([], allowedIndices);
+              return { path: bestPath, time: bestTime, baseTime: baseTime };
+          }
+
+          const goalDetails = currentState.max_details + (plan.autoSlot ? slotDetails : 0);
+          const currentCollectTime = (goalDetails - currentDetails) / currentState.income;
+
+          if (plan.autoSlot && slotDetails > 0 && currentDetails >= slotDetails) {
+              addLog('Покупаем слот орбиты');
+              postAction('buy-slot', {}, () => { delay = 2; });
+              return;
+          }
+
+          let targetIdx = -1;
+          let estimatedEta = 0;
+          let baseTime = evaluatePath(buildings, [], currentDetails, currentState.income, goalDetails);
+
+          if (plan.smartMode) {
+              let allowedIndices = [];
+              for (let i = 0; i < buildings.length; i++) {
+                  if (buildingAllowed(plan, i, true)) allowedIndices.push(i);
+              }
+              let res = getBestPath(buildings, allowedIndices, currentDetails, currentState.income, goalDetails, 3);
+              if (res.path.length > 0 && (res.baseTime - res.time) >= config.globalMinGain) {
+                  targetIdx = res.path[0];
+                  addLog('[Умный] Путь: ' + res.path.map(x => BUILDING_NAMES[x]).join(' → ') + ' (выгода ' + timeFormat(res.baseTime - res.time) + ')');
+              }
+              estimatedEta = targetIdx !== -1 ? res.time : baseTime;
+          } else {
+              let forcedIndices = [];
+              let allowedIndices = [];
+              for (let i = 0; i < buildings.length; i++) {
+                  if (buildingAllowed(plan, i, false)) {
+                      allowedIndices.push(i);
+                      if (getLevel(buildings[i]) < plan.buildings[i].targetLevel) forcedIndices.push(i);
+                  }
+              }
+              if (forcedIndices.length > 0) {
+                  targetIdx = forcedIndices[0];
+                  let subRes = getBestPath(buildings, allowedIndices, currentDetails, currentState.income, buildings[targetIdx].price, 2);
+                  if (subRes.path.length > 0 && subRes.path[0] !== targetIdx && (subRes.baseTime - subRes.time) >= config.globalMinGain) {
+                      targetIdx = subRes.path[0];
+                      addLog('[Саб] Апгрейд: ' + BUILDING_NAMES[targetIdx] + ' (ускорит на ' + timeFormat(subRes.baseTime - subRes.time) + ')');
+                  }
+                  estimatedEta = baseTime;
+              } else {
+                  let res = getBestPath(buildings, allowedIndices, currentDetails, currentState.income, goalDetails, 3);
+                  if (res.path.length > 0 && (res.baseTime - res.time) >= config.globalMinGain) {
+                      targetIdx = res.path[0];
+                      addLog('[Опт] Путь: ' + res.path.map(x => BUILDING_NAMES[x]).join(' → ') + ' (выгода ' + timeFormat(res.baseTime - res.time) + ')');
+                  }
+                  estimatedEta = targetIdx !== -1 ? res.time : baseTime;
+              }
+          }
+
+          currentState.estimatedEta = estimatedEta;
+
+          if (targetIdx === -1) {
+              if (currentCollectTime <= 0 && plan.autoLaunch) {
+                  addLog('Запускаем спутник «ПОЕХАЛИ»');
+                  postAction('start-build', {}, () => { delay = 3; });
+              } else if (currentCollectTime <= 0 && !plan.autoLaunch) {
+                  addLog('Детали собраны — автозапуск выключен');
+                  delay = 60;
+              } else {
+                  delay = currentCollectTime > 300 ? Math.min(300, currentCollectTime / 4) : Math.max(5, Math.round(currentCollectTime) + 1);
+                  addLog('Копим · ждём ' + timeFormat(delay));
+              }
+              return;
+          }
+
+          const targetBuilding = buildings[targetIdx];
+          const planB = plan.buildings[targetIdx];
+
+          if (currentDetails >= targetBuilding.price) {
+              const value = pickUpgradeValue(planB, targetBuilding, currentDetails);
+              if (!value) { delay = 10; return; }
+              addLog('Апгрейд ' + BUILDING_NAMES[targetIdx] + ' (' + value + ') → M' + (getLevel(targetBuilding) + 1));
+              postAction('upgrade-detail', { partId: targetIdx, value }, function(dd) {
+                  const key = runtime.satIndex + '_' + targetIdx;
+                  runtime.upgradeCounts[key] = (runtime.upgradeCounts[key] || 0) + 1;
+                  if (dd && dd.data) addLog('Осталось ' + formatNum(dd.data.details) + ' дет.');
+                  delay = 1;
+              });
+              return;
+          }
+
+          const need = targetBuilding.price - currentDetails;
+          delay = need / currentState.income;
+          delay = delay > 120 ? 60 : Math.max(5, Math.round(delay / 3 + 1));
+          addLog('Ждём детали на ' + BUILDING_NAMES[targetIdx] + ' · ' + timeFormat(delay));
+      }
+
+      MoswarLib.Scheduler.register({
+          id: 'satellite',
+          targetUrl: '/satellite/',
+          checkFn: async () => botRunning && !botPaused,
+          runFn: satTick
+      });
+
+      MoswarLib.modules.satellite = {
+          saveAutomationConfig: () => ({ running: botRunning, paused: botPaused, config }),
+          loadAutomationConfig: (cfg) => {
+              if (cfg && cfg.config) { config = { ...defaultConfig(), ...cfg.config }; saveConfig(); renderPlanEditor(); }
+              if (cfg && cfg.running) startBot(false);
+              if (cfg && cfg.paused) { botPaused = true; localStorage.setItem(LS_PAUSED, '1'); updateButtonsVisual(); }
+          }
+      };
 
       createUI();
-      if (localStorage.getItem('satbot_running') === '1') {
+      if (localStorage.getItem(LS_RUNNING) === '1') {
+          botPaused = localStorage.getItem(LS_PAUSED) === '1';
           startBot(false);
+          if (botPaused) setStatus('Пауза (восстановлено)');
       }
   },
-
   uluchshator: function() {
       if (window.utils_) return;
       // ИИ v4.20 — Улучшатор Мосвара
@@ -12351,7 +12706,7 @@ THE USE OF THIS SCRIPT IS MONITORED CLIENT SIDE - LAW ENFORCEMENT WILL BE NOTIFI
       \u0420\u0435\u0436\u0438\u043C \u0431\u043E\u043C\u0431\u0438\u0442\u044C \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E.
       <br>\u0427\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C, \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.<br>
       <i>(id \u0442\u0430\u0447\u043A\u0438: ${n})</i>.
-      `})}}),e=$(".auto-bombila .actions");e.find("form").css({display:"inline-block"}),e.append(t)}function ul(){$(".plus-icon").eq(1).css("display","inline-block"),window.jobShowTonusAlert=function(){$.get("/job/tonus-buy-alert/",function(t){t.error?showAlert(moswar.lang.LANG_MAIN_105,t.error,!0):$.get("/player/json/use/"+t.restore_tonus+"/",function(e){console.log(e.restore_tonus),e.fullenergyin&&(player.fullenergyin=0,$("div.tonus-overtip-increase").html()),e.stats.energy&&setEnergy(e.stats.energy)},"json")},"json")}}function Bt(){let t=location.pathname;if($(".side-invite").remove(),Wt(),cl(),ul(),Eo(),t.match(/\/alley\/fight\//))fightForward();else if(t.match(/^(?!.*\/alley\/).*\/fight\//))rl(),ol();else if(t==="/player/")zt(),$("#stats-accordion .selected.active").css("cursor","pointer").on("click",Mn);else if(t==="/automobile/ride/")Qn();else if(t==="/tattoo/")nl();else if(t.includes("neftlenin"))Do();else if(t==="/square/tvtower/")il();else if(t==="/metrowar/clan/")ao();else if(t==="/home/relic/")jo();else if(t==="/travel2/")vo();else if(t==="/metro/")Lo();else if(t==="/petarena/")lo();else if(t==="/home/")Ao();else if(t==="/camp/gypsy/"){let e=$(".game-types td:first"),n=$(".game-types td").eq(1);if((!$(".multi-play-gypsy-250").length||!$(".multi-play-gypsy-750").length)&&(e.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(0),className:"multi-play-gypsy-250"})),n.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(1),className:"multi-play-gypsy-250"}))),$(".multi-play-gypsy-flowers").length)return;let r=$(".game-types-col").first();console.log(r),r.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(),className:"multi-play-gypsy-flowers"}))}else if(t==="/casino/blackjack/"){if($(".blackjack-multi").length)return;let e=ce({label:"\u0418\u0433\u0440\u0430\u0442\u044C \u0437\u0430 10",action:async()=>await ui(),className:"blackjack-multi"});$(".actions.bets").append(e)}else if(t==="/arbat/")ll();else if(t==="/pyramid/")$("#pyramid-buy-form input").css({width:"70px"});else if(t.includes("clan")){if($("#reorder-clan").length)return;let e=$('<span id="reorder-clan" class="cool-1"><i></i></span>').css({cursor:"pointer"});e.on("click",ro);let n=N({text:"+\u0412\u0440\u0430\u0433\u0438",title:"\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0441\u043F\u0438\u0441\u043E\u043A \u0432\u0440\u0430\u0433\u043E\u0432 (\u0434\u043B\u044F \u043A\u043B\u0430\u043D\u0432\u0430\u0440\u0430)",onClick:()=>oo(),className:"add-to-enemies",disableAfterClick:!0});$(n).css({display:"block",marginLeft:"auto"}),$('td.label:contains("\u041A\u043B\u0430\u043D\u0435\u0440\u044B")').append(n),e.insertAfter(`a[onclick="$('#players').toggle();"]`)}else if(t.includes("zodiac")){let e=$("#zodiak-action-button");if(!e||e.length===0)return;let n=e.text().trim();if(!n.includes("\u0423\u0437\u043D\u0430\u0442\u044C \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F"))return;let r=parseInt(n.match(/\d+/)[0],10);e.text(`\u0423\u0437\u043D\u0430\u0442\u044C \u0412\u0421\u0415 \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F\u044B (\u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C ${r})`),e.removeAttr("onclick").on("click",async()=>{e.addClass("disabled");for(let o=0;o<r;o++)await fetch("/zodiac/",{headers:{accept:"*/*","accept-language":"en-GB,en-US;q=0.9,en;q=0.8,ru;q=0.7,ro;q=0.6","content-type":"application/x-www-form-urlencoded; charset=UTF-8","sec-ch-ua":'"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',"sec-ch-ua-mobile":"?0","sec-ch-ua-platform":'"macOS"',"sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-origin","x-requested-with":"XMLHttpRequest"},body:"action=horoscope&__referrer=%2Fzodiac%2F&return_url=%2Fzodiac%2F",method:"POST",mode:"cors",credentials:"include"});AngryAjax.reload()})}else["/squid/","/meetings/","/sovet/career/"].includes(t)||(/^\/player\/[^/]+\/?$/.test(location.pathname)?$("#pers-player-info > div.relict-block > a > h3").text(`\u0420\u0415\u041B\u0418\u041A\u0422\u042B (${Relict.$list.children().length})`):t==="/settings/"?di():t==="/alley/"?Pn():t==="/lifting/"&&el())}var te=window.Moscowpoly,Ro=window.SteppedEase,lt=window.TweenLite;function Po(){try{te.animateDices=function(t){var e=this,n=this.$dice1,r=this.$dice2;n.unbind("click"),r.unbind("click"),n.removeAttr("style"),n.css({"background-position":"0 0"}).show(0);var o=mt_rand(10,20),s=mt_rand(1,2)*o/1e3,c=lt.to(n,s,{backgroundPosition:-1*65*o+"px 0",ease:Ro.config(o),paused:!0,onComplete:function(){n.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[0]),s>=l&&e.onAnimateDicesComplete()}});r.removeAttr("style"),r.css("background-position","0 -65px").show(0);var a=mt_rand(10,20),l=mt_rand(1,2)*a/1e3,u=lt.to(r,l,{backgroundPosition:-1*65*a+"px -65px",ease:Ro.config(a),paused:!0,onComplete:function(){r.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[1]),s<l&&e.onAnimateDicesComplete()}}),d=te.dicePositions[mt_rand(0,te.dicePositions.length-1)];n.css(d);var p={ease:Power1.easeOut,paused:!0};for(var g in d)p[g]=mt_rand(90,350);var f=lt.to(n,s,p);r.css(d);var w={ease:Power1.easeOut,paused:!0};for(var T in d)w[T]=mt_rand(90,350),Math.abs(p[T]-w[T])<35&&(p[T]+=p[T]>w[T]?50:-50);var C=lt.to(r,l,w);c.play(),u.play(),f.play(),C.play()},te.animateFigureRoute=function(t){if(t.length==0){this.setInAction(!1),this.setCellActive(this.data.current),this.updateInfoHTML(),this.initState();return}var e=this,n=te.getFigurePositionByCell(t[0]);lt.to(this.$figure,.1,{top:n.top,left:n.left,ease:Linear.easeNone,paused:!1,onComplete:function(){t=t.splice(1,t.length-1),e.animateFigureRoute(t)}})},te.dropDices=function(){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_roll/",{action:"moscowpoly_roll",ajax:1},"post",function(e){if(t.lastMove=e,t.state=e.state,t.animateDices(e.rollResult),e.text_m){if(e.text_m?.text?.includes("\u0417\u0430 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u043A\u043B\u0435\u0442\u043A\u0438 \u0441\u0442\u0430\u0440\u0442 \u0432\u044B \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u0442\u0435:"))return;t.addAlert(e.text_m)}[2,12].includes(e.move_to[0].step)||(!e?.state?.disable_button||e?.data?.state?.type==="closed")&&(te.setInAction(!1),te.doActivate())})},te.doActivate=function(){if(!this.inAction){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_activate/",{action:"moscowpoly_activate",ajax:1},"post",function(e){t.state=e.state,t.setInAction(!1),e.text_m&&!e.text_m?.text?.includes("\u0411\u043E\u043D\u0443\u0441 \u0443\u0436\u0435 \u0430\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u043D")&&t.addAlert(e.text_m),t.updateInfoHTML(),t.initState()})}},te.show=function(){var t=this;postUrl("/home/moscowpoly_state/",{action:"moscowpoly_state",ajax:1},"post",function(e){if(t.open(e),e.text_m&&t.addAlert(e.text_m),$(".moscowpoly-multi-btn").length)return;let n=ce({label:"\u0411\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u0443\u0431\u0438\u043A\u0438",action:async()=>(te.dropDices(),new Promise(r=>setTimeout(r,1e3))),className:"moscowpoly-multi",disableAfterClick:!1});$(".moscowpoly-panel__td-center").append(n)})}}catch(t){console.log(`Moscowpoly speed up:
+      `})}}),e=$(".auto-bombila .actions");e.find("form").css({display:"inline-block"}),e.append(t)}function ul(){$(".plus-icon").eq(1).css("display","inline-block"),window.jobShowTonusAlert=function(){$.get("/job/tonus-buy-alert/",function(t){t.error?showAlert(moswar.lang.LANG_MAIN_105,t.error,!0):$.get("/player/json/use/"+t.restore_tonus+"/",function(e){console.log(e.restore_tonus),e.fullenergyin&&(player.fullenergyin=0,$("div.tonus-overtip-increase").html()),e.stats.energy&&setEnergy(e.stats.energy)},"json")},"json")}}function Bt(){let t=location.pathname;if($(".side-invite").remove(),Wt(),cl(),ul(),Eo(),t.match(/\/alley\/fight\//))fightForward();else if(t.match(/^(?!.*\/alley\/).*\/fight\//))rl(),ol();else if(t==="/player/")zt(),$("#stats-accordion .selected.active").css("cursor","pointer").on("click",Mn);else if(t==="/automobile/ride/")Qn();else if(t==="/tattoo/")nl();else if(t.includes("neftlenin"))Do();else if(t==="/square/tvtower/")il();else if(t==="/metrowar/clan/")ao();else if(t==="/home/relic/")jo();else if(t==="/travel2/")vo();else if(t==="/metro/")Lo();else if(t==="/petarena/")lo();else if(t==="/home/")Ao();else if(t==="/camp/gypsy/"){let e=$(".game-types td:first"),n=$(".game-types td").eq(1);if((!$(".multi-play-gypsy-250").length||!$(".multi-play-gypsy-750").length)&&(e.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(0),className:"multi-play-gypsy-250"})),n.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(1),className:"multi-play-gypsy-250"}))),$(".multi-play-gypsy-flowers").length)return;let r=$(".game-types-col").first();console.log(r),r.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(),className:"multi-play-gypsy-flowers"}))}else if(t==="/casino/blackjack/"){if($(".blackjack-multi").length)return;let e=ce({label:"\u0418\u0433\u0440\u0430\u0442\u044C \u0437\u0430 10",action:async()=>await ui(),className:"blackjack-multi"});$(".actions.bets").append(e)}else if(t==="/arbat/")ll();else if(t==="/pyramid/")$("#pyramid-buy-form input").css({width:"70px"});else if(t.includes("clan")){if($("#reorder-clan").length)return;let e=$('<span id="reorder-clan" class="cool-1"><i></i></span>').css({cursor:"pointer"});e.on("click",ro);let n=N({text:"+\u0412\u0440\u0430\u0433\u0438",title:"\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0441\u043F\u0438\u0441\u043E\u043A \u0432\u0440\u0430\u0433\u043E\u0432 (\u0434\u043B\u044F \u043A\u043B\u0430\u043D\u0432\u0430\u0440\u0430)",onClick:()=>oo(),className:"add-to-enemies",disableAfterClick:!0});$(n).css({display:"block",marginLeft:"auto"}),$('td.label:contains("\u041A\u043B\u0430\u043D\u0435\u0440\u044B")').append(n),e.insertAfter(`a[onclick="$('#players').toggle();"]`)}else if(t.includes("zodiac")){let e=$("#zodiak-action-button");if(!e||e.length===0)return;let n=e.text().trim();if(!n.includes("\u0423\u0437\u043D\u0430\u0442\u044C \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F"))return;let r=parseInt(n.match(/\d+/)[0],10);e.text(`\u0423\u0437\u043D\u0430\u0442\u044C \u0412\u0421\u0415 \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F\u044B (\u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C ${r})`),e.removeAttr("onclick").on("click",async()=>{e.addClass("disabled");for(let o=0;o<r;o++)await fetch("/zodiac/",{headers:{accept:"*/*","accept-language":"en-GB,en-US;q=0.9,en;q=0.8,ru;q=0.7,ro;q=0.6","content-type":"application/x-www-form-urlencoded; charset=UTF-8","sec-ch-ua":'"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',"sec-ch-ua-mobile":"?0","sec-ch-ua-platform":'"macOS"',"sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-origin","x-requested-with":"XMLHttpRequest"},body:"action=horoscope&__referrer=%2Fzodiac%2F&return_url=%2Fzodiac%2F",method:"POST",mode:"cors",credentials:"include"});AngryAjax.reload()})}else["/squid/","/meetings/","/sovet/career/"].includes(t)||(/^\/player\/[^/]+\/?$/.test(location.pathname)?$("#pers-player-info > div.relict-block > a > h3").text(`\u0420\u0415\u041B\u0418\u041A\u0422\u042B (${Relict.$list.children().length})`):t==="/settings/"?di():t==="/alley/"?Pn():t==="/lifting/"&&el())}var te=window.Moscowpoly,Ro=window.SteppedEase,lt=window.TweenLite;function Po(){try{if(!te){let checkMoscowpoly=0;let waitInterval=setInterval(function(){checkMoscowpoly++;if(window.Moscowpoly){clearInterval(waitInterval);te=window.Moscowpoly;Po()}if(checkMoscowpoly>500){clearInterval(waitInterval)}},100);return}te.animateDices=function(t){var e=this,n=this.$dice1,r=this.$dice2;n.unbind("click"),r.unbind("click"),n.removeAttr("style"),n.css({"background-position":"0 0"}).show(0);var o=mt_rand(10,20),s=mt_rand(1,2)*o/1e3,c=lt.to(n,s,{backgroundPosition:-1*65*o+"px 0",ease:Ro.config(o),paused:!0,onComplete:function(){n.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[0]),s>=l&&e.onAnimateDicesComplete()}});r.removeAttr("style"),r.css("background-position","0 -65px").show(0);var a=mt_rand(10,20),l=mt_rand(1,2)*a/1e3,u=lt.to(r,l,{backgroundPosition:-1*65*a+"px -65px",ease:Ro.config(a),paused:!0,onComplete:function(){r.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[1]),s<l&&e.onAnimateDicesComplete()}}),d=te.dicePositions[mt_rand(0,te.dicePositions.length-1)];n.css(d);var p={ease:Power1.easeOut,paused:!0};for(var g in d)p[g]=mt_rand(90,350);var f=lt.to(n,s,p);r.css(d);var w={ease:Power1.easeOut,paused:!0};for(var T in d)w[T]=mt_rand(90,350),Math.abs(p[T]-w[T])<35&&(p[T]+=p[T]>w[T]?50:-50);var C=lt.to(r,l,w);c.play(),u.play(),f.play(),C.play()},te.animateFigureRoute=function(t){if(t.length==0){this.setInAction(!1),this.setCellActive(this.data.current),this.updateInfoHTML(),this.initState();return}var e=this,n=te.getFigurePositionByCell(t[0]);lt.to(this.$figure,.1,{top:n.top,left:n.left,ease:Linear.easeNone,paused:!1,onComplete:function(){t=t.splice(1,t.length-1),e.animateFigureRoute(t)}})},te.dropDices=function(){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_roll/",{action:"moscowpoly_roll",ajax:1},"post",function(e){if(t.lastMove=e,t.state=e.state,t.animateDices(e.rollResult),e.text_m){if(e.text_m?.text?.includes("\u0417\u0430 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u043A\u043B\u0435\u0442\u043A\u0438 \u0441\u0442\u0430\u0440\u0442 \u0432\u044B \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u0442\u0435:"))return;t.addAlert(e.text_m)}[2,12].includes(e.move_to[0].step)||(!e?.state?.disable_button||e?.data?.state?.type==="closed")&&(te.setInAction(!1),te.doActivate())})},te.doActivate=function(){if(!this.inAction){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_activate/",{action:"moscowpoly_activate",ajax:1},"post",function(e){t.state=e.state,t.setInAction(!1),e.text_m&&!e.text_m?.text?.includes("\u0411\u043E\u043D\u0443\u0441 \u0443\u0436\u0435 \u0430\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u043D")&&t.addAlert(e.text_m),t.updateInfoHTML(),t.initState()})}},te.show=function(){var t=this;postUrl("/home/moscowpoly_state/",{action:"moscowpoly_state",ajax:1},"post",function(e){if(t.open(e),e.text_m&&t.addAlert(e.text_m),$(".moscowpoly-multi-btn").length)return;let n=ce({label:"\u0411\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u0443\u0431\u0438\u043A\u0438",action:async()=>(te.dropDices(),new Promise(r=>setTimeout(r,1e3))),className:"moscowpoly-multi",disableAfterClick:!1});$(".moscowpoly-panel__td-center").append(n)})}}catch(t){console.log(`Moscowpoly speed up:
 `,t)}}var dl=[{selector:"#content > div > div.boss-common-block > div.boss-common-bottom-panel > div > div > span.boss-common-active-from-value",url:new URL(window.location.href).origin+"/shaman/",imgSrc:"/@/images/loc/shaman/abil_6.png",targetHref:"/shaman/"},{selector:".buba-button-timer",url:new URL(window.location.href).origin+"/labubu/",imgSrc:"/@/images/loc/buba/bubas/14.png",targetHref:"/labubu/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/fake/",imgSrc:"/@/images/obj/gifts2025/sept/fake.png",targetHref:"/fake/"},{selector:"#content > div > div > div.grumpy2019-bottom-panel > div.grumpy2019-available-block > span.grumpy2019-available-value",url:new URL(window.location.href).origin+"/grumpy/",imgSrc:"/@/images/loc/grumpy/abils/abil_1.png",targetHref:"/grumpy/"},{selector:"#spanMatrixTimer",url:new URL(window.location.href).origin+"/matrix/",imgSrc:"/@/images/obj/beast_ability/ability54.png",targetHref:"/matrix/"},{selector:".worldwar2025-available-value",url:new URL(window.location.href).origin+"/tariffs/",imgSrc:"/@/images/obj/gifts2025/may/box_worldwar.png",targetHref:"/tariffs/"},{selector:".carlson2025-available-value",url:new URL(window.location.href).origin+"/karlsson/",imgSrc:"/@/images/obj/gifts2025/may/box_carlson.png",targetHref:"/karlsson/"},{selector:"#content > div > div.rocket2023-block > div.rocket2023-available-block > span.rocket2023-available-value",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/obj/gifts2023/may/abil_kosm_smoke.png",targetHref:"/kosmodromx/"},{selector:"TODO dyi selector",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/loc/rocket/rocket.png",targetHref:"/kosmodromx/"},{selector:"#hawthorn-popup > div > div.hawthorn-popup__actions > div > span",url:new URL(window.location.href).origin+"/trainer/vip/",imgSrc:"/@/images/loc/vip/hawthorn_icon.png",targetHref:"/trainer/vip/hawthorn/"},{selector:"#content > table > tbody > tr > td:nth-child(2) > div.block-bordered-tattoo > p:nth-child(3) > span",url:new URL(window.location.href).origin+"/nightclub/",imgSrc:"/@/images/obj/8march6/tattoo_mach.png",targetHref:"/nightclub/"},{selector:"#dino-tab-content-2 > div.dinopark-dino-stats > div:last-child > div.dinopark-dino-stat__value > span",url:new URL(window.location.href).origin+"/dinopark/",imgSrc:"/@/images/loc/dinopark/dinoegg.png",targetHref:"/dinopark/"},{selector:"#content > div > div.pilaf-actions .pilaf-activate-button-inner2",url:new URL(window.location.href).origin+"/teahouse/",imgSrc:"/@/images/loc/pilaf/objs/obj_3.png",targetHref:"/teahouse/"},{selector:"#content > div > div.bender-content > div.bender-use > div > div > button",url:new URL(window.location.href).origin+"/badasrobot/",imgSrc:"/@/images/obj/gifts2017/futurama/bender/head.png",targetHref:"/badasrobot/"}];async function pl({selector:t,url:e,imgSrc:n,targetHref:r,onclick:o}){if(!t||!e||!n){console.log("Could not fetch timer. Data missing.");return}let s=await _(t,new URL(e).pathname);r==="/dinopark/"&&(n=(await _(".dinopark-dino-pic__img","/dinopark/")).getAttribute("src"));let c=ee(`<img style="width: 56px; height: 56px; cursor: pointer; ${r==="/shaman/"&&"transform: scale(1.4);transform-origin: center;"}" src=${n} />`);!s||s===null?s=ee("<span>\u0413\u043E\u0442\u043E\u0432\u043E</span>"):s?.innerText==="\u0417\u0430\u0431\u0440\u0430\u0442\u044C \u043F\u043E\u0439\u043B\u043E!"?s.innerText="\u0413\u043E\u0442\u043E\u0432\u043E":countdown(s),s.style.cssText=Uo.hawthorn,s?.getAttribute("class")?.includes("button")&&$(s).css({lineHeight:"24px",padding:"3px 12px"}),r==="/badasrobot/"&&s.styles;let a=ee("<div></div>");return a.style.cssText="display: flex; align-items: center; flex-direction: column;",a.appendChild(c),a.appendChild(s),r&&c.addEventListener("click",()=>AngryAjax.goToUrl(r)),o&&c.addEventListener("click",o),a}async function li(){let t=async()=>{let r=(await Promise.all(dl.map(async c=>{try{return await pl(c)}catch(a){return console.log("Error processing timer:",c,a),null}}))).filter(Boolean),o=ee(`<div class="timers-container" style="${Uo.timersContainer}"></div>`);function s(){window.innerWidth<1330?o.style.display="none":o.style.display="grid"}window.addEventListener("resize",s),s(),o.replaceChildren(...r),document.querySelector(".main-block").appendChild(o)},e=ee(`
     <div class="button" style="position: fixed; top: 32px; right: 8px;" id="timers-trigger"><span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c" style="padding: 1px 3px;">
     \u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0422\u0430\u0439\u043C\u0435\u0440\u044B
@@ -20385,94 +20740,104 @@ function updatePanelUI() {
           };
           document.onmouseup = () => isDragging = false;
 
+          // === СЛОВАРЬ СПОСОБНОСТЕЙ (ОКО ПРОВИДЕНИЯ) ===
+          const OMNISCIENCE_ABILITIES = {
+              "3": "Призвать мишку",
+              "232": "УК РФ",
+              "273": "Скинуть спутник",
+              "282": "Тушить пожар",
+              "283": "Электро-удар",
+              "293": "Стать Великим",
+              "299": "Почему без маски!?",
+              "325": "Ледяное дыхание",
+              "152": "Сход лавины",
+              "302": "Скинуть два спутника",
+              "54": "Медовая заначка",
+              "295": "Катушка Тесла III",
+              "368": "Атака Клонов",
+              "372": "Товарищ майор",
+              "373": "Безопасный Чебурнет",
+              "374": "Мировой заговор",
+              "389": "Разогнать толпу",
+              "364": "Разгон облаков",
+              "402": "Взрывкарман",
+              "403": "Прилёт из Турции",
+              "376": "Ковровая бомбардировка",
+              "418": "Баласт II",
+              "432": "Призвать Шаи Хулуда",
+              "394": "Лунный камень II",
+              "448": "Подарок Прометея",
+              "449": "Излечение",
+              "419": "Отюрбанивание IV",
+              "468": "Ракета DIY",
+              "171": "Яростный подъем",
+              "383": "Двойная польза",
+              "395": "Взрыв чипов VI",
+              "490": "Электро-выхлоп III",
+              "491": "Стянуть маску",
+              "495": "Лолололо",
+              "446": "Дымовая Завеса V",
+              "469": "Солнечный Пульсар",
+              "511": "Луч смерти X",
+              "355": "Хоровое Голосование",
+              "477": "Дубиночка",
+              "523": "Пылающий след III",
+              "370": "Призвать Мэра",
+              "451": "В облака III",
+              "464": "Кругосветный круиз V",
+              "530": "Туман Войны",
+              "531": "Последний аргумент",
+              "503": "Космическая Пыль IV",
+              "476": "Котошаверма VI",
+              "554": "Чип Тюнинг III",
+              "555": "Горящий Электромобиль III",
+              "514": "Зеркальный клон",
+              "482": "Воронка VI",
+              "575": "Сдуватель",
+              "532": "Китайский автопилот V",
+              "435": "Стать Великим",
+              "32": "Кальян «Ледяной» Ультра",
+              "34": "Кальян «Гранатовый» Ультра",
+              "33": "Кальян «Арбузный» Ультра",
+              "270": "Кальян «3 в 1»",
+              "164": "Трофей «Sid_Ss»",
+              "444": "Медвежий Рынок",
+              "463": "Снежный переполох",
+              "462": "Реликт питомца",
+              "-310": "Рык",
+              "-311": "Топот",
+              "-369": "Откусить голову"
+          };
+
           // Fallback-список абилок из localStorage Закоулочника или встроенный
           function getAbilitiesList() {
               // Сначала пытаемся взять из Закоулочника
               try {
                   const zakData = localStorage.getItem('myway_abilities');
                   if (zakData) {
-                      return JSON.parse(zakData);
+                      const list = JSON.parse(zakData);
+                      // Преобразуем список объектов в словарь для удобства
+                      const dict = {};
+                      list.forEach(item => dict[item.id] = item.name);
+                      // Объединяем с нашим словарем (наш словарь имеет приоритет для известных абилок)
+                      return { ...OMNISCIENCE_ABILITIES, ...dict };
                   }
               } catch(e) {}
-              
-              // Встроенный fallback (дублируем основные)
-              return [
-                  { id: '3', name: 'Призвать мишку' },
-                  { id: '15', name: 'Призвать пугало' },
-                  { id: '232', name: 'УК РФ' },
-                  { id: '268', name: 'Космоспас NEW' },
-                  { id: '269', name: 'Черная дыра' },
-                  { id: '273', name: 'Скинуть спутник' },
-                  { id: '282', name: 'Тушить пожар' },
-                  { id: '283', name: 'Электро-удар' },
-                  { id: '293', name: 'Стать Великим' },
-                  { id: '325', name: 'Ледяное дыхание' },
-                  { id: '152', name: 'Сход лавины' },
-                  { id: '302', name: 'Скинуть два спутника' },
-                  { id: '54', name: 'Медовая заначка' },
-                  { id: '295', name: 'Катушка Тесла III' },
-                  { id: '368', name: 'Атака Клонов' },
-                  { id: '372', name: 'Товарищ майор' },
-                  { id: '373', name: 'Безопасный Чебурнет' },
-                  { id: '374', name: 'Мировой заговор' },
-                  { id: '375', name: 'QR-код' },
-                  { id: '389', name: 'Разогнать толпу' },
-                  { id: '364', name: 'Разгон облаков' },
-                  { id: '402', name: 'Взрывкарман' },
-                  { id: '403', name: 'Прилёт из Турции' },
-                  { id: '376', name: 'Ковровая бомбардировка' },
-                  { id: '418', name: 'Баласт II' },
-                  { id: '432', name: 'Призвать Шаи Хулуда' },
-                  { id: '394', name: 'Лунный камень II' },
-                  { id: '448', name: 'Подарок Прометея' },
-                  { id: '419', name: 'Отюрбанивание IV' },
-                  { id: '468', name: 'Ракета DIY' },
-                  { id: '353', name: 'Удар с воздуха V' },
-                  { id: '383', name: 'Двойная польза' },
-                  { id: '490', name: 'Электро-выхлоп III' },
-                  { id: '491', name: 'Стянуть маску' },
-                  { id: '495', name: 'Лолололо' },
-                  { id: '446', name: 'Дымовая Завеса V' },
-                  { id: '469', name: 'Солнечный Пульсар' },
-                  { id: '511', name: 'Луч смерти X' },
-                  { id: '355', name: 'Хоровое Голосование' },
-                  { id: '519', name: 'Космоспас 2.0' },
-                  { id: '477', name: 'Дубиночка' },
-                  { id: '442', name: 'Мощный Клаксон VI' },
-                  { id: '523', name: 'Пылающий след III' },
-                  { id: '370', name: 'Призвать Мэра' },
-                  { id: '464', name: 'Кругосветный круиз V' },
-                  { id: '530', name: 'Туман Войны' },
-                  { id: '531', name: 'Последний аргумент' },
-                  { id: '532', name: 'Китайский автопилот III' },
-                  { id: '503', name: 'Космическая Пыль IV' },
-                  { id: '476', name: 'Котошаверма VI' },
-                  { id: '554', name: 'Чип Тюнинг III' },
-                  { id: '555', name: 'Горящий Электромобиль III' },
-                  { id: '514', name: 'Зеркальный клон' },
-                  { id: '567', name: 'Не твой ключ' },
-                  { id: '575', name: 'Сдуватель' },
-                  { id: '435', name: 'Стать Великим' },
-                  { id: '33', name: 'Кальян Арбузный' },
-                  { id: '32', name: 'Кальян Ледяной' },
-                  { id: '34', name: 'Кальян Гранатовый' },
-                  { id: '270', name: 'Кальян 3 в 1' },
-                  { id: '164', name: 'Трофей Modest70' },
-                  { id: '444', name: 'Медвежий Рынок' },
-                  { id: '463', name: 'Снежный переполох' },
-                  { id: '462', name: 'Реликт питомца' },
-                  { id: '-310', name: 'Рык' },
-                  { id: '-311', name: 'Топот' },
-                  { id: '-369', name: 'Откусить голову' },
-                  { id: '-497', name: 'Вой Стаи' }
-              ];
+              return OMNISCIENCE_ABILITIES;
           }
 
           // Получить имя абилки по ID
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
-              const found = abilities.find(a => a.id === id);
-              if (found && found.name) return found.name;
+              if (abilities[id]) return abilities[id];
+              
+              // Попытка получить из DOM, если словарь не помог
+              const input = document.querySelector(`input[type="radio"][value="${id}"]`);
+              if (input) {
+                  const rel = input.getAttribute('rel');
+                  if (rel && rel !== 'Абилка' && !rel.includes('?')) return rel;
+              }
+              
               return null;
           }
 
@@ -20544,23 +20909,26 @@ function updatePanelUI() {
                   iconWrapper.appendChild(iconImg);
                   btn.appendChild(iconWrapper);
 
-                  // ТЕКСТОВЫЙ ЛЕЙБЛ ПОД ИКОНКОЙ (ID + название, если имя скрыто)
+                  // ТЕКСТОВЫЙ ЛЕЙБЛ ПОД ИКОНКОЙ (Название + ID)
                   const labelDiv = document.createElement('div');
                   labelDiv.style.cssText = `
-                      font-size: 9px;
-                      opacity: 0.85;
+                      font-size: 10px;
+                      font-weight: 500;
+                      opacity: 0.95;
                       margin-top: 2px;
                       text-align: center;
                       line-height: 1.2;
                       word-break: break-word;
                       max-width: 100%;
+                      color: ${isNameFallback ? '#ffca28' : '#fff'};
                   `;
-                  if (isNameFallback) {
-                      // Если имя скрыто — показываем ID и название из fallback
-                      labelDiv.innerHTML = `<span style="color:#ffca28;font-weight:600;">#${id}</span><br>${name}`;
+                  
+                  if (name && name !== 'Абилка' && !name.includes('?')) {
+                      // Если имя известно (из DOM или словаря) — показываем его
+                      labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
                   } else {
-                      // Если имя видно — показываем только ID
-                      labelDiv.textContent = id;
+                      // Если имя неизвестно — показываем ID
+                      labelDiv.textContent = `ID: ${id}`;
                   }
                   btn.appendChild(labelDiv);
 
