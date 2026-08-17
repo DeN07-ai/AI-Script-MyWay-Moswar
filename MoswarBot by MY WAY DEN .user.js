@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.8.1
-// @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот, ОМОН
+// @version      1.8.7
+// @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
@@ -3791,6 +3791,11 @@
       let doubleRunEnabled = false;
       let doubleRunStage = 0;               // 0 = первый проход, 1 = второй
 
+      // Темный тоннель
+      let darkTunnelMode = false;
+      let darkTunnelCollections = true;
+      let darkTunnelChests = true;
+
       // инициализация жетонов (сессионно)
       let tokensInitialized = false;
 
@@ -3865,6 +3870,9 @@
           localStorage.setItem("ratbot-doubleEnabled", doubleRunEnabled ? "1" : "0");
           localStorage.setItem("ratbot-tokens", String(ratTokens));
           localStorage.setItem("ratbot-useBadge", useBadgeElevator ? "1" : "0");
+          localStorage.setItem("ratbot-darkTunnelMode", darkTunnelMode ? "1" : "0");
+          localStorage.setItem("ratbot-darkTunnelCollections", darkTunnelCollections ? "1" : "0");
+          localStorage.setItem("ratbot-darkTunnelChests", darkTunnelChests ? "1" : "0");
           localStorage.setItem("ratbot-actionAutoMax", actionAutoMax ? "1" : "0");
       }
 
@@ -3895,6 +3903,10 @@
           useBadgeElevator = localStorage.getItem("ratbot-useBadge") !== "0";
 
           actionAutoMax = localStorage.getItem("ratbot-actionAutoMax") === "1";
+
+          darkTunnelMode = localStorage.getItem("ratbot-darkTunnelMode") === "1";
+          darkTunnelCollections = localStorage.getItem("ratbot-darkTunnelCollections") !== "0";
+          darkTunnelChests = localStorage.getItem("ratbot-darkTunnelChests") !== "0";
       }
 
       /* ========================= ПАРСИНГ ТАЙМЕРА ========================= */
@@ -3946,7 +3958,7 @@
 
       function createUI() {
           if (document.getElementById("ratbot-panel")) return;
-          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9");
+          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.1");
           if (!ui) return;
           const { panel, header, body } = ui;
           body.id = "ratbot-body";
@@ -3961,6 +3973,7 @@
       <b>Режим:</b><br>
       <label style="margin-right:8px;"><input type="radio" name="rat-mode" id="rat-mode-normal"> Обычный</label>
       <label><input type="radio" name="rat-mode" id="rat-mode-action"> Акционный</label>
+      <label><input type="radio" name="rat-mode" id="rat-mode-dark"> Темный тоннель</label>
     </div>
 
     <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">
@@ -3993,6 +4006,15 @@
       </div>
     </div>
 
+    <div id="rat-dark-tunnel-box" style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.04);">
+        <div style="font-weight:700;margin-bottom:6px;">Темный тоннель: Искать</div>
+        <div>
+            <label><input type="checkbox" id="rat-dark-collections"> Элементы коллекций</label>
+        </div>
+        <div>
+            <label><input type="checkbox" id="rat-dark-chests"> Сундуки</label>
+        </div>
+    </div>
     <div style="margin-bottom:10px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.1);">
       <label style="display:block;margin-bottom:6px;"><input type="checkbox" id="rat-use-badge"> Использовать лифт за жетоны</label>
       <label style="display:block;margin-bottom:6px;"><input type="checkbox" id="rat-auto-reset"> Авто-сброс таймера после уровня ≥
@@ -4058,6 +4080,7 @@
           /* --- элементы настроек --- */
           const rNormal = document.getElementById("rat-mode-normal");
           const rAction = document.getElementById("rat-mode-action");
+          const rDark = document.getElementById("rat-mode-dark");
           const inpRudaMin = document.getElementById("rat-normal-ruda-min");
           const chkBadge = document.getElementById("rat-use-badge");
           const chkAutoReset = document.getElementById("rat-auto-reset");
@@ -4070,14 +4093,22 @@
           const rbActionRun = document.getElementById("rat-action-below-run");
 
           const chkDoubleRun = document.getElementById("rat-double-run");
+          
+          const chkDarkCollections = document.getElementById("rat-dark-collections");
+          const chkDarkChests = document.getElementById("rat-dark-chests");
 
-          if (modeAction) {
+          if (darkTunnelMode) {
+              rDark.checked = true;
+          } else if (modeAction) {
               rAction.checked = true;
-              rNormal.checked = false;
           } else {
               rNormal.checked = true;
-              rAction.checked = false;
           }
+
+          chkDarkCollections.checked = !!darkTunnelCollections;
+          chkDarkChests.checked = !!darkTunnelChests;
+
+          updateModeVisibility();
 
           inpRudaMin.value = normalRudaMin;
           chkBadge.checked = !!useBadgeElevator;
@@ -4098,16 +4129,38 @@
           rNormal.onchange = () => {
               if (rNormal.checked) {
                   modeAction = false;
+                  darkTunnelMode = false;
                   saveFlags();
+                  updateModeVisibility();
                   addLog("Режим: Обычный");
               }
           };
           rAction.onchange = () => {
               if (rAction.checked) {
                   modeAction = true;
+                  darkTunnelMode = false;
                   saveFlags();
+                  updateModeVisibility();
                   addLog("Режим: Акционный (сезонный дроп)");
               }
+          };
+          rDark.onchange = () => {
+              if (rDark.checked) {
+                  darkTunnelMode = true;
+                  modeAction = false; // Акционный и темный тоннель взаимоисключающие
+                  saveFlags();
+                  updateModeVisibility();
+                  addLog("Режим: Темный тоннель");
+              }
+          };
+
+          chkDarkCollections.onchange = () => {
+              darkTunnelCollections = !!chkDarkCollections.checked;
+              saveFlags();
+          };
+          chkDarkChests.onchange = () => {
+              darkTunnelChests = !!chkDarkChests.checked;
+              saveFlags();
           };
 
           function bindNumberInput(input, setter) {
@@ -4175,6 +4228,18 @@
           updateButtonsVisual();
           updateTokensUI(ratTokens || 0);
           updateTotalsUI();
+
+          function updateModeVisibility() {
+              const normalBox = document.querySelector('input#rat-normal-ruda-min').closest('.mw-panel-section, div');
+              const actionBox = document.querySelector('select#rat-action-drop-type').closest('.mw-panel-section, div');
+              const darkBox = document.getElementById('rat-dark-tunnel-box');
+
+              if (normalBox) normalBox.style.display = !modeAction && !darkTunnelMode ? 'block' : 'none';
+              if (actionBox) actionBox.style.display = modeAction ? 'block' : 'none';
+              if (darkBox) darkBox.style.display = darkTunnelMode ? 'block' : 'none';
+          }
+
+          updateModeVisibility();
       }
 
       function updateButtonsVisual() {
@@ -4316,7 +4381,7 @@
 
       function parseRewardFromWelcomeRat(root) {
           const res = {
-              ruda: 0, tugriki: 0, petric: 0, tails: 0,
+              ruda: 0, tugriki: 0, petric: 0, tails: 0, collections: 0, chests: 0,
                 emeralds: 0, iskry: 0, puli: 0, sneg: 0, stones: 0, rocket: 0
           };
           if (!root) return res;
@@ -4349,6 +4414,8 @@
               if (/pul|bullet|патрон|пули|пуля/.test(text)) res.puli += baseCount;
               if (/iskr|spark|искра|искры/.test(text)) res.iskry += baseCount;
             if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
+              if (src.includes("/obj/collections/")) res.collections += baseCount;
+              if (src.includes("/obj/box_")) res.chests += baseCount;
               if (/rocket\/|nav_block|pillar|fuel|armor/.test(text)) res.rocket += baseCount;
           });
 
@@ -4357,7 +4424,20 @@
 
       function decideActionForWelcomeRat(rew) {
           addLog(`[debug] config: modeAction=${modeAction}, actionDropType=${actionDropType}, actionDropMin=${actionDropMin}, actionAutoMax=${actionAutoMax}, actionBelowBehavior=${actionBelowBehavior}, useBadgeElevator=${useBadgeElevator}`);
+          addLog(`[debug] config: darkTunnelMode=${darkTunnelMode}, darkTunnelCollections=${darkTunnelCollections}, darkTunnelChests=${darkTunnelChests}`);
 
+          if (darkTunnelMode) {
+              const hasCollections = darkTunnelCollections && rew.collections > 0;
+              const hasChests = darkTunnelChests && rew.chests > 0;
+
+              if (hasCollections || hasChests) {
+                  addLog(`Темный тоннель: найдено (коллекции: ${rew.collections}, сундуки: ${rew.chests}) → нападаю`);
+                  return "fight";
+              } else {
+                  addLog(`Темный тоннель: ничего не найдено → ищу другого монстра`);
+                  return "search_other";
+              }
+          }
           if (modeAction) {
               let cur = 0, label = "";
               if (actionDropType === "snow") {
@@ -4620,7 +4700,7 @@
           }
 
           const rew = parseRewardFromWelcomeRat(root);
-        updateRewardUI(`руда=${rew.ruda}, петрики=${rew.petric}, снег=${rew.sneg}, пули=${rew.puli}, искры=${rew.iskry}, камни=${rew.stones}, ракеты=${rew.rocket}`);
+        updateRewardUI(`руда=${rew.ruda}, петрики=${rew.petric}, снег=${rew.sneg}, пули=${rew.puli}, искры=${rew.iskry}, камни=${rew.stones}, ракеты=${rew.rocket}, коллекции=${rew.collections}, сундуки=${rew.chests}`);
 
           const what = decideActionForWelcomeRat(rew);
 
