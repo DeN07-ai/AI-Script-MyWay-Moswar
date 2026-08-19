@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      1.8.7
+// @version      1.8.8
 // @description  Единая панель: Рейды, Крысы, Нефть, Подземка, Спутники, ИИ, Автофлаг, Фулл Доп, МиниБот (полный), ОМОН (полный)
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -680,16 +680,19 @@
   async function checkSecurity() {
      // Сразу обновляем заголовок, чтобы убрать "Загрузка..."
      updateHubHeader();
-      // Автоматическое обновление WhiteList (раз в 15 минут)
+      // Автоматическое обновление WhiteList (раз в 60 минут)
       if (ADMIN.whitelistUrl && !ADMIN.whitelistUrl.includes('YOUR_WHITELIST_ID')) {
+          const localWhitelist = localStorage.getItem('den_bot_whitelist');
           const lastUpdate = localStorage.getItem('den_bot_whitelist_ts');
-          if (!lastUpdate || Date.now() - parseInt(lastUpdate) > 15 * 60 * 1000) {
+          // Обновляем, только если списка нет локально или он устарел (1 час)
+          if (!localWhitelist || !lastUpdate || Date.now() - parseInt(lastUpdate) > 60 * 60 * 1000) {
               try {
                   const response = await crossFetch(ADMIN.whitelistUrl);
                   if (response.ok) {
                       const text = await response.text();
                       localStorage.setItem('den_bot_whitelist', text);
                       localStorage.setItem('den_bot_whitelist_ts', Date.now().toString());
+                      console.log('[MoswarBot] Whitelist updated successfully.');
                   }
               } catch (e) { console.error('[MoswarBot] Whitelist update failed', e); }
           }
@@ -4381,8 +4384,8 @@
 
       function parseRewardFromWelcomeRat(root) {
           const res = {
-              ruda: 0, tugriki: 0, petric: 0, tails: 0, collections: 0, chests: 0,
-                emeralds: 0, iskry: 0, puli: 0, sneg: 0, stones: 0, rocket: 0
+              ruda: 0, tugriki: 0, petric: 0, tails: 0,
+                emeralds: 0, iskry: 0, puli: 0, sneg: 0, stones: 0, rocket: 0, collections: 0, chests: 0
           };
           if (!root) return res;
 
@@ -4413,39 +4416,48 @@
               if (/snow|sneg|снежин/.test(text)) res.sneg += baseCount;
               if (/pul|bullet|патрон|пули|пуля/.test(text)) res.puli += baseCount;
               if (/iskr|spark|искра|искры/.test(text)) res.iskry += baseCount;
-            if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
-              if (src.includes("/obj/collections/")) res.collections += baseCount;
-              if (src.includes("/obj/box_")) res.chests += baseCount;
+              if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
               if (/rocket\/|nav_block|pillar|fuel|armor/.test(text)) res.rocket += baseCount;
+              if (src.includes("/obj/collections/234-")) res.collections += baseCount;
+              if (src.includes("/obj/box_")) res.chests += baseCount;
+
+
           });
 
           return res;
       }
 
-      function decideActionForWelcomeRat(rew) {
+      function decideActionForWelcomeRat(rew, darkTunnelMode) {
           addLog(`[debug] config: modeAction=${modeAction}, actionDropType=${actionDropType}, actionDropMin=${actionDropMin}, actionAutoMax=${actionAutoMax}, actionBelowBehavior=${actionBelowBehavior}, useBadgeElevator=${useBadgeElevator}`);
           addLog(`[debug] config: darkTunnelMode=${darkTunnelMode}, darkTunnelCollections=${darkTunnelCollections}, darkTunnelChests=${darkTunnelChests}`);
 
           if (darkTunnelMode) {
-              const hasCollections = darkTunnelCollections && rew.collections > 0;
-              const hasChests = darkTunnelChests && rew.chests > 0;
-
-              if (hasCollections || hasChests) {
-                  addLog(`Темный тоннель: найдено (коллекции: ${rew.collections}, сундуки: ${rew.chests}) → нападаю`);
+              if (darkTunnelCollections && rew.collections > 0) {
+                  addLog(`Темный тоннель: найдены элементы коллекций (${rew.collections}) → нападаю`);
                   return "fight";
-              } else {
-                  addLog(`Темный тоннель: ничего не найдено → ищу другого монстра`);
+              }
+              if (darkTunnelChests && rew.chests > 0) {
+                  addLog(`Темный тоннель: найдены сундуки (${rew.chests}) → нападаю`);
+                  return "fight";
+              }
+
+              if (actionBelowBehavior === "elevator") {
+                  addLog(`Темный тоннель: нет целевых предметов → ищу другого монстра (лифт)`);
                   return "search_other";
+              } else {
+                  addLog(`Темный тоннель: нет целевых предметов → убегаю`);
+                  return "run";
               }
           }
+
           if (modeAction) {
               let cur = 0, label = "";
               if (actionDropType === "snow") {
                   cur = rew.sneg; label = "снежинки";
               } else if (actionDropType === "bullets") {
                   cur = rew.puli; label = "пули";
-                } else if (actionDropType === "stones") {
-                    cur = rew.stones; label = "камни";
+              } else if (actionDropType === "stones") {
+                  cur = rew.stones; label = "камни";
               } else if (actionDropType === "rocket") {
                   cur = rew.rocket; label = "детали ракеты";
               } else {
@@ -4702,7 +4714,7 @@
           const rew = parseRewardFromWelcomeRat(root);
         updateRewardUI(`руда=${rew.ruda}, петрики=${rew.petric}, снег=${rew.sneg}, пули=${rew.puli}, искры=${rew.iskry}, камни=${rew.stones}, ракеты=${rew.rocket}, коллекции=${rew.collections}, сундуки=${rew.chests}`);
 
-          const what = decideActionForWelcomeRat(rew);
+          const what = decideActionForWelcomeRat(rew, darkTunnelMode);
 
           const btnFight = root.querySelector('button.button[onclick*="metroFightRat"]') || root.querySelector('button.button');
           const btnRun = root.querySelector('button.button[onclick*="metroLeaveFightRat"]') || root.querySelector('button.button[onclick*="metroLeaveFightRat"]');
