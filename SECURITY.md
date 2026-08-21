@@ -1,21 +1,18 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Актуальная рабочая версия — userscript **MoswarBot by MY WAY DEN** (`DEN.js` / GitHub `.user.js`).
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Версия | Поддержка |
+|--------|-----------|
+| текущий `main` / DEN.js | ✅ |
+| старые бэкапы / `.bak` | ❌ |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Если нашли уязвимость в скрипте или утечку токенов/ключей:
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+1. Не публикуйте токены Telegram / cookies / приватные ключи в Issues.
+2. Сообщите владельцу репозитория [DeN07-ai](https://github.com/DeN07-ai) через GitHub private contact / Issues без секретов.
+3. Ротируйте скомпрометированные токены сразу после обнаружения.
