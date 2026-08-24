@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.2
+// @version      2.3
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -9719,7 +9719,7 @@
       }
 
       if (document.getElementById('fulldope-modal')) return;
-      console.log('[MODULE_fulldope] v2.9');
+      console.log('[MODULE_fulldope] v2.10');
 
       // IDs from AI module for smart classification
       const RIDE_GROUPS = {
@@ -10103,7 +10103,32 @@
       const LS_FD_INACTIVE = 'mw_fd_inactive_keys';
 
       // Сессия: свернуть не трогает; ×/Стоп → abort; Пауза → paused
-      const fdSession = { running: false, aborted: false, paused: false, queue: null };
+      // pendingSleeps / intervals / abortControllers — чтобы Стоп/× реально гасили фоновые ветки
+      const fdSession = {
+          running: false,
+          aborted: false,
+          paused: false,
+          queue: null,
+          pendingSleeps: new Set(),
+          intervals: new Set(),
+          abortControllers: new Set()
+      };
+
+      const clearFdAsync = () => {
+          fdSession.pendingSleeps.forEach((entry) => {
+              try { clearTimeout(entry.id); } catch (_) {}
+              try { entry.resolve(); } catch (_) {}
+          });
+          fdSession.pendingSleeps.clear();
+          fdSession.intervals.forEach((id) => {
+              try { clearInterval(id); } catch (_) {}
+          });
+          fdSession.intervals.clear();
+          fdSession.abortControllers.forEach((c) => {
+              try { c.abort(); } catch (_) {}
+          });
+          fdSession.abortControllers.clear();
+      };
 
       const syncFdHeaderButtons = () => {
           const run = document.getElementById('fd-run');
@@ -10725,6 +10750,7 @@
           fdSession.paused = false;
           fdSession.running = false;
           fdSession.queue = null;
+          clearFdAsync();
           clearRunState();
           document.querySelectorAll('.fd-item.processing').forEach(i => i.classList.remove('processing'));
           syncFdHeaderButtons();
@@ -10829,6 +10855,7 @@
           fdSession.paused = !!(state && state.paused);
           fdSession.running = true;
           fdSession.queue = state.tasks;
+          clearFdAsync();
 
           const originalText = 'Активировать';
           syncFdHeaderButtons();
@@ -10837,9 +10864,14 @@
           const logs = Array.isArray(state.logs) ? state.logs : [];
           const pw = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
-          const sleep = (ms) => new Promise(r => {
-              // console.log('[FullDope] Wait ' + ms + 'ms');
-              setTimeout(r, ms);
+          const sleep = (ms) => new Promise((resolve) => {
+              if (fdSession.aborted) { resolve(); return; }
+              const entry = { id: 0, resolve };
+              entry.id = setTimeout(() => {
+                  fdSession.pendingSleeps.delete(entry);
+                  resolve();
+              }, ms);
+              fdSession.pendingSleeps.add(entry);
           });
           const isAborted = () => fdSession.aborted;
           const waitWhilePaused = async () => {
@@ -10848,39 +10880,92 @@
                   await sleep(200);
               }
           };
+          const trackInterval = (fn, ms) => {
+              const id = setInterval(fn, ms);
+              fdSession.intervals.add(id);
+              return id;
+          };
+          const untrackInterval = (id) => {
+              try { clearInterval(id); } catch (_) {}
+              fdSession.intervals.delete(id);
+          };
 
           const request = async (url, data) => {
+              if (isAborted()) return null;
               const standardData = { ...data, ajax: 1, __ajax: 1, standard_ajax: 1 };
-              if (typeof $ !== 'undefined' && $.ajax) {
-                  return new Promise(resolve => {
-                      $.ajax({
-                          url: url,
-                          type: 'POST',
-                          data: standardData,
-                          dataType: 'json',
-                          success: (res) => resolve(res),
-                          error: () => resolve(null)
+              const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+              if (controller) fdSession.abortControllers.add(controller);
+              const releaseController = () => {
+                  if (controller) fdSession.abortControllers.delete(controller);
+              };
+              try {
+                  if (typeof $ !== 'undefined' && $.ajax) {
+                      return await new Promise((resolve) => {
+                          const xhr = $.ajax({
+                              url: url,
+                              type: 'POST',
+                              data: standardData,
+                              dataType: 'json',
+                              success: (res) => resolve(res),
+                              error: () => resolve(null)
+                          });
+                          if (controller) {
+                              const onAbort = () => {
+                                  try { if (xhr && xhr.abort) xhr.abort(); } catch (_) {}
+                                  resolve(null);
+                              };
+                              if (controller.signal.aborted) onAbort();
+                              else controller.signal.addEventListener('abort', onAbort, { once: true });
+                          }
                       });
+                  } else if (typeof $ !== 'undefined' && $.post) {
+                      return await new Promise((resolve) => {
+                          const jqXHR = $.post(url, standardData, (res) => resolve(res)).fail(() => resolve(null));
+                          if (controller) {
+                              const onAbort = () => {
+                                  try { if (jqXHR && jqXHR.abort) jqXHR.abort(); } catch (_) {}
+                                  resolve(null);
+                              };
+                              if (controller.signal.aborted) onAbort();
+                              else controller.signal.addEventListener('abort', onAbort, { once: true });
+                          }
+                      });
+                  } else {
+                      const fd = new URLSearchParams();
+                      for (const k in standardData) fd.append(k, standardData[k]);
+                      try {
+                          const res = await fetch(url, {
+                              method: 'POST',
+                              headers: {
+                                  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                  'X-Requested-With': 'XMLHttpRequest'
+                              },
+                              body: fd.toString(),
+                              credentials: 'include',
+                              signal: controller ? controller.signal : undefined
+                          });
+                          if (isAborted()) return null;
+                          return await res.json();
+                      } catch (e) { return null; }
+                  }
+              } finally {
+                  releaseController();
+              }
+          };
+
+          const fdFetch = async (url, opts = {}) => {
+              if (isAborted()) return null;
+              const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+              if (controller) fdSession.abortControllers.add(controller);
+              try {
+                  return await fetch(url, {
+                      ...opts,
+                      signal: controller ? controller.signal : (opts && opts.signal)
                   });
-              } else if (typeof $ !== 'undefined' && $.post) {
-                  return new Promise(resolve => {
-                      $.post(url, standardData, (res) => resolve(res)).fail(() => resolve(null));
-                  });
-              } else {
-                  const fd = new URLSearchParams();
-                  for (const k in standardData) fd.append(k, standardData[k]);
-                  try {
-                      const res = await fetch(url, {
-                          method: 'POST',
-                          headers: {
-                              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                              'X-Requested-With': 'XMLHttpRequest'
-                          },
-                          body: fd.toString(),
-                          credentials: 'include'
-                      }); // console.log(`[FullDope] Fetch to ${url} response:`, res);
-                      return await res.json();
-                  } catch (e) { return null; }
+              } catch (e) {
+                  return null;
+              } finally {
+                  if (controller) fdSession.abortControllers.delete(controller);
               }
           };
 
@@ -10930,6 +11015,7 @@
           };
           const waitForFlyButton = async (rocketId, tries = 6, delay = 300) => {
               for (let t = 0; t < tries; t++) {
+                  if (isAborted()) return null;
                   const b = findFlyButton(rocketId);
                   if (b) return b;
                   await sleep(delay);
@@ -10976,6 +11062,7 @@
 
               const waitForLiveAbilityBtn = async (tries = 8, delay = 250) => {
                   for (let i = 0; i < tries; i++) {
+                      if (isAborted()) return null;
                       const b = findLiveAbilityBtn();
                       if (b) return b;
                       await sleep(delay);
@@ -11001,11 +11088,13 @@
 
               // Фолбэк: пробуем тот же механизм, но из HTML страницы
               try {
-                  const r = await fetch(trainPath);
+                  const r = await fdFetch(trainPath);
+                  if (!r || isAborted()) return false;
                   const html = await r.text();
                   const d = new DOMParser().parseFromString(html, 'text/html');
                   const candidates = d.querySelectorAll('.action[onclick*="petUseAbil"], .action[data-onclick*="petUseAbil"]');
                   for (const srcBtn of candidates) {
+                      if (isAborted()) return false;
                       const oc = srcBtn.getAttribute('onclick') || srcBtn.getAttribute('data-onclick') || '';
                       const m = oc.match(/moswar\.petUseAbil\s*\(\s*['"]?(\d+)['"]?\s*,\s*['"]?([^'",\s\)]+)['"]?/i);
                       if (!m || m[1] !== pid || m[2] !== abil) continue;
@@ -11043,6 +11132,9 @@
           };
 
           const runTask = async (task) => {
+              if (isAborted()) return false;
+              await waitWhilePaused();
+              if (isAborted()) return false;
               switch (task.type) {
                   case 'dope':
                       await request('/player/json/use-many/', { ids: task.dataId });
@@ -11179,30 +11271,41 @@
                           
                           // Переходим на страницу москвополии если ещё не там
                           if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
+                              if (isAborted()) return false;
                               console.log('[FullDope] Moscowpoly: Navigating to /home/');
                               MoswarLib.Navigation.goToUrl('/home/');
                               await sleep(3000);
+                              if (isAborted()) return false;
                           }
                           
                           // Ждём инициализации window.Moscowpoly
                           const mp = await new Promise(function(resolve) {
                               let tries = 0;
-                              let interval = setInterval(function() {
+                              const interval = trackInterval(function() {
+                                  if (fdSession.aborted) {
+                                      untrackInterval(interval);
+                                      resolve(null);
+                                      return;
+                                  }
                                   tries++;
                                   if (window.Moscowpoly && typeof window.Moscowpoly.dropDices === 'function') {
-                                      clearInterval(interval);
+                                      untrackInterval(interval);
                                       console.log('[FullDope] Moscowpoly: Initialized after ' + tries + ' tries');
                                       resolve(window.Moscowpoly);
                                   }
                                   if (tries > 100) {
-                                      clearInterval(interval);
+                                      untrackInterval(interval);
                                       console.warn('[FullDope] Moscowpoly: Timeout, using AJAX fallback');
                                       resolve(null);
                                   }
                               }, 100);
                           });
+                          if (isAborted()) return false;
                           
                           for (let i = 0; i < count; i++) {
+                              if (isAborted()) break;
+                              await waitWhilePaused();
+                              if (isAborted()) break;
                               // Быстрый бросок: прямой вызов функции игры (без анимации)
                               if (mp && typeof mp.dropDices === 'function' && !mp.inAction) {
                                   console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via API');
@@ -11213,12 +11316,16 @@
                                   // Fallback: AJAX
                                   console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via AJAX');
                                   const r = await request('/home/moscowpoly_roll/', { action: 'moscowpoly_roll' });
+                                  if (isAborted()) break;
                                   if (!r || r.result === 0) {
                                       console.warn('[FullDope] Moscowpoly: Roll failed');
                                       break;
                                   }
                                   await sleep(1000);
                               }
+                              if (isAborted()) break;
+                              await waitWhilePaused();
+                              if (isAborted()) break;
                               // Активация бонуса
                               if (mp && typeof mp.doActivate === 'function' && !mp.inAction) {
                                   mp.doActivate();
@@ -11237,30 +11344,38 @@
                           logs.push('💰 Бизнес');
                       } else if (task.id === 'fd-autopilot') {
                           try {
-                              const r = await fetch('/home/collections/');
-                              const t = await r.text();
-                              const d = new DOMParser().parseFromString(t, 'text/html');
-                              const forms = d.querySelectorAll('form[action*="/activate/"]');
-                              for (const f of forms) {
-                                  const act = f.getAttribute('action');
-                                  const data = { ajax: 1, __ajax: 1 };
-                                  new FormData(f).forEach((v, k) => data[k] = v);
-                                  await request(act, data);
-                                  await sleep(500);
+                              const r = await fdFetch('/home/collections/');
+                              if (r && !isAborted()) {
+                                  const t = await r.text();
+                                  const d = new DOMParser().parseFromString(t, 'text/html');
+                                  const forms = d.querySelectorAll('form[action*="/activate/"]');
+                                  for (const f of forms) {
+                                      if (isAborted()) break;
+                                      await waitWhilePaused();
+                                      if (isAborted()) break;
+                                      const act = f.getAttribute('action');
+                                      const data = { ajax: 1, __ajax: 1 };
+                                      new FormData(f).forEach((v, k) => data[k] = v);
+                                      await request(act, data);
+                                      await sleep(500);
+                                  }
                               }
                           } catch (_) {}
+                          if (isAborted()) return false;
                           if (typeof window.AutomobileAutopilot === 'function') window.AutomobileAutopilot();
                           else await request('/automobile/autopilot/', { action: 'autopilot' });
                           logs.push('🚖 Автопилот');
                       } else if (task.id === 'fd-crown') {
-                          const r = await fetch('/player/item-special/8marchtiar/');
-                          const t = await r.text();
-                          const d = new DOMParser().parseFromString(t, 'text/html');
-                          const f = d.querySelector('form');
-                          if (f) {
-                              const data = {};
-                              new FormData(f).forEach((v, k) => data[k] = v);
-                              await request(f.getAttribute('action'), data);
+                          const r = await fdFetch('/player/item-special/8marchtiar/');
+                          if (r && !isAborted()) {
+                              const t = await r.text();
+                              const d = new DOMParser().parseFromString(t, 'text/html');
+                              const f = d.querySelector('form');
+                              if (f) {
+                                  const data = {};
+                                  new FormData(f).forEach((v, k) => data[k] = v);
+                                  await request(f.getAttribute('action'), data);
+                              }
                           }
                           logs.push('👑 Корона');
                       } else if (task.id === 'fd-robot') {
@@ -11285,11 +11400,13 @@
                               
                               // Если не на странице - переходим и ждём загрузки
                               if (location.pathname !== '/natal2026/') {
+                                  if (isAborted()) return false;
                                   console.log('[FullDope] Natal: Navigating to /natal2026/');
                                   // Переходим на страницу через AngryAjax (без полной перезагрузки)
                                   MoswarLib.Navigation.goToUrl('/natal2026/');
                                   // Ждём пока страница загрузится
                                   await sleep(3000);
+                                  if (isAborted()) return false;
                                   console.log('[FullDope] Natal: Page should be loaded now');
                                   // Продолжаем выполнение в том же цикле
                               }
@@ -11297,6 +11414,7 @@
                               // Ждём полной загрузки DOM
                               console.log('[FullDope] Natal: Waiting for DOM...');
                               await sleep(2000);
+                              if (isAborted()) return false;
                               
                               // Ищем кнопки
                               const actions = document.querySelector('.dog2017-actions');
@@ -11358,20 +11476,25 @@
                               // [FIX] Big Brother (Matrix) special handling: activate up to 9 available talents
                               if (task.id === 'fd-matrix') {
                                   try {
-                                      const r = await fetch(evt.url);
-                                      const t = await r.text();
-                                      const d = new DOMParser().parseFromString(t, 'text/html');
-                                      const wrappers = d.querySelectorAll('.big-brother-abil-wrapper');
-                                      if (wrappers.length > 0) {
-                                          let available = 0;
-                                          wrappers.forEach(w => {
-                                              if (!w.querySelector('.timeleft') && !w.querySelector('.timeout')) available++;
-                                          });
-                                          limit = available;
+                                      const r = await fdFetch(evt.url);
+                                      if (r) {
+                                          const t = await r.text();
+                                          const d = new DOMParser().parseFromString(t, 'text/html');
+                                          const wrappers = d.querySelectorAll('.big-brother-abil-wrapper');
+                                          if (wrappers.length > 0) {
+                                              let available = 0;
+                                              wrappers.forEach(w => {
+                                                  if (!w.querySelector('.timeleft') && !w.querySelector('.timeout')) available++;
+                                              });
+                                              limit = available;
+                                          } else { limit = 9; }
                                       } else { limit = 9; }
                                   } catch (e) { limit = 9; }
                               }
                               for (let i = 0; i < limit; i++) {
+                                  if (isAborted()) break;
+                                  await waitWhilePaused();
+                                  if (isAborted()) break;
                                   const res = await request(evt.url, { action: 'activate-talant' });
                                   if (!res || res.result === 0) break;
                                   await sleep(800);
@@ -11419,6 +11542,7 @@
           fdSession.running = false;
           fdSession.paused = false;
           fdSession.queue = null;
+          clearFdAsync();
           syncFdHeaderButtons();
           if (btn.isConnected) btn.textContent = originalText;
           clearRunState();
