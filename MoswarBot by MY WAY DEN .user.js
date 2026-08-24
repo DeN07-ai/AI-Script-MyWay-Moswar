@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.3
+// @version      2.4
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -550,31 +550,9 @@
                       }
                   }, 1000); // Ждём 1 секунду чтобы панель успела открыться
                   
-                  // 7. АВТОМАТИЧЕСКОЕ СВОРАЧИВАНИЕ ПАНЕЛИ через 2 секунды
+                  // 7. АВТОМАТИЧЕСКОЕ СВОРАЧИВАНИЕ ПАНЕЛИ через 2 секунды (− = hidePanel)
                   setTimeout(() => {
-                      const panelId = {
-                          'raids': 'raidbot-panel',
-                          'rat': 'ratbot-panel',
-                          'neft': 'neftbot-panel',
-                          'dungeon': 'dg-panel',
-                          'satellite': 'satellite-panel',
-                          'flag': 'flag-panel',
-                          'fulldope': 'fulldope-panel',
-                          'fubugs': 'fubugs-panel',
-      'minibot': 'zk-panel',
-      'omon': 'omon-panel'
-                      }[moduleId];
-                      
-                      if (panelId) {
-                          const panel = document.getElementById(panelId);
-                          if (panel) {
-                              const toggleBtn = panel.querySelector('.toggle-btn');
-                              if (toggleBtn) {
-                                  toggleBtn.click();
-                                  console.log(`[TimeScheduler] ✓ Панель ${moduleId} сворачивается`);
-                              }
-                          }
-                      }
+                      if (typeof hidePanel === 'function') hidePanel(moduleId);
                   }, 2000); // Ждём 2 секунды чтобы панель успела открыться
                   
                   // Отправляем уведомление
@@ -980,6 +958,29 @@
   /* ==========================================================================
      UTILS & UI BUILDER
      ========================================================================== */
+  // Реестр abort/pause: × на панели и ✕ в хабе гасят работу модуля
+  const ModuleSessionRegistry = {
+      _abort: Object.create(null),
+      _pause: Object.create(null),
+      register(moduleId, handlers = {}) {
+          if (!moduleId) return;
+          if (typeof handlers.onAbort === 'function') this._abort[moduleId] = handlers.onAbort;
+          if (typeof handlers.onPause === 'function') this._pause[moduleId] = handlers.onPause;
+      },
+      abort(moduleId, reason) {
+          const fn = this._abort[moduleId];
+          if (typeof fn === 'function') {
+              try { fn(reason || 'stop'); } catch (e) { console.warn('[ModuleSession] abort', moduleId, e); }
+          }
+      },
+      pause(moduleId) {
+          const fn = this._pause[moduleId];
+          if (typeof fn === 'function') {
+              try { fn(); } catch (e) { console.warn('[ModuleSession] pause', moduleId, e); }
+          }
+      }
+  };
+
   const Utils = {
       sleep: (ms) => new Promise(r => setTimeout(r, ms)),
       humanPause: async (min = 400, max = 900) => {
@@ -1023,10 +1024,17 @@
               });
           } catch(e) { console.error('Report error', e); }
       },
-      createPanel: (id, title) => {
+      /**
+       * Панель настроек. opts.moduleId → шапка − (hidePanel) / × (abort+hide).
+       * Без moduleId — старый ▾ (свернуть тело).
+       */
+      createPanel: (id, title, opts) => {
           if (document.getElementById(id)) return null;
+          opts = (typeof opts === 'string') ? { moduleId: opts } : (opts || {});
+          const moduleId = opts.moduleId || null;
           const panel = document.createElement('div');
           panel.id = id;
+          if (moduleId) panel.dataset.moduleId = moduleId;
           panel.style.cssText = `
               position: fixed; top: 100px; right: 40px; z-index: 999999;
               width: 380px; color: #fff;
@@ -1041,7 +1049,15 @@
           `;
           const header = document.createElement('div');
           header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 15px;cursor:pointer;background:rgba(255,255,255,0.05);border-bottom: 1px solid rgba(255,255,255,0.1);';
-          header.innerHTML = `<span style="font-size:14px;font-weight:600;letter-spacing:0.5px;">${title}</span><span class="toggle-btn" style="font-size:20px;opacity:0.7;cursor:pointer;">▾</span>`;
+          if (moduleId) {
+              header.innerHTML = `<span style="font-size:14px;font-weight:600;letter-spacing:0.5px;">${title}</span>` +
+                  `<span class="mw-panel-chrome">` +
+                  `<span class="mw-panel-min" title="Свернуть (работа продолжается)">−</span>` +
+                  `<span class="mw-panel-close" title="Закрыть и остановить">×</span>` +
+                  `</span>`;
+          } else {
+              header.innerHTML = `<span style="font-size:14px;font-weight:600;letter-spacing:0.5px;">${title}</span><span class="toggle-btn" style="font-size:20px;opacity:0.7;cursor:pointer;">▾</span>`;
+          }
 
           const body = document.createElement('div');
           body.className = 'panel-body';
@@ -1050,7 +1066,135 @@
           panel.appendChild(header);
           panel.appendChild(body);
           document.body.appendChild(panel);
-          return { panel, header, body };
+
+          if (moduleId) Utils.attachPanelChrome(header, moduleId, opts);
+          return { panel, header, body, moduleId };
+      },
+      /** − = свернуть в хаб; × = abort + свернуть */
+      attachPanelChrome: (headerEl, moduleId, opts) => {
+          if (!headerEl || !moduleId) return;
+          opts = opts || {};
+          let chrome = headerEl.querySelector('.mw-panel-chrome');
+          if (!chrome) {
+              const oldToggle = headerEl.querySelector('.toggle-btn');
+              if (oldToggle) oldToggle.remove();
+              chrome = document.createElement('span');
+              chrome.className = 'mw-panel-chrome';
+              chrome.innerHTML =
+                  `<span class="mw-panel-min" title="Свернуть (работа продолжается)">−</span>` +
+                  `<span class="mw-panel-close" title="Закрыть и остановить">×</span>`;
+              headerEl.appendChild(chrome);
+          }
+          const minBtn = chrome.querySelector('.mw-panel-min');
+          const closeBtn = chrome.querySelector('.mw-panel-close');
+          if (minBtn && !minBtn._mwBound) {
+              minBtn._mwBound = true;
+              minBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  if (typeof opts.onMinimize === 'function') opts.onMinimize();
+                  else if (typeof hidePanel === 'function') hidePanel(moduleId);
+              };
+          }
+          if (closeBtn && !closeBtn._mwBound) {
+              closeBtn._mwBound = true;
+              closeBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  ModuleSessionRegistry.abort(moduleId, 'close');
+                  if (typeof opts.onClose === 'function') opts.onClose();
+                  else if (typeof hidePanel === 'function') hidePanel(moduleId);
+              };
+          }
+      },
+      /**
+       * Общая сессия (как FullDop): abort гасит sleeps/intervals/AbortController.
+       * createModuleSessionControl({ moduleId, onAbort, onPause })
+       */
+      createModuleSessionControl: (opts) => {
+          opts = opts || {};
+          const session = {
+              running: false,
+              aborted: false,
+              paused: false,
+              pendingSleeps: new Set(),
+              intervals: new Set(),
+              abortControllers: new Set()
+          };
+          const clearAsync = () => {
+              session.pendingSleeps.forEach((entry) => {
+                  try { clearTimeout(entry.id); } catch (_) {}
+                  try { entry.resolve(); } catch (_) {}
+              });
+              session.pendingSleeps.clear();
+              session.intervals.forEach((id) => {
+                  try { clearInterval(id); } catch (_) {}
+              });
+              session.intervals.clear();
+              session.abortControllers.forEach((c) => {
+                  try { c.abort(); } catch (_) {}
+              });
+              session.abortControllers.clear();
+          };
+          const abort = (reason) => {
+              session.aborted = true;
+              session.paused = false;
+              session.running = false;
+              clearAsync();
+              if (typeof opts.onAbort === 'function') {
+                  try { opts.onAbort(reason || 'stop'); } catch (e) { console.warn(e); }
+              }
+          };
+          const togglePause = () => {
+              if (!session.running || session.aborted) return session.paused;
+              session.paused = !session.paused;
+              if (typeof opts.onPause === 'function') {
+                  try { opts.onPause(session.paused); } catch (e) { console.warn(e); }
+              }
+              return session.paused;
+          };
+          const sleep = (ms) => new Promise((resolve) => {
+              if (session.aborted) { resolve(); return; }
+              const entry = { id: 0, resolve };
+              entry.id = setTimeout(() => {
+                  session.pendingSleeps.delete(entry);
+                  resolve();
+              }, ms);
+              session.pendingSleeps.add(entry);
+          });
+          const isAborted = () => session.aborted;
+          const waitWhilePaused = async () => {
+              while (session.paused && !session.aborted) await sleep(200);
+          };
+          const trackInterval = (fn, ms) => {
+              const id = setInterval(fn, ms);
+              session.intervals.add(id);
+              return id;
+          };
+          const untrackInterval = (id) => {
+              try { clearInterval(id); } catch (_) {}
+              session.intervals.delete(id);
+          };
+          const trackAbortController = () => {
+              const c = typeof AbortController !== 'undefined' ? new AbortController() : null;
+              if (c) session.abortControllers.add(c);
+              return c;
+          };
+          const markRunning = (v) => {
+              session.running = v !== false;
+              if (session.running) session.aborted = false;
+          };
+
+          if (opts.moduleId) {
+              ModuleSessionRegistry.register(opts.moduleId, {
+                  onAbort: (reason) => abort(reason),
+                  onPause: () => togglePause()
+              });
+          }
+
+          return {
+              session, abort, sleep, isAborted, waitWhilePaused,
+              trackInterval, untrackInterval, trackAbortController,
+              clearAsync, togglePause, markRunning
+          };
       },
       sendTelegram: async (msg) => {
           if (!ADMIN.tgToken || !ADMIN.tgChatId) return;
@@ -1442,6 +1586,25 @@
       font-size: 12px;
       letter-spacing: 0.3px;
   }
+
+  /* − / × на шапке панели (как FullDop) */
+  .mw-panel-chrome {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-shrink: 0;
+  }
+  .mw-panel-min, .mw-panel-close {
+      width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+      font-size: 16px; line-height: 1;
+      opacity: 0.7; cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+  }
+  .mw-panel-min:hover { opacity: 1; color: #f1c40f; background: rgba(241,196,15,0.12); }
+  .mw-panel-close:hover { opacity: 1; color: #ff6b6b; background: rgba(255,107,107,0.12); }
   `);
 
   const PANEL_MAP = {
@@ -1935,6 +2098,8 @@
       const container = hub.querySelector('.mods');
 
       function stopModule(id) {
+          // Сначала реестр abort (гасит все ветки, если модуль зарегистрировал)
+          ModuleSessionRegistry.abort(id, 'hub-close');
           const stopMap = {
               'raids': 'bot-stop',
               'rat': 'ratbot-stop',
@@ -2068,6 +2233,7 @@
                       // Сбрасываем таймер запуска для немедленного срабатывания
                       const task = MoswarLib.Scheduler.tasks.find(t => t.id === id); if (task) task.lastRun = 0;
                   } else {
+                      stopModule(id);
                       hidePanel(id);
                       MoswarLib.events.emit('module:toggle', { id: id, state: false });
                   }
@@ -2404,7 +2570,7 @@
       /* ---------------- UI ---------------- */
 
       function createUI() {
-  const ui = Utils.createPanel("raidbot-panel", "🔥 Travel2 Bot v6.1");
+  const ui = Utils.createPanel("raidbot-panel", "🔥 Travel2 Bot v6.1", { moduleId: 'raids' });
   if(!ui) return;
   const panel = ui.panel;
   const header = ui.header;
@@ -2493,7 +2659,7 @@
           // drag
           let ox = 0, oy = 0, drag = false;
           panel.addEventListener("mousedown", e => {
-      if(e.target.classList.contains("toggle-btn") || e.target.closest("button") || e.target.closest("input") || e.target.closest("select")) return;
+      if(e.target.classList.contains("toggle-btn") || e.target.closest(".mw-panel-chrome") || e.target.closest("button") || e.target.closest("input") || e.target.closest("select")) return;
               drag = true; ox = e.clientX - panel.offsetLeft; oy = e.clientY - panel.offsetTop;
           });
           document.addEventListener("mousemove", e => {
@@ -3681,6 +3847,11 @@
           Utils.reportToCreator('Raids', 'Stopped');
       }
 
+      ModuleSessionRegistry.register('raids', {
+          onAbort: () => stopBot(),
+          onPause: () => { if (botEnabled) togglePause(); }
+      });
+
       /* ---------------- INIT ---------------- */
 
       function restoreFlags() {
@@ -3982,7 +4153,7 @@
 
       function createUI() {
           if (document.getElementById("ratbot-panel")) return;
-          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.2");
+          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.2", { moduleId: 'rat' });
           if (!ui) return;
           const { panel, header, body } = ui;
           body.id = "ratbot-body";
@@ -4370,6 +4541,11 @@
           Utils.reportToCreator('Rat', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'rat', status: 'stopped' });
       }
+
+      ModuleSessionRegistry.register('rat', {
+          onAbort: () => stopBot(),
+          onPause: () => { if (botEnabled) togglePause(); }
+      });
 
       /* ========================= ПАРСИНГ НАГРАД ========================= */
 
@@ -5331,7 +5507,7 @@
 
       function createUI() {
           if (document.getElementById("neftbot-panel")) return;
-          const ui = Utils.createPanel("neftbot-panel", "⛽ Нефтепровод Bot v3.7");
+          const ui = Utils.createPanel("neftbot-panel", "⛽ Нефтепровод Bot v3.7", { moduleId: 'neft' });
           if (!ui) return;
           const { panel, header, body } = ui;
           body.id = "neftbot-body";
@@ -5551,6 +5727,11 @@
           Utils.reportToCreator('Neft', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
       }
+
+      ModuleSessionRegistry.register('neft', {
+          onAbort: () => stopBot(),
+          onPause: () => { if (botEnabled) togglePause(); }
+      });
 
       /* ========================= ПОДОЗРИТЕЛЬНОСТЬ / ПАРТБИЛЕТЫ ========================= */
 
@@ -6475,7 +6656,7 @@
   function createUI() {
     if (panel) return;
 
-    const ui = Utils.createPanel('dg-panel', `🕳️ Подземка v${APP.version}`);
+    const ui = Utils.createPanel('dg-panel', `🕳️ Подземка v${APP.version}`, { moduleId: 'dungeon' });
     if (!ui) return;
     panel = ui.panel;
     const header = ui.header;
@@ -6799,6 +6980,11 @@
     renderLog();
     log('STOP — клики отключены. Настройки можно менять спокойно.');
   }
+
+  ModuleSessionRegistry.register('dungeon', {
+    onAbort: () => stopBot(),
+    onPause: () => { if (CFG.enabled) togglePause(); }
+  });
 
   /***********************
    * BOOST ICON GRID
@@ -10764,6 +10950,15 @@
           }
       };
 
+      ModuleSessionRegistry.register('fulldope', {
+          onAbort: (reason) => abortFullDope(reason || 'close'),
+          onPause: () => {
+              if (!fdSession.running || fdSession.aborted) return;
+              fdSession.paused = !fdSession.paused;
+              syncFdHeaderButtons();
+          }
+      });
+
       if (minimizeBtn) {
           minimizeBtn.onclick = (e) => {
               e.stopPropagation();
@@ -11580,7 +11775,7 @@
       let botPaused = localStorage.getItem(KEY.paused) === '1';
 
       // --- UI ---
-      const ui = Utils.createPanel("flag-panel", "🏳️ Автофлаг");
+      const ui = Utils.createPanel("flag-panel", "🏳️ Автофлаг", { moduleId: 'flag' });
       if (!ui) return;
       const body = ui.body;
 
@@ -11820,6 +12015,21 @@
           Utils.reportToCreator('Flag', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'flag', status: 'stopped' });
       };
+
+      ModuleSessionRegistry.register('flag', {
+          onAbort: () => {
+              botEnabled = false;
+              botPaused = false;
+              updateButtons();
+              setStatus('Остановлен');
+          },
+          onPause: () => {
+              if (!botEnabled) return;
+              botPaused = !botPaused;
+              updateButtons();
+              setStatus(botPaused ? 'Пауза' : 'Работает');
+          }
+      });
 
       // Initialize button state from storage
       updateButtons();
@@ -12148,7 +12358,7 @@
       function createUI() {
           if (document.getElementById('satellite-panel')) return;
           loadConfig();
-          const ui = Utils.createPanel('satellite-panel', '🛰️ Спутники v' + VERSION);
+          const ui = Utils.createPanel('satellite-panel', '🛰️ Спутники v' + VERSION, { moduleId: 'satellite' });
           if (!ui) return;
           const { panel, header, body } = ui;
           panel.style.width = '430px';
@@ -12272,6 +12482,11 @@
               MoswarLib.events.emit('module:status', { id: 'satellite', status: 'stopped' });
           }
       }
+
+      ModuleSessionRegistry.register('satellite', {
+          onAbort: () => stopBot(false),
+          onPause: () => { if (botRunning) togglePause(false); }
+      });
 
       function parseSatIndex(content) {
           const m = content.match(/satellite-progress__bar-inner state-(\d+)/);
@@ -13392,28 +13607,40 @@ utils_.init();
           const WAIT_POLL = 220;
           const FLAG_TIMEOUT = 9000;
 
-          let isRunning = true;
+          let isRunning = false; // не автостарт после × — только по кнопке / первому запуску панели
           let openCount = 0;
           let bagCount = 0;
           const boxCounters = {};
           const logEntries = [];
 
+          const sess = Utils.createModuleSessionControl({
+              moduleId: 'fubugs',
+              onAbort: () => {
+                  isRunning = false;
+                  updatePanel();
+              }
+          });
+
           // ====== Панель ======
-          const ui = Utils.createPanel('fubugs-panel', 'Фу-Баги');
+          const ui = Utils.createPanel('fubugs-panel', 'Фу-Баги', { moduleId: 'fubugs' });
           if (!ui) return;
           const panel = ui.body;
-          // Note: Utils.createPanel already appends to body and handles drag/collapse
 
-          function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+          function wait(ms){ return sess.sleep(ms); }
 
           function waitForCondition(checkFn, timeout=FLAG_TIMEOUT, poll=WAIT_POLL){
               return new Promise(resolve=>{
                   const start = Date.now();
-                  const t = setInterval(()=>{
+                  const t = sess.trackInterval(()=>{
                       try{
+                          if (sess.isAborted() || !isRunning) {
+                              sess.untrackInterval(t);
+                              resolve(null);
+                              return;
+                          }
                           const v = checkFn();
-                          if(v){ clearInterval(t); resolve(v); }
-                          else if(Date.now()-start>timeout){ clearInterval(t); resolve(null); }
+                          if(v){ sess.untrackInterval(t); resolve(v); }
+                          else if(Date.now()-start>timeout){ sess.untrackInterval(t); resolve(null); }
                       } catch(e){}
                   }, poll);
               });
@@ -13603,6 +13830,13 @@ utils_.init();
                   btn.onclick = (e) => {
                       e.stopPropagation();
                       isRunning = !isRunning;
+                      if (isRunning) {
+                          sess.markRunning(true);
+                          sess.session.aborted = false;
+                          startProcessing();
+                      } else {
+                          sess.abort('stop');
+                      }
                       addLog(`AUTO ${isRunning ? 'ON' : 'OFF'}`);
                       Utils.reportToCreator('Fubugs', isRunning ? 'Started' : 'Stopped');
                       updatePanel(currentBug, currentRound);
@@ -13620,9 +13854,9 @@ utils_.init();
                       addLog('Рюкзаки не найдены');
                   }
 
-                  while(isRunning){
+                  while(isRunning && !sess.isAborted()){
                       await openAllCompBags();
-                      if(!isRunning) break;
+                      if(!isRunning || sess.isAborted()) break;
                       await normalizedRoundsLoop();
                       await wait(600);
                   }
@@ -13630,6 +13864,9 @@ utils_.init();
               } catch(e){ console.error('Error main', e); isRunning=false; updatePanel(); }
           }
 
+          // Первый запуск при открытии панели (как раньше), но ×/abort не продолжит сам
+          isRunning = true;
+          sess.markRunning(true);
           startProcessing();
       })();
   },
@@ -16763,11 +17000,12 @@ function updatePanelUI() {
                 <div class="zk-panel-header">
                 <div class="zk-panel-title">⚙️ Закоулочник <small>v0.7.9 MOSWAR</small></div>
                 <div class="zk-controls">
-                    <button class="zk-ctrl-btn zk-start-btn" title="Старт">▶</button>
-                    <button class="zk-ctrl-btn zk-pause-btn" title="Пауза">⏸</button>
-                    <button class="zk-ctrl-btn zk-stop-btn" title="Стоп">⏹</button>
+                    <button class="zk-ctrl-btn zk-start-btn" id="mb-start" title="Старт">▶</button>
+                    <button class="zk-ctrl-btn zk-pause-btn" id="mb-pause" title="Пауза">⏸</button>
+                    <button class="zk-ctrl-btn zk-stop-btn" id="mb-stop" title="Стоп">⏹</button>
                     <button class="zk-ctrl-btn zk-strategies-btn" title="Стратегии">🎯</button>
-                    <button class="zk-ctrl-btn zk-collapse-btn" title="Свернуть">─</button>
+                    <button class="zk-ctrl-btn zk-collapse-btn mw-panel-min" title="Свернуть (работа продолжается)">−</button>
+                    <button class="zk-ctrl-btn zk-close-btn mw-panel-close" title="Закрыть и остановить">×</button>
                 </div>
             </div>
             <div class="zk-panel-body">
@@ -16826,11 +17064,28 @@ function updatePanelUI() {
         const pauseBtn = panel.querySelector('.zk-pause-btn');
         const stopBtn = panel.querySelector('.zk-stop-btn');
         const collapseBtn = panel.querySelector('.zk-collapse-btn');
+        const closeBtn = panel.querySelector('.zk-close-btn');
 
         if (startBtn) startBtn.addEventListener('click', (e) => { e.stopPropagation(); startScript(); });
         if (pauseBtn) pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pauseScript(); });
         if (stopBtn) stopBtn.addEventListener('click', (e) => { e.stopPropagation(); stopScript(); });
-        if (collapseBtn) collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); panel.classList.toggle('zk-collapsed'); });
+        // − = hidePanel (работа продолжается); × = стоп + свернуть
+        if (collapseBtn) collapseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (typeof hidePanel === 'function') hidePanel('minibot');
+            else panel.classList.add('mw-panel-hidden');
+        });
+        if (closeBtn) closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            stopScript();
+            if (typeof hidePanel === 'function') hidePanel('minibot');
+            else panel.classList.add('mw-panel-hidden');
+        });
+
+        ModuleSessionRegistry.register('minibot', {
+            onAbort: () => stopScript(),
+            onPause: () => { if (cfg.running) pauseScript(); }
+        });
 
         // Create settings modal
         const settingsModal = document.createElement('div');
@@ -20453,7 +20708,10 @@ function updatePanelUI() {
               panel.innerHTML = `
                 <div id="omon-header" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;">
                   <span style="font-size:15px;">🛡 ОМОН v3.1</span>
-                  <span class="toggle-btn" style="cursor:pointer;font-size:16px;">▾</span>
+                  <span class="mw-panel-chrome">
+                    <span class="mw-panel-min" title="Свернуть (работа продолжается)">−</span>
+                    <span class="mw-panel-close" title="Закрыть и остановить">×</span>
+                  </span>
                 </div>
                 <div id="omon-body" style="padding:8px 10px 10px 10px;">
                   <button id="omon-start" style="width: 100%; padding: 6px; margin-bottom:5px; border-radius:6px;">▶ Запустить ОМОН</button>
@@ -20503,25 +20761,9 @@ function updatePanelUI() {
               document.body.appendChild(panel);
               makeDraggable(panel, '#omon-header', null);
 
-              const toggle = panel.querySelector('.toggle-btn');
+              Utils.attachPanelChrome(document.getElementById('omon-header'), 'omon');
+
               const body = document.getElementById('omon-body');
-              let collapsed = _group.settings.collapsed;
-
-              if (collapsed) {
-                  body.style.display = 'none';
-                  toggle.textContent = '▸';
-              } else {
-                  body.style.display = 'block';
-                  toggle.textContent = '▾';
-              }
-
-              toggle.onclick = () => {
-                  collapsed = !collapsed;
-                  body.style.display = collapsed ? 'none' : 'block';
-                  toggle.textContent = collapsed ? '▸' : '▾';
-                  _group.settings.collapsed = collapsed;
-                  _group.saveSettings();
-              };
 
               const btnStart = document.getElementById('omon-start');
               const btnStop = document.getElementById('omon-stop');
@@ -20582,6 +20824,15 @@ function updatePanelUI() {
                   _group.addLog('ОМОН остановлен');
                   refreshStartButtonStyle();
               };
+
+              ModuleSessionRegistry.register('omon', {
+                  onAbort: () => {
+                      _group.settings.enabled = false;
+                      _group.saveSettings();
+                      _group.setStatus('⛔ Остановлен ОМОН');
+                      refreshStartButtonStyle();
+                  }
+              });
 
               refreshStartButtonStyle();
 
@@ -21357,7 +21608,10 @@ function updatePanelUI() {
           panel.innerHTML = `
               <div style="padding: 10px 15px; background: rgba(255,255,255,0.05); border-radius: 24px 24px 0 0; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                   <span style="font-weight: 600; letter-spacing: 0.5px;">👁️ Око Провидения</span>
-                  <span class="toggle-btn" style="font-size: 20px; opacity: 0.7; cursor: pointer;">▾</span>
+                  <span class="mw-panel-chrome">
+                    <span class="mw-panel-min" title="Свернуть (работа продолжается)">−</span>
+                    <span class="mw-panel-close" title="Закрыть">×</span>
+                  </span>
               </div>
               <div class="panel-body" style="padding: 10px; overflow-y: auto; flex: 1;">
                   <div id="omniscience-abilities" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;"></div>
@@ -21365,6 +21619,10 @@ function updatePanelUI() {
           `;
 
           document.body.appendChild(panel);
+          Utils.attachPanelChrome(panel.firstElementChild, 'omniscience');
+          ModuleSessionRegistry.register('omniscience', {
+              onAbort: () => { if (typeof hidePanel === 'function') hidePanel('omniscience'); }
+          });
           console.log('[Omniscience] Панель создана');
 
           const toggle = panel.querySelector('.toggle-btn');
@@ -21380,7 +21638,7 @@ function updatePanelUI() {
           // Dragging logic
           let isDragging = false, offsetX, offsetY;
           panel.onmousedown = (e) => {
-              if (e.target.classList.contains('toggle-btn')) return;
+              if (e.target.classList.contains('toggle-btn') || e.target.closest('.mw-panel-chrome')) return;
               isDragging = true;
               offsetX = e.clientX - panel.offsetLeft;
               offsetY = e.clientY - panel.offsetTop;
