@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.0
+// @version      2.1
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -1957,6 +1957,12 @@
                    const btn = p.querySelector('button');
                    if (btn && btn.textContent.includes('Остановить')) btn.click();
                }
+          }
+          // FullDop: ✕ в хабе = закрыть модуль → abort очереди (не путать с hidePanel / свернуть)
+          if (id === 'fulldope') {
+              const fdClose = document.getElementById('fulldope-close');
+              if (fdClose) fdClose.click();
+              else try { localStorage.removeItem('mw_fd_run_state'); } catch (_) {}
           }
       }
 
@@ -10054,13 +10060,16 @@
 
       // 3. Logic & Data Loading
       const closeBtn = document.getElementById('fulldope-close');
-      closeBtn.onclick = () => modal.remove();
+      // close → abort (см. abortFullDope ниже); hidePanel хаба ≠ close
 
       const LS_FD_SELECTED = 'mw_fd_selected_ids';
       const LS_FD_STATE = 'mw_fd_run_state';
       const LS_FD_MISC = 'mw_fd_misc_state';
       const LS_FD_CACHE = 'mw_fd_cache_v1';
       const LS_FD_INACTIVE = 'mw_fd_inactive_keys';
+
+      // Сессия активации: свернуть (hidePanel) не трогает; закрыть (×) → abort
+      const fdSession = { running: false, aborted: false, queue: null };
 
       // [FIX] Если процесс активации не запущен, очищаем кэш для обновления списка доступных усилений
       const currentRunState = (function() { try { return JSON.parse(localStorage.getItem(LS_FD_STATE) || '{}'); } catch (_) { return {}; } })();
@@ -10655,6 +10664,29 @@
       const setRunState = (state) => localStorage.setItem(LS_FD_STATE, JSON.stringify(state || {}));
       const clearRunState = () => localStorage.removeItem(LS_FD_STATE);
 
+      const abortFullDope = () => {
+          fdSession.aborted = true;
+          fdSession.running = false;
+          fdSession.queue = null;
+          clearRunState();
+          document.querySelectorAll('.fd-item.processing').forEach(i => i.classList.remove('processing'));
+          const b = document.getElementById('fd-run');
+          if (b) {
+              b.classList.remove('running');
+              b.textContent = 'Активировать';
+          }
+          if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') {
+              Utils.log('💉 FullDop: остановлен (модуль закрыт)');
+          } else {
+              console.log('💉 FullDop: остановлен (модуль закрыт)');
+          }
+      };
+
+      closeBtn.onclick = () => {
+          abortFullDope();
+          modal.remove();
+      };
+
       const buildTaskFromElement = (el) => ({
           key: getItemKey(el),
           id: el.id || '',
@@ -10671,14 +10703,15 @@
       // Run Handler
       const runFullDope = async (resumeState) => {
           const btn = document.getElementById('fd-run');
-          if (btn.classList.contains('running')) return;
+          if (!btn || btn.classList.contains('running') || fdSession.running) return;
 
-          let state = resumeState && resumeState.running ? resumeState : null;
+          let state = resumeState && resumeState.running && !resumeState.aborted ? resumeState : null;
           if (!state) {
               const selected = Array.from(document.querySelectorAll('.fd-item.selected'));
               if (!selected.length) { alert('Ничего не выбрано!'); return; }
               state = {
                   running: true,
+                  aborted: false,
                   index: 0,
                   logs: [],
                   tasks: selected.map(buildTaskFromElement),
@@ -10686,6 +10719,10 @@
               };
               setRunState(state);
           }
+
+          fdSession.aborted = false;
+          fdSession.running = true;
+          fdSession.queue = state.tasks;
 
           btn.classList.add('running');
           const originalText = btn.textContent;
@@ -10698,6 +10735,7 @@
               // console.log('[FullDope] Wait ' + ms + 'ms');
               setTimeout(r, ms);
           });
+          const isAborted = () => fdSession.aborted;
 
           const request = async (url, data) => {
               const standardData = { ...data, ajax: 1, __ajax: 1, standard_ajax: 1 };
@@ -11240,16 +11278,19 @@
           };
 
           for (let i = state.index || 0; i < state.tasks.length; i++) {
+              if (isAborted()) break;
               const task = state.tasks[i];
               const percent = Math.floor((i / Math.max(state.tasks.length, 1)) * 100);
-              btn.textContent = `Обработка ${percent}%...`;
+              if (btn.isConnected) btn.textContent = `Обработка ${percent}%...`;
               markProcessingByKey(task.key);
               let taskResult = null;
               try { taskResult = await runTask(task); } catch (e) { console.warn('[FullDope] task failed', task, e); }
+              if (isAborted()) break;
               if (taskResult === 'NAVIGATE') {
                   state.logs = logs;
                   setRunState(state);
                   saveSelections();
+                  // уход со страницы: сессия в LS, fdSession сбросится при пересоздании модуля
                   return;
               }
               markDoneByKey(task.key);
@@ -11259,16 +11300,23 @@
               saveSelections();
           }
 
-          btn.classList.remove('running');
-          btn.textContent = originalText;
+          const wasAborted = isAborted();
+          fdSession.running = false;
+          fdSession.queue = null;
+          if (btn.isConnected) {
+              btn.classList.remove('running');
+              btn.textContent = originalText;
+          }
           clearRunState();
+          if (wasAborted) return;
           Utils.sendTelegram(`💉 <b>FullDope Завершен:</b>\n${logs.join('\n')}`);
           alert('Готово!\n' + logs.join('\n'));
       };
 
+      // «Активировать» всегда стартует с текущих галочек (не resume). Resume — только после NAVIGATE (перезагрузка страницы).
       document.getElementById('fd-run').onclick = () => runFullDope();
       const pendingState = getRunState();
-      if (pendingState && pendingState.running && Array.isArray(pendingState.tasks) && (pendingState.index || 0) < pendingState.tasks.length) {
+      if (pendingState && pendingState.running && !pendingState.aborted && Array.isArray(pendingState.tasks) && (pendingState.index || 0) < pendingState.tasks.length) {
           runFullDope(pendingState);
       }
   },
