@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.1
+// @version      2.2
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -9755,8 +9755,14 @@
                   background: rgba(255,255,255,0.05); border-radius: 24px 24px 0 0;
               }
               #fulldope-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
-              #fulldope-close { cursor: pointer; font-size: 24px; opacity: 0.6; transition: 0.2s; line-height: 1; }
-              #fulldope-close:hover { opacity: 1; color: #ff6b6b; }
+              #fulldope-header-actions { display: flex; align-items: center; gap: 6px; }
+              #fulldope-close, #fulldope-minimize {
+                  cursor: pointer; font-size: 20px; opacity: 0.6; transition: 0.2s; line-height: 1;
+                  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+                  border-radius: 6px; user-select: none;
+              }
+              #fulldope-minimize:hover { opacity: 1; color: #f1c40f; background: rgba(241,196,15,0.12); }
+              #fulldope-close:hover { opacity: 1; color: #ff6b6b; background: rgba(255,107,107,0.12); }
               #fulldope-content {
                   padding: 15px; overflow: hidden; flex: 1;
                   display: flex; flex-direction: column;
@@ -9867,22 +9873,41 @@
                   background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #fff; text-shadow: 0 0 5px rgba(46, 204, 113, 0.8);
                   animation: fd-ios-pulse 2s infinite;
               }
-              .fd-header-activate-btn {
-                  padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2);
+              .fd-header-btn {
+                  padding: 6px 10px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.2);
                   cursor: pointer; background: rgba(255, 255, 255, 0.05);
                   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                  color: rgba(255, 255, 255, 0.9); font-size: 12px; font-weight: 600;
-                  text-transform: uppercase; letter-spacing: 0.5px;
+                  color: rgba(255, 255, 255, 0.9); font-size: 11px; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: 0.4px;
                   transition: all 0.3s ease; white-space: nowrap;
-                  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
               }
-              .fd-header-activate-btn:hover {
+              .fd-header-btn:hover {
                   background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.4);
                   box-shadow: 0 0 10px rgba(255, 255, 255, 0.15); transform: scale(1.05);
               }
-              .fd-header-activate-btn.running {
-                  background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #fff;
-                  animation: fd-ios-pulse 2s infinite;
+              .fd-header-btn.running, .fd-header-btn.active-run {
+                  background: rgba(46, 204, 113, 0.22); border-color: #2ecc71; color: #fff;
+                  animation: fd-ios-pulse 1.4s infinite;
+              }
+              .fd-header-btn.active-pause {
+                  background: rgba(241, 196, 15, 0.22); border-color: #f1c40f; color: #fff;
+                  animation: fd-pause-pulse 1.2s infinite;
+              }
+              .fd-header-btn.active-stop {
+                  background: rgba(231, 76, 60, 0.22); border-color: #e74c3c; color: #fff;
+                  animation: fd-stop-pulse 1.2s infinite;
+              }
+              .fd-header-activate-btn { /* alias */ }
+              @keyframes fd-pause-pulse {
+                  0% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); }
+                  70% { box-shadow: 0 0 0 12px rgba(241, 196, 15, 0); }
+                  100% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); }
+              }
+              @keyframes fd-stop-pulse {
+                  0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.55); }
+                  70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+                  100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
               }
               .fd-item.done, .fd-item.inactive { opacity: 0.2; filter: grayscale(100%); pointer-events: none; }
               @keyframes fd-ios-pulse {
@@ -9908,7 +9933,13 @@
       modal.innerHTML = `
           <div id="fulldope-header">
               <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.8</span></div>
-              <button class="fd-header-activate-btn" id="fd-run" title="Запустить">Активировать</button><div id="fulldope-close">×</div>
+              <div id="fulldope-header-actions">
+                  <button class="fd-header-btn" id="fd-run" title="Запустить / продолжить">Активировать</button>
+                  <button class="fd-header-btn" id="fd-pause" title="Пауза">Пауза</button>
+                  <button class="fd-header-btn" id="fd-stop" title="Полный стоп">Стоп</button>
+                  <div id="fulldope-minimize" title="Свернуть (работа продолжается)">−</div>
+                  <div id="fulldope-close" title="Закрыть и остановить">×</div>
+              </div>
           </div>
           <div id="fulldope-content">
               <!-- Top Bar: Misc -->
@@ -10060,7 +10091,10 @@
 
       // 3. Logic & Data Loading
       const closeBtn = document.getElementById('fulldope-close');
-      // close → abort (см. abortFullDope ниже); hidePanel хаба ≠ close
+      const minimizeBtn = document.getElementById('fulldope-minimize');
+      const pauseBtn = document.getElementById('fd-pause');
+      const stopBtn = document.getElementById('fd-stop');
+      // − → hidePanel (работа/пауза живы); × / Стоп → abort; Пауза → fdSession.paused
 
       const LS_FD_SELECTED = 'mw_fd_selected_ids';
       const LS_FD_STATE = 'mw_fd_run_state';
@@ -10068,8 +10102,30 @@
       const LS_FD_CACHE = 'mw_fd_cache_v1';
       const LS_FD_INACTIVE = 'mw_fd_inactive_keys';
 
-      // Сессия активации: свернуть (hidePanel) не трогает; закрыть (×) → abort
-      const fdSession = { running: false, aborted: false, queue: null };
+      // Сессия: свернуть не трогает; ×/Стоп → abort; Пауза → paused
+      const fdSession = { running: false, aborted: false, paused: false, queue: null };
+
+      const syncFdHeaderButtons = () => {
+          const run = document.getElementById('fd-run');
+          const pause = document.getElementById('fd-pause');
+          const stop = document.getElementById('fd-stop');
+          if (run) {
+              run.classList.toggle('running', fdSession.running && !fdSession.paused);
+              run.classList.toggle('active-run', fdSession.running && !fdSession.paused);
+              if (!fdSession.running) run.textContent = 'Активировать';
+              else if (fdSession.paused) run.textContent = 'Продолжить';
+          }
+          if (pause) {
+              pause.classList.toggle('active-pause', fdSession.running && fdSession.paused);
+              pause.disabled = !fdSession.running;
+              pause.style.opacity = fdSession.running ? '1' : '0.45';
+          }
+          if (stop) {
+              stop.classList.toggle('active-stop', fdSession.running);
+              stop.disabled = !fdSession.running;
+              stop.style.opacity = fdSession.running ? '1' : '0.45';
+          }
+      };
 
       // [FIX] Если процесс активации не запущен, очищаем кэш для обновления списка доступных усилений
       const currentRunState = (function() { try { return JSON.parse(localStorage.getItem(LS_FD_STATE) || '{}'); } catch (_) { return {}; } })();
@@ -10664,28 +10720,63 @@
       const setRunState = (state) => localStorage.setItem(LS_FD_STATE, JSON.stringify(state || {}));
       const clearRunState = () => localStorage.removeItem(LS_FD_STATE);
 
-      const abortFullDope = () => {
+      const abortFullDope = (reason) => {
           fdSession.aborted = true;
+          fdSession.paused = false;
           fdSession.running = false;
           fdSession.queue = null;
           clearRunState();
           document.querySelectorAll('.fd-item.processing').forEach(i => i.classList.remove('processing'));
-          const b = document.getElementById('fd-run');
-          if (b) {
-              b.classList.remove('running');
-              b.textContent = 'Активировать';
-          }
+          syncFdHeaderButtons();
+          const msg = reason === 'stop'
+              ? '💉 FullDop: остановлен'
+              : '💉 FullDop: остановлен (модуль закрыт)';
           if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') {
-              Utils.log('💉 FullDop: остановлен (модуль закрыт)');
+              Utils.log(msg);
           } else {
-              console.log('💉 FullDop: остановлен (модуль закрыт)');
+              console.log(msg);
           }
       };
 
-      closeBtn.onclick = () => {
-          abortFullDope();
-          modal.remove();
-      };
+      if (minimizeBtn) {
+          minimizeBtn.onclick = (e) => {
+              e.stopPropagation();
+              if (typeof hidePanel === 'function') hidePanel('fulldope');
+              else modal.classList.add('mw-panel-hidden');
+          };
+      }
+
+      if (closeBtn) {
+          closeBtn.onclick = (e) => {
+              e.stopPropagation();
+              abortFullDope('close');
+              modal.remove();
+          };
+      }
+
+      if (pauseBtn) {
+          pauseBtn.onclick = (e) => {
+              e.stopPropagation();
+              if (!fdSession.running || fdSession.aborted) return;
+              fdSession.paused = !fdSession.paused;
+              // persist pause so reopen after NAVIGATE doesn't auto-confuse
+              try {
+                  const st = getRunState();
+                  if (st && st.running) { st.paused = fdSession.paused; setRunState(st); }
+              } catch (_) {}
+              syncFdHeaderButtons();
+              const msg = fdSession.paused ? '💉 FullDop: пауза' : '💉 FullDop: продолжение';
+              if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') Utils.log(msg);
+              else console.log(msg);
+          };
+      }
+
+      if (stopBtn) {
+          stopBtn.onclick = (e) => {
+              e.stopPropagation();
+              abortFullDope('stop');
+          };
+      }
 
       const buildTaskFromElement = (el) => ({
           key: getItemKey(el),
@@ -10703,7 +10794,20 @@
       // Run Handler
       const runFullDope = async (resumeState) => {
           const btn = document.getElementById('fd-run');
-          if (!btn || btn.classList.contains('running') || fdSession.running) return;
+          if (!btn) return;
+          // Если на паузе — снять паузу и продолжить текущую очередь
+          if (fdSession.running && fdSession.paused && !resumeState) {
+              fdSession.paused = false;
+              try {
+                  const st = getRunState();
+                  if (st && st.running) { st.paused = false; setRunState(st); }
+              } catch (_) {}
+              syncFdHeaderButtons();
+              if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') Utils.log('💉 FullDop: продолжение');
+              else console.log('💉 FullDop: продолжение');
+              return;
+          }
+          if (btn.classList.contains('running') || fdSession.running) return;
 
           let state = resumeState && resumeState.running && !resumeState.aborted ? resumeState : null;
           if (!state) {
@@ -10712,6 +10816,7 @@
               state = {
                   running: true,
                   aborted: false,
+                  paused: false,
                   index: 0,
                   logs: [],
                   tasks: selected.map(buildTaskFromElement),
@@ -10721,12 +10826,13 @@
           }
 
           fdSession.aborted = false;
+          fdSession.paused = !!(state && state.paused);
           fdSession.running = true;
           fdSession.queue = state.tasks;
 
-          btn.classList.add('running');
-          const originalText = btn.textContent;
-          btn.textContent = 'Обработка 0%...';
+          const originalText = 'Активировать';
+          syncFdHeaderButtons();
+          if (btn.isConnected && !fdSession.paused) btn.textContent = '0%...';
 
           const logs = Array.isArray(state.logs) ? state.logs : [];
           const pw = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
@@ -10736,6 +10842,12 @@
               setTimeout(r, ms);
           });
           const isAborted = () => fdSession.aborted;
+          const waitWhilePaused = async () => {
+              while (fdSession.paused && !fdSession.aborted) {
+                  syncFdHeaderButtons();
+                  await sleep(200);
+              }
+          };
 
           const request = async (url, data) => {
               const standardData = { ...data, ajax: 1, __ajax: 1, standard_ajax: 1 };
@@ -11279,9 +11391,12 @@
 
           for (let i = state.index || 0; i < state.tasks.length; i++) {
               if (isAborted()) break;
+              await waitWhilePaused();
+              if (isAborted()) break;
               const task = state.tasks[i];
               const percent = Math.floor((i / Math.max(state.tasks.length, 1)) * 100);
-              if (btn.isConnected) btn.textContent = `Обработка ${percent}%...`;
+              syncFdHeaderButtons();
+              if (btn.isConnected && !fdSession.paused) btn.textContent = `${percent}%...`;
               markProcessingByKey(task.key);
               let taskResult = null;
               try { taskResult = await runTask(task); } catch (e) { console.warn('[FullDope] task failed', task, e); }
@@ -11302,19 +11417,19 @@
 
           const wasAborted = isAborted();
           fdSession.running = false;
+          fdSession.paused = false;
           fdSession.queue = null;
-          if (btn.isConnected) {
-              btn.classList.remove('running');
-              btn.textContent = originalText;
-          }
+          syncFdHeaderButtons();
+          if (btn.isConnected) btn.textContent = originalText;
           clearRunState();
           if (wasAborted) return;
           Utils.sendTelegram(`💉 <b>FullDope Завершен:</b>\n${logs.join('\n')}`);
           alert('Готово!\n' + logs.join('\n'));
       };
 
-      // «Активировать» всегда стартует с текущих галочек (не resume). Resume — только после NAVIGATE (перезагрузка страницы).
+      // «Активировать» — старт или снятие паузы. Resume очереди — после NAVIGATE / pendingState.
       document.getElementById('fd-run').onclick = () => runFullDope();
+      syncFdHeaderButtons();
       const pendingState = getRunState();
       if (pendingState && pendingState.running && !pendingState.aborted && Array.isArray(pendingState.tasks) && (pendingState.index || 0) < pendingState.tasks.length) {
           runFullDope(pendingState);
