@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.4.1
+// @version      2.4.2
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -917,7 +917,7 @@
   const CORE_KEY = 'moswar_allinone_core_v1';
   const MODULES = [
       { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
-      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.3' },
+      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.4' },
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы', version: '1.3.17' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
@@ -1585,6 +1585,47 @@
       color: rgba(255, 255, 255, 0.7);
       font-size: 12px;
       letter-spacing: 0.3px;
+  }
+
+  /* Лабуба Летучик — иконка-тоггл (как DM metro.labubuLetuchik) */
+  .rat-labubu-pick {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 6px 0 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      vertical-align: middle;
+  }
+  .rat-labubu-pick-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.08);
+      transition: all .18s ease;
+  }
+  .rat-labubu-pick-icon img {
+      width: 70%;
+      height: 70%;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  }
+  .rat-labubu-pick:hover .rat-labubu-pick-icon {
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.12);
+  }
+  .rat-labubu-pick.is-on .rat-labubu-pick-icon {
+      background: rgba(46, 204, 113, 0.25);
+      border-color: rgba(46, 204, 113, 0.6);
+      box-shadow: inset 0 0 12px rgba(46, 204, 113, 0.2), 0 0 10px rgba(46, 204, 113, 0.15);
   }
 
   /* − / × на шапке панели (как FullDop) */
@@ -4156,7 +4197,7 @@
 
       function createUI() {
           if (document.getElementById("ratbot-panel")) return;
-          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.3", { moduleId: 'rat' });
+          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.4", { moduleId: 'rat' });
           if (!ui) return;
           const { panel, header, body } = ui;
           body.id = "ratbot-body";
@@ -4229,7 +4270,11 @@
         <input id="rat-auto-reset-level" type="number" min="1" max="100" step="1" class="mw-input" style="width:56px;margin-left:6px;" value="40">
       </label>
       <label style="display:block;"><input type="checkbox" id="rat-double-run"> Двойные спуски</label>
-      <label style="display:block;margin-top:6px;"><input type="checkbox" id="rat-labubu-letuchik"> Лабуба Летучик (игнор КД крыс + авто-активация)</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <button type="button" id="rat-labubu-letuchik" class="rat-labubu-pick" title="Летучик: выкл" aria-pressed="false" aria-label="Лабуба Летучик">
+          <span class="rat-labubu-pick-icon"><img src="/@/images/loc/buba/bubas/10_large.png" alt="Летучик"></span>
+        </button>
+      </div>
       <div style="font-size:11px;opacity:.8;margin-top:4px;line-height:1.3;">Спуски 36–40 (тёмный): нападение только при ключах — уже в логике.</div>
     </div>
 
@@ -4303,7 +4348,14 @@
           const rbActionRun = document.getElementById("rat-action-below-run");
 
           const chkDoubleRun = document.getElementById("rat-double-run");
-          const chkLabubu = document.getElementById("rat-labubu-letuchik");
+          const btnLabubu = document.getElementById("rat-labubu-letuchik");
+
+          const syncLabubuPick = () => {
+              if (!btnLabubu) return;
+              btnLabubu.classList.toggle("is-on", !!labubuLetuchik);
+              btnLabubu.setAttribute("aria-pressed", labubuLetuchik ? "true" : "false");
+              btnLabubu.title = labubuLetuchik ? "Летучик: вкл" : "Летучик: выкл";
+          };
           
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
@@ -4340,7 +4392,7 @@
           }
 
           chkDoubleRun.checked = !!doubleRunEnabled;
-          if (chkLabubu) chkLabubu.checked = !!labubuLetuchik;
+          syncLabubuPick();
 
           rNormal.onchange = () => {
               if (rNormal.checked) {
@@ -4461,9 +4513,10 @@
               saveFlags();
               addLog("Двойные спуски: " + (doubleRunEnabled ? "ON" : "OFF"));
           };
-          if (chkLabubu) {
-              chkLabubu.onchange = () => {
-                  labubuLetuchik = !!chkLabubu.checked;
+          if (btnLabubu) {
+              btnLabubu.onclick = () => {
+                  labubuLetuchik = !labubuLetuchik;
+                  syncLabubuPick();
                   saveFlags();
                   addLog("Лабуба Летучик: " + (labubuLetuchik ? "ON" : "OFF"));
               };
