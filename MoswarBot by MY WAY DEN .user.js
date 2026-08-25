@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.4
+// @version      2.4.1
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -917,13 +917,13 @@
   const CORE_KEY = 'moswar_allinone_core_v1';
   const MODULES = [
       { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
-      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель', version: '1.9.2' },
+      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.3' },
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы', version: '1.3.17' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство', version: '3.0' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
-      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.9' },
+      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.11' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'minibot', name: 'МиниБот', icon: '<img src="/@/images/pers/n26/1.png" style="background: transparent url(/@/images/pers/n26/1_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'Хаос, Противостояние, Дуэли, Патруль, Шаурма, Пахан, Дэпс, ИИ - Полные стратегии боя с предметами/способностями (1-10 ход)', version: '0.7.11', isDemo: true },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
@@ -2127,7 +2127,7 @@
           if (id === 'fulldope') {
               const fdClose = document.getElementById('fulldope-close');
               if (fdClose) fdClose.click();
-              else try { localStorage.removeItem('mw_fd_run_state'); } catch (_) {}
+              else try { localStorage.removeItem('mw_fd_run_state'); localStorage.removeItem('mw_fd_active'); } catch (_) {}
           }
       }
 
@@ -3898,7 +3898,7 @@
   rat: function() {
       // v1.9.1
       if (document.getElementById('ratbot-panel')) { return; }
-      console.log('[MODULE_rat] v1.9.1');
+      console.log('[MODULE_rat] v1.9.3');
 
 
       /* ========================= УТИЛИТЫ ========================= */
@@ -3960,6 +3960,7 @@
       let autoResetLevel = 40;             // уровень, от которого срабатывает авто‑сброс
       let ratTokens = 0;                   // количество жетонов (badge)
       let useBadgeElevator = true;         // использовать лифт за жетоны
+      let labubuLetuchik = false;          // лабуба Летучик: игнор КД + activate
 
       // акционный режим
       let actionDropType = "sparks";       // snow | bullets | sparks
@@ -4056,6 +4057,7 @@
           localStorage.setItem("ratbot-doubleEnabled", doubleRunEnabled ? "1" : "0");
           localStorage.setItem("ratbot-tokens", String(ratTokens));
           localStorage.setItem("ratbot-useBadge", useBadgeElevator ? "1" : "0");
+          localStorage.setItem("ratbot-labubuLetuchik", labubuLetuchik ? "1" : "0");
           localStorage.setItem("ratbot-darkTunnelMode", darkTunnelMode ? "1" : "0");
           localStorage.setItem("ratbot-darkTunnelReward", darkTunnelReward);
           localStorage.setItem("ratbot-darkTunnelCollections", (darkTunnelReward === "collections" || darkTunnelReward === "both") ? "1" : "0");
@@ -4088,6 +4090,7 @@
           if (!isNaN(t) && t >= 0) ratTokens = t;
 
           useBadgeElevator = localStorage.getItem("ratbot-useBadge") !== "0";
+          labubuLetuchik = localStorage.getItem("ratbot-labubuLetuchik") === "1";
 
           actionAutoMax = localStorage.getItem("ratbot-actionAutoMax") === "1";
 
@@ -4153,7 +4156,7 @@
 
       function createUI() {
           if (document.getElementById("ratbot-panel")) return;
-          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.2", { moduleId: 'rat' });
+          const ui = Utils.createPanel("ratbot-panel", "🐀 Крысопровод Bot v1.9.3", { moduleId: 'rat' });
           if (!ui) return;
           const { panel, header, body } = ui;
           body.id = "ratbot-body";
@@ -4226,6 +4229,8 @@
         <input id="rat-auto-reset-level" type="number" min="1" max="100" step="1" class="mw-input" style="width:56px;margin-left:6px;" value="40">
       </label>
       <label style="display:block;"><input type="checkbox" id="rat-double-run"> Двойные спуски</label>
+      <label style="display:block;margin-top:6px;"><input type="checkbox" id="rat-labubu-letuchik"> Лабуба Летучик (игнор КД крыс + авто-активация)</label>
+      <div style="font-size:11px;opacity:.8;margin-top:4px;line-height:1.3;">Спуски 36–40 (тёмный): нападение только при ключах — уже в логике.</div>
     </div>
 
     <div style="margin-top:10px;margin-bottom:10px;">
@@ -4298,6 +4303,7 @@
           const rbActionRun = document.getElementById("rat-action-below-run");
 
           const chkDoubleRun = document.getElementById("rat-double-run");
+          const chkLabubu = document.getElementById("rat-labubu-letuchik");
           
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
@@ -4334,6 +4340,7 @@
           }
 
           chkDoubleRun.checked = !!doubleRunEnabled;
+          if (chkLabubu) chkLabubu.checked = !!labubuLetuchik;
 
           rNormal.onchange = () => {
               if (rNormal.checked) {
@@ -4454,6 +4461,13 @@
               saveFlags();
               addLog("Двойные спуски: " + (doubleRunEnabled ? "ON" : "OFF"));
           };
+          if (chkLabubu) {
+              chkLabubu.onchange = () => {
+                  labubuLetuchik = !!chkLabubu.checked;
+                  saveFlags();
+                  addLog("Лабуба Летучик: " + (labubuLetuchik ? "ON" : "OFF"));
+              };
+          }
 
           updateButtonsVisual();
           updateTokensUI(ratTokens || 0);
@@ -5120,7 +5134,41 @@
               ratSecs = parseTimer(timerCell.textContent);
               if (ratSecs > 0) {
                   const txt = timerCell.textContent.trim();
-                  if (autoResetEnabled && level >= autoResetLevel) {
+                  // Лабуба Летучик: не ждём КД — пробуем активировать и продолжить охоту
+                  if (labubuLetuchik) {
+                      addLog(`КД спуска ${txt}, но Лабуба Летучик ON → игнор КД / активация`);
+                      try {
+                          const lr = await fetch('/labubu/', { credentials: 'include' });
+                          const lhtml = await lr.text();
+                          const timeMatch = lhtml.match(/id="servertime"[^>]*rel="(\d+)"/);
+                          const now = timeMatch ? parseInt(timeMatch[1], 10) : Math.floor(Date.now() / 1000);
+                          let items = [];
+                          const im = lhtml.match(/items\s*:\s*(\[\s*\{[\s\S]+?\}\s*\])/);
+                          if (im) { try { items = new Function('return ' + im[1])(); } catch (_) {} }
+                          const pet = (items || []).find(it => {
+                              const n = String(it && it.name || '').toLowerCase();
+                              return n.includes('летучик') || (n.includes('лабуб') && n.includes('лет'));
+                          });
+                          if (pet && !(pet.activeTill && pet.activeTill > now) && Number(pet.durability) > 0) {
+                              const body = new URLSearchParams({ action: 'activate', code: String(pet.id), ajax: '1', __ajax: '1', standard_ajax: '1' });
+                              await fetch('/labubu/', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+                                  body: body.toString(),
+                                  credentials: 'include'
+                              });
+                              addLog('Лабуба Летучик: активировал');
+                              await humanPause(800, 1400);
+                          } else if (pet && pet.activeTill && pet.activeTill > now) {
+                              addLog('Лабуба Летучик уже активна');
+                          } else {
+                              addLog('Лабуба Летучик: пет не найден / нет прочности', 'warn');
+                          }
+                      } catch (e) {
+                          addLog('Лабуба Летучик: ошибка активации');
+                      }
+                      // не return — идём дальше к выследить, если actionBlock доступен
+                  } else if (autoResetEnabled && level >= autoResetLevel) {
                       const usedElevator = clickElevatorIn(root);
                       if (usedElevator) {
                           addLog(`КД спуска ${txt} (уровень ${level} ≥ ${autoResetLevel}) → сбрасываю лифтом за жетоны`);
@@ -5128,10 +5176,11 @@
                       } else {
                           addLog(`КД спуска ${txt}, лифт выключен или не найден → просто жду`);
                       }
+                      return;
                   } else {
                       addLog(`КД спуска ${txt}, авто‑сброс выключен или уровень ${level} < ${autoResetLevel} → просто жду`);
+                      return;
                   }
-                  return;
               } else {
                   addLog("Крысопровод: таймер спуска есть, но в нуле → ждём появления блока 'Готов к охоте'");
               }
@@ -9905,7 +9954,7 @@
       }
 
       if (document.getElementById('fulldope-modal')) return;
-      console.log('[MODULE_fulldope] v2.10');
+      console.log('[MODULE_fulldope] v2.11');
 
       // IDs from AI module for smart classification
       const RIDE_GROUPS = {
@@ -10118,7 +10167,7 @@
       modal.id = 'fulldope-modal';
       modal.innerHTML = `
           <div id="fulldope-header">
-              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.8</span></div>
+              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.11</span></div>
               <div id="fulldope-header-actions">
                   <button class="fd-header-btn" id="fd-run" title="Запустить / продолжить">Активировать</button>
                   <button class="fd-header-btn" id="fd-pause" title="Пауза">Пауза</button>
@@ -10284,6 +10333,7 @@
 
       const LS_FD_SELECTED = 'mw_fd_selected_ids';
       const LS_FD_STATE = 'mw_fd_run_state';
+      const LS_FD_ACTIVE = 'mw_fd_active';
       const LS_FD_MISC = 'mw_fd_misc_state';
       const LS_FD_CACHE = 'mw_fd_cache_v1';
       const LS_FD_INACTIVE = 'mw_fd_inactive_keys';
@@ -10928,8 +10978,21 @@
       const getRunState = () => {
           try { return JSON.parse(localStorage.getItem(LS_FD_STATE) || '{}'); } catch (_) { return {}; }
       };
-      const setRunState = (state) => localStorage.setItem(LS_FD_STATE, JSON.stringify(state || {}));
-      const clearRunState = () => localStorage.removeItem(LS_FD_STATE);
+      const setRunState = (state) => {
+          try { localStorage.setItem(LS_FD_STATE, JSON.stringify(state || {})); } catch (_) {}
+      };
+      const clearRunState = () => {
+          try { localStorage.removeItem(LS_FD_STATE); } catch (_) {}
+      };
+      const setFdActiveFlag = (on) => {
+          try {
+              if (on) localStorage.setItem(LS_FD_ACTIVE, '1');
+              else localStorage.removeItem(LS_FD_ACTIVE);
+          } catch (_) {}
+      };
+      const isFdActiveFlag = () => {
+          try { return localStorage.getItem(LS_FD_ACTIVE) === '1'; } catch (_) { return false; }
+      };
 
       const abortFullDope = (reason) => {
           fdSession.aborted = true;
@@ -10938,6 +11001,7 @@
           fdSession.queue = null;
           clearFdAsync();
           clearRunState();
+          setFdActiveFlag(false);
           document.querySelectorAll('.fd-item.processing').forEach(i => i.classList.remove('processing'));
           syncFdHeaderButtons();
           const msg = reason === 'stop'
@@ -11046,6 +11110,7 @@
               setRunState(state);
           }
 
+          setFdActiveFlag(true);
           fdSession.aborted = false;
           fdSession.paused = !!(state && state.paused);
           fdSession.running = true;
@@ -11741,17 +11806,57 @@
           syncFdHeaderButtons();
           if (btn.isConnected) btn.textContent = originalText;
           clearRunState();
+          setFdActiveFlag(false);
           if (wasAborted) return;
           Utils.sendTelegram(`💉 <b>FullDope Завершен:</b>\n${logs.join('\n')}`);
           alert('Готово!\n' + logs.join('\n'));
       };
 
-      // «Активировать» — старт или снятие паузы. Resume очереди — после NAVIGATE / pendingState.
+      // «Активировать» — старт или снятие паузы. Resume очереди — после NAVIGATE / reload.
       document.getElementById('fd-run').onclick = () => runFullDope();
       syncFdHeaderButtons();
+
+      // Persist перед уходом со страницы (ability / AngryAjax reload)
+      try {
+          window.addEventListener('beforeunload', () => {
+              if (fdSession.running && !fdSession.aborted && fdSession.queue) {
+                  const st = getRunState() || {};
+                  st.running = true;
+                  st.aborted = false;
+                  st.paused = !!fdSession.paused;
+                  st.tasks = fdSession.queue;
+                  if (st.index == null) st.index = 0;
+                  setRunState(st);
+                  setFdActiveFlag(true);
+              }
+          });
+      } catch (_) {}
+
       const pendingState = getRunState();
-      if (pendingState && pendingState.running && !pendingState.aborted && Array.isArray(pendingState.tasks) && (pendingState.index || 0) < pendingState.tasks.length) {
-          runFullDope(pendingState);
+      const shouldResume = isFdActiveFlag()
+          && pendingState
+          && pendingState.running
+          && !pendingState.aborted
+          && Array.isArray(pendingState.tasks)
+          && pendingState.tasks.length > 0
+          && (pendingState.index || 0) < pendingState.tasks.length
+          && !pendingState.paused;
+      if (shouldResume) {
+          if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') {
+              Utils.log('💉 FullDop: авто-продолжение после reload');
+          } else {
+              console.log('💉 FullDop: авто-продолжение после reload');
+          }
+          setTimeout(() => runFullDope(pendingState), 400);
+      } else if (pendingState && pendingState.running && pendingState.paused && isFdActiveFlag()) {
+          // После reload на паузе — восстановить UI, но не крутить очередь
+          fdSession.running = true;
+          fdSession.paused = true;
+          fdSession.queue = pendingState.tasks || null;
+          syncFdHeaderButtons();
+          if (typeof Utils !== 'undefined' && typeof Utils.log === 'function') {
+              Utils.log('💉 FullDop: на паузе (после reload)');
+          }
       }
   },
 
@@ -21950,6 +22055,21 @@ function updatePanelUI() {
           } catch(e) {
               console.error('[MoswarBot] Module launch failed:', e);
           }
+          // FullDop: после reload страницы — снова открыть панель и auto-resume
+          try {
+              const fdActive = localStorage.getItem('mw_fd_active') === '1';
+              let fdState = {};
+              try { fdState = JSON.parse(localStorage.getItem('mw_fd_run_state') || '{}'); } catch (_) {}
+              if (fdActive && fdState && fdState.running && !fdState.aborted && Array.isArray(fdState.tasks) && fdState.tasks.length) {
+                  setTimeout(() => {
+                      try {
+                          if (!document.getElementById('fulldope-modal') && typeof BotModules !== 'undefined' && BotModules.fulldope) {
+                              BotModules.fulldope();
+                          }
+                      } catch (e) { console.warn('[FullDop] auto-reopen failed', e); }
+                  }, 700);
+              }
+          } catch (_) {}
           initAutoRefuel();
           initTelegramControl();
           checkUpdate();
