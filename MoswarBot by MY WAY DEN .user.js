@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.4.2
+// @version      2.4.3
 // @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -917,7 +917,7 @@
   const CORE_KEY = 'moswar_allinone_core_v1';
   const MODULES = [
       { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
-      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.4' },
+      { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.5' },
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы', version: '1.3.17' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
@@ -4726,6 +4726,22 @@
           return null;
       }
 
+      function isMetroKeyRewardImg(img, span) {
+          if (!img) return false;
+          const src = (img.getAttribute("src") || "").toLowerCase();
+          const alt = (img.getAttribute("alt") || "").toLowerCase();
+          const title = (img.getAttribute("title") || "").toLowerCase();
+          const text = `${src} ${alt} ${title}`;
+          const st = String(img.getAttribute("data-st") || "");
+          const type = String(img.getAttribute("data-type") || "").toLowerCase();
+          if (src.includes(DARK_METRO_KEY_SRC) || st === DARK_METRO_KEY_ST) return true;
+          if (type === "quest" && (src.includes("box_metro_key") || /ключ/.test(text))) return true;
+          // Запасной путь: в title/alt явно «ключ» и метро/крысы/сундук
+          if (/ключ/.test(text) && /(метро|крыс|сундук|тоннел|box_metro)/.test(text)) return true;
+          if (span && span.querySelector && span.querySelector(`[id*="metro_key"], [id*="rat_key"]`)) return true;
+          return false;
+      }
+
       function parseRewardFromWelcomeRat(root) {
           const res = {
               ruda: 0, tugriki: 0, petric: 0, tails: 0,
@@ -4742,33 +4758,43 @@
           const petSpan = root.querySelector(".petric");
           if (petSpan) res.petric = parseIntSafe(petSpan.textContent);
 
-          const objThumbs = root.querySelectorAll(".object-thumb");
-          objThumbs.forEach(span => {
-              const img = span.querySelector("img");
-              if (!img) return;
-              const src = (img.getAttribute("src") || "").toLowerCase();
-              const alt = (img.getAttribute("alt") || "").toLowerCase();
-              const title = (img.getAttribute("title") || "").toLowerCase();
-              const text = src + " " + alt + " " + title;
+          // Награды могут быть в #welcome-rat или рядом в .metro-branch
+          const scopes = [root];
+          const branch = root.closest && root.closest(".metro-branch");
+          if (branch && branch !== root) scopes.push(branch);
 
-              const cntDiv = span.querySelector(".count");
-              const baseCount = cntDiv ? parseIntSafe(cntDiv.textContent) : 1;
+          const seen = new Set();
+          scopes.forEach((scope) => {
+              scope.querySelectorAll(".object-thumb").forEach((span) => {
+                  const img = span.querySelector("img");
+                  if (!img) return;
+                  const mark = img.getAttribute("src") || img.getAttribute("data-st") || img.outerHTML;
+                  if (seen.has(mark)) return;
+                  seen.add(mark);
 
-              if (text.includes("хвост") || text.includes("17-2")) res.tails += baseCount;
-              if (text.includes("изумруд") || text.includes("emerald")) res.emeralds += baseCount;
+                  const src = (img.getAttribute("src") || "").toLowerCase();
+                  const alt = (img.getAttribute("alt") || "").toLowerCase();
+                  const title = (img.getAttribute("title") || "").toLowerCase();
+                  const text = src + " " + alt + " " + title;
 
-              if (/snow|sneg|снежин/.test(text)) res.sneg += baseCount;
-              if (/pul|bullet|патрон|пули|пуля/.test(text)) res.puli += baseCount;
-              if (/iskr|spark|искра|искры/.test(text)) res.iskry += baseCount;
-              if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
-              if (/rocket\/|nav_block|pillar|fuel|armor/.test(text)) res.rocket += baseCount;
-              if (src.includes("/obj/collections/234-")) res.collections += baseCount;
-              const st = String(img.getAttribute("data-st") || "");
-              const type = String(img.getAttribute("data-type") || "").toLowerCase();
-              const isKey = src.includes(DARK_METRO_KEY_SRC) || st === DARK_METRO_KEY_ST || (type === "quest" && src.includes("box_metro_key"));
-              const isGiantChest = src.includes(DARK_GIANT_CHEST_SRC) || st === DARK_GIANT_CHEST_ST || !!(span.querySelector("#inventory-rat_box_5-btn, [id*='inventory-rat_box_5']"));
-              if (isKey) res.keys += baseCount;
-              else if (isGiantChest) res.chests += baseCount;
+                  const cntDiv = span.querySelector(".count");
+                  const baseCount = cntDiv ? parseIntSafe(cntDiv.textContent) : 1;
+
+                  if (text.includes("хвост") || text.includes("17-2")) res.tails += baseCount;
+                  if (text.includes("изумруд") || text.includes("emerald")) res.emeralds += baseCount;
+
+                  if (/snow|sneg|снежин/.test(text)) res.sneg += baseCount;
+                  if (/pul|bullet|патрон|пули|пуля/.test(text)) res.puli += baseCount;
+                  if (/iskr|spark|искра|искры/.test(text)) res.iskry += baseCount;
+                  if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
+                  if (/rocket\/|nav_block|pillar|fuel|armor/.test(text)) res.rocket += baseCount;
+                  if (src.includes("/obj/collections/234-")) res.collections += baseCount;
+                  const st = String(img.getAttribute("data-st") || "");
+                  const isKey = isMetroKeyRewardImg(img, span);
+                  const isGiantChest = src.includes(DARK_GIANT_CHEST_SRC) || st === DARK_GIANT_CHEST_ST || !!(span.querySelector("#inventory-rat_box_5-btn, [id*='inventory-rat_box_5']"));
+                  if (isKey) res.keys += baseCount;
+                  else if (isGiantChest) res.chests += baseCount;
+              });
           });
 
           return res;
@@ -4791,12 +4817,18 @@
               const level = getCurrentLevel();
               addLog(`[debug] parsed dark: collections=${rew.collections}, chests=${rew.chests}, keys=${rew.keys}, level=${level}`);
 
-              if (level >= DARK_KEY_LEVEL_MIN && level <= DARK_KEY_LEVEL_MAX) {
+              // 36–40: только ключи. Если уровень не прочитан (0), но ключи в награде — тоже бьём
+              // (на welcome-rat уровень часто только в кэше/#action-rat-fight).
+              const onKeyLevels = level >= DARK_KEY_LEVEL_MIN && level <= DARK_KEY_LEVEL_MAX;
+              const unknownButKeys = level <= 0 && rew.keys > 0;
+              if (onKeyLevels || unknownButKeys) {
                   if (rew.keys > 0) {
-                      addLog(`Темный тоннель: спуск ${level} (36–40) — найдены ключи (${rew.keys}) → нападаю`);
+                      addLog(`Темный тоннель: спуск ${level || "?"} (правило ключей 36–40) — ключи (${rew.keys}) → нападаю`);
                       return "fight";
                   }
-                  return darkTunnelMissAction(`спуск ${level} (36–40) — ключей нет`);
+                  if (onKeyLevels) {
+                      return darkTunnelMissAction(`спуск ${level} (36–40) — ключей нет`);
+                  }
               }
 
               const wantCol = darkTunnelReward === "collections" || darkTunnelReward === "both";
@@ -4935,39 +4967,84 @@
           return document.querySelector(".metro-branch");
       }
 
+      const METRO_LEVEL_CACHE_KEY = "ratbot-descent-level";
+
+      function rememberMetroLevel(lvl) {
+          const n = parseIntSafe(lvl);
+          if (!(n > 0)) return;
+          try { sessionStorage.setItem(METRO_LEVEL_CACHE_KEY, String(n)); } catch (e) { }
+      }
+
+      function getCachedMetroLevel() {
+          try {
+              const v = parseIntSafe(sessionStorage.getItem(METRO_LEVEL_CACHE_KEY));
+              return v > 0 ? v : 0;
+          } catch (e) {
+              return 0;
+          }
+      }
+
+      function parseLevelFromText(txt) {
+          const t = String(txt || "");
+          let m = t.match(/Уровень\s+спуска\s*:\s*(\d+)/i);
+          if (m) return parseIntSafe(m[1]);
+          m = t.match(/Спуск\s+на\s+(\d+)\s+уровень/i);
+          if (m) return parseIntSafe(m[1]);
+          m = t.match(/спуск[^\d]{0,12}(\d{1,2})\b/i);
+          if (m) {
+              const n = parseIntSafe(m[1]);
+              if (n >= 1 && n <= 50) return n;
+          }
+          return 0;
+      }
+
       function getCurrentLevel() {
           const action = document.getElementById("action-rat-fight");
           if (action) {
               const holders = action.querySelector(".holders");
               if (holders) {
-                  const m = holders.textContent.match(/Уровень\s+спуска\s*:\s*(\d+)/i);
-                  if (m) {
-                      const lvl = parseIntSafe(m[1]);
-                      if (lvl > 0) return lvl;
-                  }
+                  const lvl = parseLevelFromText(holders.textContent || "");
+                  if (lvl > 0) { rememberMetroLevel(lvl); return lvl; }
               }
+              const lvlFromAction = parseLevelFromText(action.textContent || "");
+              if (lvlFromAction > 0) { rememberMetroLevel(lvlFromAction); return lvlFromAction; }
           }
           const timerBlock = document.getElementById("timer-rat-fight");
           if (timerBlock) {
               const label = timerBlock.querySelector(".label");
               if (label) {
-                  const m = label.textContent.match(/Спуск\s+на\s+(\d+)\s+уровень/i);
-                  if (m) {
-                      const lvl = parseIntSafe(m[1]);
-                      if (lvl > 0) return lvl;
-                  }
+                  const lvl = parseLevelFromText(label.textContent || "");
+                  if (lvl > 0) { rememberMetroLevel(lvl); return lvl; }
               }
+              const lvlFromTimer = parseLevelFromText(timerBlock.textContent || "");
+              if (lvlFromTimer > 0) { rememberMetroLevel(lvlFromTimer); return lvlFromTimer; }
           }
           const welcome = document.getElementById("welcome-rat");
-          if (welcome) {
-              const m = (welcome.textContent || "").match(/Уровень\s+спуска\s*:\s*(\d+)/i) ||
-                  (welcome.textContent || "").match(/Спуск\s+на\s+(\d+)\s+уровень/i);
-              if (m) {
-                  const lvl = parseIntSafe(m[1]);
-                  if (lvl > 0) return lvl;
+          if (welcome && isVisible(welcome)) {
+              const lvlWelcome = parseLevelFromText(welcome.textContent || "");
+              if (lvlWelcome > 0) { rememberMetroLevel(lvlWelcome); return lvlWelcome; }
+              const branch = welcome.closest(".metro-branch");
+              if (branch) {
+                  const bh = branch.querySelector("#action-rat-fight .holders, p.holders");
+                  if (bh) {
+                      const lvl = parseLevelFromText(bh.textContent || "");
+                      if (lvl > 0) { rememberMetroLevel(lvl); return lvl; }
+                  }
+              }
+              const cached = getCachedMetroLevel();
+              if (cached > 0) return cached;
+          }
+          const branch = document.querySelector(".metro-branch");
+          if (branch) {
+              const bh = branch.querySelector("#action-rat-fight .holders, p.holders");
+              if (bh) {
+                  const lvl = parseLevelFromText(bh.textContent || "");
+                  if (lvl > 0) { rememberMetroLevel(lvl); return lvl; }
               }
           }
-          return 0;
+          const fromBody = parseLevelFromText(document.body.innerText || "");
+          if (fromBody > 0) { rememberMetroLevel(fromBody); return fromBody; }
+          return getCachedMetroLevel();
       }
 
       function getRatLimitElement() {
@@ -18280,7 +18357,8 @@ function updatePanelUI() {
             if (/sun|stone|камен|солнечн/.test(text)) res.stones += baseCount;
             if (/rocket\/|nav_block|pillar|fuel|armor/.test(text)) res.rocket += baseCount;
             if (src.includes('/obj/collections/234-')) res.collections += baseCount;
-            const isKey = src.includes('box_metro_key') || st === '3347';
+            const isKey = src.includes('box_metro_key') || st === '3347' ||
+              (/ключ/.test(text) && /(метро|крыс|сундук|тоннел|box_metro)/.test(text));
             const isGiantChest = src.includes('box_metro5') || st === '8217' || !!span.querySelector('#inventory-rat_box_5-btn, [id*="inventory-rat_box_5"]');
             if (isKey) res.keys += baseCount;
             else if (isGiantChest) res.chests += baseCount;
@@ -18311,9 +18389,11 @@ function updatePanelUI() {
         if (cfg.rat.darkTunnelMode) {
             const level = getRatDescentLevel();
             const reward = cfg.rat.darkTunnelReward || 'both';
-            if (level >= 36 && level <= 40) {
+            const onKeyLevels = level >= 36 && level <= 40;
+            const unknownButKeys = level <= 0 && rew.keys > 0;
+            if (onKeyLevels || unknownButKeys) {
                 if (rew.keys > 0) return 'fight';
-                return cfg.rat.actionBelowBehavior === 'elevator' ? 'search_other' : 'run';
+                if (onKeyLevels) return cfg.rat.actionBelowBehavior === 'elevator' ? 'search_other' : 'run';
             }
             if (reward === 'both') {
                 if (rew.collections > 0 && rew.chests > 0) return 'fight';
