@@ -1,8 +1,8 @@
-# 🤖 MoswarBot by MY WAY DEN v1.8.1 — Инструкция пользователя
+# 🤖 AI MyWay DeN v1.8.1 — Инструкция пользователя
 
-**Актуальный исходник:** `DEN.js` (проект `Актуальный эталон /Скрипт moswar`)  
-**GitHub:** [DeN07-ai/Moswar](https://github.com/DeN07-ai/Moswar)  
-**Userscript на GitHub:** `MoswarBot by MY WAY DEN .user.js`
+**Актуальный исходник:** `AI MyWay DeN.js` (проект `Актуальный эталон /Скрипт moswar`)  
+**GitHub:** [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)  
+**Userscript на GitHub:** `AI MyWay DeN .user.js`
 
 ## 📋 Содержание
 
@@ -19,9 +19,9 @@
 
 ## 📖 Общая информация
 
-**MoswarBot by MY WAY DEN** — единый userscript для [moswar.ru](https://www.moswar.ru). Объединяет **12 модулей** автоматизации в одну панель с планировщиком, сохранением состояния и Telegram-уведомлениями.
+**AI MyWay DeN** — единый userscript для [moswar.ru](https://www.moswar.ru). Объединяет **12 модулей** автоматизации в одну панель с планировщиком, сохранением состояния и Telegram-уведомлениями.
 
-Рабочая копия ведётся в файле **`DEN.js`**. Перед релизом содержимое синхронизируется с GitHub userscript (`@updateURL` / `@downloadURL`).
+Рабочая копия ведётся в файле **`AI MyWay DeN.js`**. Перед релизом содержимое синхронизируется с GitHub userscript (`@updateURL` / `@downloadURL`).
 
 ### 🎯 Возможности
 
@@ -54,12 +54,12 @@
 ### Шаг 2: Добавление скрипта
 
 **Вариант A — с GitHub (рекомендуется для обновлений):**
-1. Откройте [установку userscript](https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js)
+1. Откройте [установку userscript](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js)
 2. Подтвердите установку в Tampermonkey
 
-**Вариант B — из эталона `DEN.js`:**
+**Вариант B — из эталона `AI MyWay DeN.js`:**
 1. Tampermonkey → «Добавить новый скрипт»
-2. Вставьте содержимое файла `DEN.js` из проекта `Скрипт moswar`
+2. Вставьте содержимое файла `AI MyWay DeN.js` из проекта `Скрипт moswar`
 3. `Файл` → `Сохранить` (`Ctrl+S` / `Cmd+S`)
 
 ### Шаг 3: Первая настройка
@@ -510,7 +510,7 @@
 ### Q: Как обновить бот?
 
 **A:**
-1. Возьмите актуальный `DEN.js` из проекта **Скрипт moswar** или userscript с [GitHub DeN07-ai/Moswar](https://github.com/DeN07-ai/Moswar)
+1. Возьмите актуальный `AI MyWay DeN.js` из проекта **Скрипт moswar** или userscript с [GitHub DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)
 2. Откройте Tampermonkey → «Редактировать»
 3. Замените код на новый и сохраните (`Ctrl+S` / `Cmd+S`)
 4. Жёстко обновите страницу moswar.ru
@@ -539,7 +539,7 @@
 ### Архитектура
 
 ```
-MoswarBot by MY WAY DEN (DEN.js / v1.8.1)
+AI MyWay DeN (AI MyWay DeN.js / v1.8.1)
 ├── Ядро
 │   ├── FSM / планировщик
 │   ├── Таймеры и конфликты локаций
@@ -586,21 +586,21 @@ MoswarBot by MY WAY DEN (DEN.js / v1.8.1)
 ### Логи и отладка
 
 1. Откройте консоль браузера (F12 → Console)
-2. Фильтр по `[MoswarBot]` / логу панели крыс
+2. Фильтр по `[AI MyWay DeN]` / логу панели крыс
 3. В тёмном тоннеле смотрите строки `[debug] parsed dark: collections=… chests=… keys=… level=…`
 
 ### Совместимость
 
 - **Браузеры:** Chrome, Edge, Firefox, Safari
 - **Расширения:** Tampermonkey, Violentmonkey, Greasemonkey
-- **Версия userscript:** 1.8.1 (`DEN.js`)
+- **Версия userscript:** 1.8.1 (`AI MyWay DeN.js`)
 - **Крысопровод:** 1.9.2
 - **Дата актуальности:** 2026-08-21
-- **Репозиторий:** https://github.com/DeN07-ai/Moswar
+- **Репозиторий:** https://github.com/DeN07-ai/AI-Script-MyWay-Moswar
 
 ### Контакты и поддержка
 
-- 💬 GitHub: [DeN07-ai/Moswar](https://github.com/DeN07-ai/Moswar) (Issues)
+- 💬 GitHub: [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar) (Issues)
 - 📧 Email: (укажите ваш email)
 - 💬 Telegram: (укажите ваш Telegram)
 
@@ -612,7 +612,7 @@ MoswarBot by MY WAY DEN (DEN.js / v1.8.1)
 - ✅ Режим **Тёмный тоннель**: выбор награды — коллекции / гигантский ларец / оба
 - ✅ Цель ларца только `box_metro5` (`8217`); автооткрытие после боя
 - ✅ Правило спусков **36–40**: атака только за ключи `box_metro_key` (`3347`)
-- ✅ Документация и проект `Скрипт moswar` с эталоном `DEN.js`
+- ✅ Документация и проект `Скрипт moswar` с эталоном `AI MyWay DeN.js`
 - ✅ Модуль **Око Провидения** (v1.0) в списке модулей
 
 ### Ранее (v1.7.2 Smart Core)
@@ -635,5 +635,5 @@ MoswarBot by MY WAY DEN (DEN.js / v1.8.1)
 
 **Версия документа:** 1.2  
 **Дата обновления:** 2026-08-21  
-**Автор:** MY WAY DEN  
-**Эталон:** `Актуальный эталон /Скрипт moswar/DEN.js`
+**Автор:** MyWay DeN  
+**Эталон:** `Актуальный эталон /Скрипт moswar/AI MyWay DeN.js`

@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MoswarBot by MY WAY DEN
-// @namespace    MY WAY
+// @name         AI MyWay DeN
+// @namespace    MyWay.Moswar
 // @version      2.4.3
-// @description  Единая панель MY WAY DEN: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
+// @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
@@ -12,8 +12,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      github.com
 // @connect      pastebin.com
-// @updateURL    https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
-// @downloadURL  https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
+// @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // ==/UserScript==
 
 (function () {
@@ -14109,7 +14109,7 @@ utils_.init();
       (function() {
 // ==UserScript==
 // @name         Закоулочник MY WAY DEN
-// @namespace    MY WAY
+// @namespace    MyWay.Moswar
 // @version      0.7.11
 // @description  Мини-бот автоматизации: Хаос, Противостояние. Полные стратегии боя с выборами предметов/способностей на каждый ход (1-10), время запуска, лимиты боёв. Glass UI. v0.7.11 MOSWAR
 // @match        https://*.moswar.ru/*
@@ -21229,7 +21229,7 @@ function updatePanelUI() {
       // Проверяем один раз за сессию, чтобы не спамить запросами
       if (sessionStorage.getItem('mw_update_checked')) return;
 
-      const updateUrl = 'https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js';
+      const updateUrl = 'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js';
       try {
           // Добавляем timestamp, чтобы избежать кэширования
           const res = await crossFetch(updateUrl + '?t=' + Date.now());
