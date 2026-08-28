@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         AI MyWay DeN
-// @namespace    MyWay.Moswar
+// @name         MoswarBot by MY WAY DEN
+// @namespace    MY WAY
 // @version      2.4.7
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -12,8 +12,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      github.com
 // @connect      pastebin.com
-// @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
-// @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
+// @updateURL    https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// @downloadURL  https://github.com/DeN07-ai/Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
 // ==/UserScript==
 // @ts-nocheck
 

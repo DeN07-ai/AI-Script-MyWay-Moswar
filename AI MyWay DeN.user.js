@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.4.6
+// @version      2.4.7
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -196,28 +196,6 @@
               }
               // Разблокировка произойдет после загрузки новой страницы или по таймауту
               return true;
-          }
-      },
-      // [NEW] Scheduler: Планировщик задач (Приоритетная очередь)
-      Scheduler: {
-          tasks: [],
-          state: 'idle', // idle, busy, waiting
-          tickInterval: 2000,
-          lastTick: 0,
-
-          // Регистрация задачи: id, priority (1-100), checkFn (возвращает true если можно запустить), runFn (запуск)
-          register: (task) => {
-              const idx = MoswarLib.Scheduler.tasks.findIndex(t => t.id === task.id);
-              // Сохраняем состояние (lastRun) при обновлении задачи
-              if (idx !== -1) MoswarLib.Scheduler.tasks[idx] = { ...MoswarLib.Scheduler.tasks[idx], ...task };
-              else MoswarLib.Scheduler.tasks.push(task);
-              // Сортировка: высокий приоритет первым
-              MoswarLib.Scheduler.tasks.sort((a, b) => b.priority - a.priority);
-          },
-
-          // Главный цикл планировщика (хаб-автозапуск снят: модули стартуют только вручную)
-          tick: async () => {
-              return;
           }
       },
       // Сбор данных для обучения ИИ
@@ -1670,8 +1648,6 @@
                       setTimeout(() => showPanel(id), 100);
                       // [EVENT] Сообщаем ядру, что модуль включен пользователем
                       MoswarLib.events.emit('module:toggle', { id: id, state: true });
-                      // Сбрасываем таймер запуска для немедленного срабатывания
-                      const task = MoswarLib.Scheduler.tasks.find(t => t.id === id); if (task) task.lastRun = 0;
                   } else {
                       stopModule(id);
                       hidePanel(id);
@@ -3306,14 +3282,6 @@
           updateUICountry();
       }
 
-      // [SCHEDULER REGISTRATION]
-      MoswarLib.Scheduler.register({
-          id: 'raids',
-          targetUrl: '/travel2/',
-          checkFn: async () => botEnabled && !botPaused,
-          runFn: mainLoop
-      });
-
       setInterval(mainLoop, 2000);
 
       setInterval(() => {
@@ -4734,14 +4702,6 @@
           addLog("Крысопровод: состояние не распознано (нет timer/action/welcome/limit)");
       }
 
-      // [SCHEDULER REGISTRATION]
-      MoswarLib.Scheduler.register({
-          id: 'rat',
-          targetUrl: '/metro/',
-          checkFn: async () => botEnabled && !botPaused,
-          runFn: mainLoop
-      });
-
       /* ========================= БОЙ (/fight/) ========================= */
 
       function getFightExitButtonForMetro() {
@@ -5736,14 +5696,6 @@
           await handlePipeMainPage();
       }
 
-
-      // [SCHEDULER REGISTRATION]
-      MoswarLib.Scheduler.register({
-          id: 'neft',
-          targetUrl: '/neftlenin/',
-          checkFn: async () => botEnabled && !botPaused,
-          runFn: mainLoop
-      });
 
       /* ========================= MAIN LOOP ========================= */
 
@@ -11492,14 +11444,6 @@
           localStorage.setItem(KEY.paused, botPaused ? '1' : '0');
       }
 
-      // [SCHEDULER REGISTRATION]
-      MoswarLib.Scheduler.register({
-          id: 'flag',
-          targetUrl: '/alley/',
-          checkFn: async () => botEnabled && !botPaused,
-          runFn: tick
-      });
-
       bStart.onclick = () => {
           botEnabled = true;
           botPaused = false;
@@ -12642,13 +12586,6 @@
           delay = delay > 120 ? 60 : Math.max(5, Math.round(delay / 3 + 1));
           addLog('Ждём детали на ' + BUILDING_NAMES[targetIdx] + ' · ' + timeFormat(delay));
       }
-
-      MoswarLib.Scheduler.register({
-          id: 'satellite',
-          targetUrl: '/satellite/',
-          checkFn: async () => botRunning && !botPaused,
-          runFn: satTick
-      });
 
       createUI();
       if (localStorage.getItem(LS_RUNNING) === '1') {

@@ -443,7 +443,7 @@
 ### Архитектура
 
 ```
-AI MyWay DeN (AI MyWay DeN.js / v2.4.6)
+AI MyWay DeN (AI MyWay DeN.js / v2.4.7)
 ├── Ядро
 │   ├── Хаб (вкл/выкл модулей)
 │   ├── Панели и сохранение состояния
@@ -490,7 +490,7 @@ AI MyWay DeN (AI MyWay DeN.js / v2.4.6)
 
 - **Браузеры:** Chrome, Edge, Firefox, Safari
 - **Расширения:** Tampermonkey, Violentmonkey, Greasemonkey
-- **Версия userscript:** 2.4.6 (`AI MyWay DeN.js`)
+- **Версия userscript:** 2.4.7 (`AI MyWay DeN.js`)
 - **Крысопровод:** 1.9.2
 - **Дата актуальности:** 2026-08-21
 - **Репозиторий:** https://github.com/DeN07-ai/AI-Script-MyWay-Moswar
@@ -504,6 +504,10 @@ AI MyWay DeN (AI MyWay DeN.js / v2.4.6)
 ---
 
 ## 📝 Changelog
+
+### v2.4.7 (2026-08-28)
+- ✅ Убран мёртвый `Scheduler` (после снятия Автоматизации он ничего не запускал)
+- ✅ Мост автообновления: файл `MoswarBot by MY WAY DEN .user.js` для старых установок клана
 
 ### v2.4.6 (2026-08-28)
 - ✅ МиниБот убран из хаба (черновик «бота на всё»)

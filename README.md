@@ -9,7 +9,8 @@
 | Файл | Назначение |
 |------|------------|
 | `AI MyWay DeN.js` | исходник для разработки |
-| `AI MyWay DeN.user.js` | публикуемая копия для Tampermonkey (`@updateURL` / `@downloadURL`) |
+| `AI MyWay DeN.user.js` | новая установка (имя **AI MyWay DeN**) |
+| `MoswarBot by MY WAY DEN .user.js` | мост автообновления для тех, у кого ещё старое имя |
 | `README_AI_MyWay_DeN_Instructions.md` | полная инструкция по модулям |
 | `SECURITY.md` | политика безопасности |
 
@@ -21,6 +22,8 @@
 2. Установите скрипт с GitHub:
    - [AI MyWay DeN.user.js (raw)](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js)
 3. Откройте `https://*.moswar.ru/*` и включите нужные модули в панели.
+
+Если скрипт ставили **до переименования** (в Tampermonkey он называется `MoswarBot by MY WAY DEN`) — ничего переустанавливать не нужно. Обновление идёт со старого адреса. В меню Tampermonkey: «Проверить обновления скриптов».
 
 ## Модули (актуально)
 
@@ -41,7 +44,7 @@
 ## Разработка
 
 1. Правки в `AI MyWay DeN.js`.
-2. Перед релизом: скопировать в `AI MyWay DeN.user.js`, обновить `@version` в шапке.
+2. Перед релизом: скопировать в `AI MyWay DeN.user.js` **и** в мост `MoswarBot by MY WAY DEN .user.js` (в мосте оставить старые `@name` / `@namespace` / `@updateURL`).
 3. Commit + push в `main` на GitHub.
 
 Связанный проект (desktop): [Desktop-Bot-Moswar-MyWay](../Desktop-Bot) — Electron-приложение DM.
