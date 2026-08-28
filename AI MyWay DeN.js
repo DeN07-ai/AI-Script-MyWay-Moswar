@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.4.3
+// @version      2.4.4
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, МиниБот, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -921,7 +921,7 @@
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы', version: '1.3.17' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
-      { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство', version: '3.0' },
+      { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.11' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
@@ -12276,11 +12276,12 @@
       if (window._satelliteModuleRunning) { return; }
       window._satelliteModuleRunning = true;
 
-      const VERSION = '3.0';
+      const VERSION = '3.1';
       const LS_PLAN = 'satbot_plan_v3';
       const LS_RUNNING = 'satbot_running';
       const LS_PAUSED = 'satbot_paused';
-      const BUILDING_NAMES = ['Фабрика', 'Цех', 'Завод', 'Комплекс', 'Реактор'];
+      const LS_SPEND = 'satbot_spend_v1';
+      const BUILDING_NAMES = ['Кузница', 'Конвейер', 'ЭВМ', 'Фабрика', 'Реактор'];
       const BUILDING_ICONS = ['1_64.png', '2_64.png', '3_64.png', '4_64.png', '5_64.png'];
       const SAT_COUNT = 10;
 
@@ -12295,6 +12296,8 @@
               smartMode: false,
               halfPriceCount: 0,
               autoBoost: false,
+              buyHalfWithHoney: false,
+              buySlotWithHoney: true,
               autoLaunch: true,
               autoSlot: true,
               buildings: BUILDING_NAMES.map((_, i) => defaultBuilding(i))
@@ -12304,7 +12307,7 @@
       function defaultConfig() {
           const plans = {};
           for (let s = 1; s <= SAT_COUNT; s++) plans[s] = defaultSatPlan();
-          return { selectedSat: 1, globalMinGain: 60, sequential: true, plans };
+          return { selectedSat: 1, globalMinGain: 60, sequential: true, soundLaunch: true, syncPage: true, plans };
       }
 
       let config = defaultConfig();
@@ -12317,7 +12320,7 @@
       let logBuffer = [];
       let liveTimerId = null;
       let lastSnapshot = null;
-      const runtime = { satIndex: 0, halfPriceUsed: 0, boostUsed: false, upgradeCounts: {} };
+      const runtime = { satIndex: 0, cycleKey: '', halfPriceUsed: 0, boostUsed: false, slotHoneyUsed: false, upgradeCounts: {} };
 
       function loadConfig() {
           try {
@@ -12326,7 +12329,7 @@
               const parsed = JSON.parse(raw);
               config = { ...defaultConfig(), ...parsed, plans: { ...defaultConfig().plans, ...(parsed.plans || {}) } };
               for (let s = 1; s <= SAT_COUNT; s++) {
-                  if (!config.plans[s]) config.plans[s] = defaultSatPlan();
+                  config.plans[s] = { ...defaultSatPlan(), ...(config.plans[s] || {}) };
                   config.plans[s].buildings = (config.plans[s].buildings || []).map((b, i) => ({
                       ...defaultBuilding(i),
                       ...(b || {})
@@ -12346,12 +12349,55 @@
           return config.plans[satIndex] || config.plans[config.selectedSat] || defaultSatPlan();
       }
 
-      function resetRuntime(satIndex) {
-          if (runtime.satIndex === satIndex) return;
+      function loadSpendBook() {
+          try {
+              return JSON.parse(localStorage.getItem(LS_SPEND) || '{}') || {};
+          } catch (e) {
+              return {};
+          }
+      }
+
+      function saveSpendBook(book) {
+          localStorage.setItem(LS_SPEND, JSON.stringify(book));
+      }
+
+      function emptySpend() {
+          return { boost: 0, half: 0, slotHoney: 0 };
+      }
+
+      function cycleKey(satIndex, maxDetails) {
+          return satIndex + ':' + Math.round(Number(maxDetails) || 0);
+      }
+
+      function readSpend(key) {
+          const rec = loadSpendBook()[key];
+          return rec ? { ...emptySpend(), ...rec } : emptySpend();
+      }
+
+      function writeSpend(key, patch) {
+          const book = loadSpendBook();
+          const next = { ...emptySpend(), ...(book[key] || {}), ...patch, ts: Date.now() };
+          book[key] = next;
+          saveSpendBook(book);
+          return next;
+      }
+
+      function bindCycle(satIndex, maxDetails) {
+          const key = cycleKey(satIndex, maxDetails);
+          const sameCycle = runtime.cycleKey === key;
           runtime.satIndex = satIndex;
-          runtime.halfPriceUsed = 0;
-          runtime.boostUsed = false;
-          runtime.upgradeCounts = {};
+          runtime.cycleKey = key;
+          const spend = readSpend(key);
+          runtime.halfPriceUsed = spend.half || 0;
+          runtime.boostUsed = (spend.boost || 0) > 0;
+          runtime.slotHoneyUsed = (spend.slotHoney || 0) > 0;
+          if (!sameCycle) {
+              runtime.upgradeCounts = {};
+              runtime._loggedSkipHalf = false;
+              runtime._loggedHalfCap = false;
+              runtime._loggedSkipSlotHoney = false;
+          }
+          return spend;
       }
 
       function addLog(msg) {
@@ -12406,6 +12452,167 @@
           if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
           if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
           return Math.round(n).toLocaleString();
+      }
+
+      function snippetAround(content, needle, radius) {
+          const i = content.indexOf(needle);
+          if (i === -1) return '';
+          return content.substring(Math.max(0, i - radius), Math.min(content.length, i + radius));
+      }
+
+      function honeyIn(html) {
+          if (!html) return 0;
+          let m = html.match(/type="honey" amount="(\d+)"/);
+          if (m) return Number(m[1]);
+          m = html.match(/amount="(\d+)"[^>]{0,80}type="honey"/);
+          if (m) return Number(m[1]);
+          return 0;
+      }
+
+      function parseHalfOffer(content) {
+          const has = content.indexOf("action: 'get-half'") !== -1 || content.indexOf("action: \"get-half\"") !== -1 || content.indexOf("'get-half'") !== -1;
+          if (!has) return { available: false, honeyCost: 0, isPaid: false };
+          const snip = snippetAround(content, 'get-half', 500);
+          const honeyCost = honeyIn(snip);
+          return { available: true, honeyCost, isPaid: honeyCost > 0 };
+      }
+
+      function parseBoostOffer(content) {
+          const has = content.indexOf("action: 'get-boost'") !== -1 || content.indexOf("action: \"get-boost\"") !== -1 || content.indexOf("'get-boost'") !== -1;
+          if (!has) return { available: false, honeyCost: 0 };
+          const snip = snippetAround(content, 'get-boost', 500);
+          return { available: true, honeyCost: honeyIn(snip) || 49 };
+      }
+
+      function parseSlotOffer(content) {
+          let slotDetails = 0;
+          const slotIdx = content.indexOf('<span class="satellite-orbit-satellite__price">');
+          if (slotIdx !== -1) {
+              const i = content.indexOf('<span class="satellite-icon"><i></i>', slotIdx);
+              if (i !== -1) {
+                  const j = content.indexOf('</span>', i);
+                  slotDetails = parseAmount(content.substring(i + 36, j));
+              }
+          }
+          const snip = snippetAround(content, 'buy-slot', 1200) || snippetAround(content, 'satellite-orbit-satellite__price', 1200);
+          const slotHoney = honeyIn(snip);
+          const canBuy = content.indexOf('buy-slot') !== -1 || content.indexOf("action: 'buy-slot'") !== -1;
+          return { slotDetails, slotHoney, canBuy };
+      }
+
+      function isPostOk(dd) {
+          if (!dd || typeof dd !== 'object') return false;
+          if (dd.error || dd.err) return false;
+          if (dd.status === 'error' || dd.result === 'error') return false;
+          if (dd.result === false || dd.success === false) return false;
+          return true;
+      }
+
+      function syncGamePage() {
+          if (!config.syncPage) return;
+          try {
+              if (typeof AngryAjax !== 'undefined') {
+                  if (typeof AngryAjax.reload === 'function') AngryAjax.reload();
+                  else if (typeof AngryAjax.goToUrl === 'function') AngryAjax.goToUrl('/satellite/', {});
+              }
+          } catch (e) {
+              console.warn('[Satellite] syncGamePage', e);
+          }
+      }
+
+      function playLaunchSound() {
+          if (config.soundLaunch === false) return;
+          try {
+              const Ctx = window.AudioContext || window.webkitAudioContext;
+              if (!Ctx) return;
+              const ctx = new Ctx();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(784.0, ctx.currentTime + 0.28);
+              gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.05);
+              gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.42);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.45);
+              setTimeout(() => { try { ctx.close(); } catch (e) {} }, 800);
+          } catch (e) {}
+      }
+
+      function celebrateLaunch(satIndex) {
+          playLaunchSound();
+          const fx = document.getElementById('sat-launch-fx');
+          const toast = document.getElementById('sat-launch-toast');
+          const img = document.getElementById('sat-launch-img');
+          if (toast) toast.textContent = 'ПОЕХАЛИ · спутник #' + satIndex;
+          if (fx) {
+              fx.style.display = 'block';
+              fx.classList.remove('sat-fx-run');
+              void fx.offsetWidth;
+              fx.classList.add('sat-fx-run');
+              setTimeout(() => { fx.style.display = 'none'; fx.classList.remove('sat-fx-run'); }, 1600);
+          }
+          if (img) {
+              img.style.animation = 'none';
+              void img.offsetWidth;
+              img.style.animation = 'satFly 1.4s ease-in forwards';
+          }
+          addLog('Запуск спутника #' + satIndex);
+      }
+
+      function renderOrbit(satIndex) {
+          const host = document.getElementById('sat-orbit');
+          if (!host) return;
+          let html = '';
+          for (let i = 1; i <= SAT_COUNT; i++) {
+              let bg = 'rgba(255,255,255,0.08)';
+              let border = '1px solid rgba(255,255,255,0.12)';
+              let title = 'слот ' + i;
+              if (i < satIndex) {
+                  bg = 'rgba(74, 222, 128, 0.35)';
+                  border = '1px solid rgba(74, 222, 128, 0.7)';
+                  title = 'на орбите #' + i;
+              } else if (i === satIndex) {
+                  bg = 'rgba(96, 165, 250, 0.45)';
+                  border = '1px solid rgba(96, 165, 250, 0.9)';
+                  title = 'стройка #' + i;
+              }
+              html += `<span title="${title}" style="width:18px;height:18px;border-radius:50%;background:${bg};border:${border};display:inline-block;"></span>`;
+          }
+          host.innerHTML = html;
+      }
+
+      function renderBuildings(buildings, pulseIdx) {
+          const host = document.getElementById('sat-buildings');
+          if (!host) return;
+          if (!buildings || !buildings.length) {
+              host.innerHTML = '<div style="opacity:0.6;font-size:11px;">Цеха появятся после скана локации</div>';
+              return;
+          }
+          host.innerHTML = buildings.map((b, i) => {
+              const lvl = getLevel(b);
+              const name = BUILDING_NAMES[i] || ('#' + i);
+              const icon = BUILDING_ICONS[i] || '1_64.png';
+              const pulse = pulseIdx === i ? 'box-shadow:0 0 0 2px rgba(96,165,250,0.8);' : '';
+              return `<div style="flex:1;min-width:70px;padding:6px;border-radius:10px;background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.08);text-align:center;font-size:10px;${pulse}">
+                <img src="https://www.moswar.ru/@/images/loc/satellite/${icon}" width="26" height="26" style="border-radius:6px;">
+                <div style="opacity:0.85;margin-top:4px;">${name}</div>
+                <div style="font-weight:700;color:#93c5fd;font-size:12px;">M${lvl}</div>
+                <div style="color:#4ade80;">+${formatNum(b.profit)}/с</div>
+                <div style="opacity:0.6;">след. ${formatNum(b.price)}</div>
+              </div>`;
+          }).join('');
+      }
+
+      function renderSpendHud(plan) {
+          const el = document.getElementById('sat-spend-val');
+          if (!el) return;
+          const boost = runtime.boostUsed ? 'x2 уже был' : 'x2 не брали';
+          const half = (runtime.halfPriceUsed || 0) + '/' + (plan && plan.halfPriceCount || 0);
+          el.textContent = boost + ' · скидки ' + half + ' · журнал не сбрасывается';
       }
 
       function updateButtonsVisual() {
@@ -12474,13 +12681,16 @@
             </table>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
               <label>Скидки «пополам»: <input type="number" id="sat-half-count" min="0" max="20" class="mw-input" value="${plan.halfPriceCount}" style="width:42px;"></label>
-              <label><input type="checkbox" id="sat-auto-boost" ${plan.autoBoost ? 'checked' : ''}> x2 за 49🍯</label>
+              <label><input type="checkbox" id="sat-auto-boost" ${plan.autoBoost ? 'checked' : ''}> x2 за 49 меда</label>
+              <label style="grid-column:1/-1;color:#fbbf24;"><input type="checkbox" id="sat-buy-half-honey" ${plan.buyHalfWithHoney ? 'checked' : ''}> Покупать скидки за мед (40 за штуку). Без галки — только купоны.</label>
               <label><input type="checkbox" id="sat-auto-launch" ${plan.autoLaunch ? 'checked' : ''}> Авто «ПОЕХАЛИ»</label>
               <label><input type="checkbox" id="sat-auto-slot" ${plan.autoSlot ? 'checked' : ''}> Авто-слот</label>
+              <label><input type="checkbox" id="sat-buy-slot-honey" ${plan.buySlotWithHoney ? 'checked' : ''}> Слоты 9/10 за мед (75+200)</label>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button type="button" id="sat-copy-plan" class="mw-btn" style="font-size:10px;padding:4px 8px;">Копировать на все</button>
               <button type="button" id="sat-reset-plan" class="mw-btn" style="font-size:10px;padding:4px 8px;">Сброс #${sat}</button>
+              <button type="button" id="sat-lock-spend" class="mw-btn" style="font-size:10px;padding:4px 8px;color:#fbbf24;">Этот круг уже оплачен</button>
             </div>`;
 
           const btnSmart = document.getElementById('sat-plan-smart');
@@ -12492,8 +12702,10 @@
               saveConfig();
           };
           document.getElementById('sat-auto-boost').onchange = e => { plan.autoBoost = e.target.checked; saveConfig(); };
+          document.getElementById('sat-buy-half-honey').onchange = e => { plan.buyHalfWithHoney = e.target.checked; saveConfig(); };
           document.getElementById('sat-auto-launch').onchange = e => { plan.autoLaunch = e.target.checked; saveConfig(); };
           document.getElementById('sat-auto-slot').onchange = e => { plan.autoSlot = e.target.checked; saveConfig(); };
+          document.getElementById('sat-buy-slot-honey').onchange = e => { plan.buySlotWithHoney = e.target.checked; saveConfig(); };
           host.querySelectorAll('.sat-bld-target').forEach(inp => {
               inp.onchange = () => {
                   const idx = +inp.dataset.idx;
@@ -12528,6 +12740,19 @@
               saveConfig();
               renderPlanEditor();
               addLog('План #' + sat + ' сброшен');
+          };
+          document.getElementById('sat-lock-spend').onclick = () => {
+              const maxD = lastSnapshot && lastSnapshot.maxDetails;
+              const idx = (lastSnapshot && lastSnapshot.satIndex) || sat;
+              if (maxD == null) {
+                  addLog('Сначала откройте /satellite/ и дождитесь скана — потом закройте круг');
+                  return;
+              }
+              const key = cycleKey(idx, maxD);
+              writeSpend(key, { boost: 1, half: Math.max(plan.halfPriceCount || 0, runtime.halfPriceUsed || 0, 20), slotHoney: runtime.slotHoneyUsed ? 1 : 0 });
+              bindCycle(idx, maxD);
+              renderSpendHud(plan);
+              addLog('Круг ' + key + ' закрыт: x2 и скидки больше не покупаем');
           };
       }
 
@@ -12575,6 +12800,9 @@
           } else if (etaEl) {
               etaEl.textContent = data.currentDetails >= data.goalDetails ? 'готово' : '—';
           }
+          renderOrbit(data.satIndex || 1);
+          if (data.buildings) renderBuildings(data.buildings, data.pulseIdx);
+          renderSpendHud(getPlan(data.satIndex));
       }
 
       function startLiveCounter() {
@@ -12597,28 +12825,49 @@
           if (!ui) return;
           const { panel, header, body } = ui;
           panel.style.width = '430px';
+          panel.style.overflow = 'hidden';
           body.id = 'satellite-body';
+          body.style.position = 'relative';
+          if (!document.getElementById('sat-fx-style')) {
+              const st = document.createElement('style');
+              st.id = 'sat-fx-style';
+              st.textContent = `
+                @keyframes satFly { 0% { transform: translate(-50%,0) scale(1); opacity:1; } 100% { transform: translate(-50%,-140px) scale(0.6); opacity:0; } }
+                #sat-launch-fx { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:5; }
+                #sat-launch-toast { position:absolute; left:50%; top:28%; transform:translateX(-50%); background:rgba(15,20,30,0.92); border:1px solid rgba(96,165,250,0.5); color:#fff; padding:8px 14px; border-radius:12px; font-weight:700; letter-spacing:0.4px; opacity:0; }
+                #sat-launch-fx.sat-fx-run #sat-launch-toast { animation: satToast 1.4s ease forwards; }
+                @keyframes satToast { 0% { opacity:0; transform:translateX(-50%) translateY(8px); } 18% { opacity:1; transform:translateX(-50%) translateY(0); } 75% { opacity:1; } 100% { opacity:0; } }
+              `;
+              document.head.appendChild(st);
+          }
 
           body.innerHTML = `
+            <div id="sat-launch-fx" style="display:none;">
+              <img id="sat-launch-img" src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" width="48" height="48" style="position:absolute;bottom:48px;left:50%;transform:translateX(-50%);">
+              <div id="sat-launch-toast">ПОЕХАЛИ</div>
+            </div>
             <div style="display:flex;gap:8px;margin-bottom:10px;">
               <button id="sat-start" class="mw-btn">▶ Старт</button>
               <button id="sat-pause" class="mw-btn">⏸ Пауза</button>
               <button id="sat-stop" class="mw-btn">⏹ Стоп</button>
             </div>
 
-            <div style="margin-bottom:10px;padding:12px;border-radius:12px;background:rgba(20, 25, 35, 0.4);border:1px solid rgba(255,255,255,0.1);box-shadow:inset 0 0 20px rgba(0,0,0,0.5);">
+            <div style="margin-bottom:10px;padding:12px;border-radius:12px;background:rgba(20, 25, 35, 0.4);border:1px solid rgba(255,255,255,0.1);">
               <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
                 <span style="opacity:0.9;">Спутник <b id="sat-current-num" style="color:#60a5fa;">—</b></span>
                 <span id="sat-status" style="font-weight:700;letter-spacing:0.5px;">Ожидание…</span>
               </div>
+              <div id="sat-orbit" style="display:flex;gap:5px;justify-content:center;margin-bottom:8px;"></div>
+              <div id="sat-buildings" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
               <div style="font-size:11px;margin-bottom:8px;opacity:0.8;">
                 <span id="sat-details-val" style="color:#fff;font-weight:bold;">—</span> / <span id="sat-goal-val">—</span>
                 · <span id="sat-income-val" style="color:#4ade80;">—</span>
                 · ETA <span id="sat-eta-val" style="color:#fbbf24;">—</span>
               </div>
-              <div style="height:10px;border-radius:999px;background:rgba(0,0,0,0.5);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,0.8);">
-                <div id="sat-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg, #3b82f6, #60a5fa);transition:width 0.6s ease-out;border-radius:999px;box-shadow:0 0 10px rgba(96,165,250,0.5);"></div>
+              <div style="height:10px;border-radius:999px;background:rgba(0,0,0,0.5);overflow:hidden;">
+                <div id="sat-progress-bar" style="height:100%;width:0%;background:#3b82f6;transition:width 0.6s ease-out;border-radius:999px;"></div>
               </div>
+              <div id="sat-spend-val" style="margin-top:8px;font-size:10px;color:#fbbf24;letter-spacing:0.2px;">мед: журнал пуст</div>
             </div>
 
             <div style="margin-bottom:8px;">
@@ -12631,6 +12880,10 @@
             <div style="margin-bottom:8px;font-size:11px;">
               <label>Мин. выгода апгрейда (сек): <input type="number" id="sat-min-gain" min="0" max="3600" class="mw-input" value="${config.globalMinGain}" style="width:56px;"></label>
               <label style="margin-left:8px;"><input type="checkbox" id="sat-sequential" ${config.sequential ? 'checked' : ''}> По очереди (#1→#10)</label>
+              <div style="margin-top:6px;">
+                <label><input type="checkbox" id="sat-sound" ${config.soundLaunch !== false ? 'checked' : ''}> Звук запуска</label>
+                <label style="margin-left:8px;"><input type="checkbox" id="sat-sync-page" ${config.syncPage !== false ? 'checked' : ''}> Обновлять страницу игры после действия</label>
+              </div>
             </div>
 
             <b>Лог:</b>
@@ -12647,6 +12900,14 @@
           };
           document.getElementById('sat-sequential').onchange = e => {
               config.sequential = e.target.checked;
+              saveConfig();
+          };
+          document.getElementById('sat-sound').onchange = e => {
+              config.soundLaunch = e.target.checked;
+              saveConfig();
+          };
+          document.getElementById('sat-sync-page').onchange = e => {
+              config.syncPage = e.target.checked;
               saveConfig();
           };
 
@@ -12674,6 +12935,9 @@
 
           renderSatTabs();
           renderPlanEditor();
+          renderOrbit(config.selectedSat || 1);
+          renderBuildings([]);
+          renderSpendHud(getPlan(config.selectedSat || 1));
           updateButtonsVisual();
       }
 
@@ -12747,17 +13011,21 @@
           if (planBuilding.mode === 'detail') return 'detail';
           if (planBuilding.mode === 'auto') {
               if (currentDetails >= building.price) return 'detail';
-              if (building.honeyPrice > 0) return 'honey';
-              return 'detail';
+              return null;
           }
           return 'detail';
       }
 
       function postAction(action, extra, cb) {
-          $.post('/satellite/', { action, ...extra }, cb, 'json').fail(() => {
+          $.post('/satellite/', { action, ...extra }, function(dd) {
+              const ok = isPostOk(dd);
+              if (ok) syncGamePage();
+              if (typeof cb === 'function') cb(dd, ok);
+          }, 'json').fail(() => {
               addLog('Ошибка POST: ' + action);
               loopBusy = false;
               delay = 30;
+              if (typeof cb === 'function') cb(null, false);
           });
       }
 
@@ -12810,15 +13078,9 @@
       function processPage(content) {
           addLog('--- Итерация #' + (pass++) + ' ---');
 
-          let slotDetails = 0;
-          const slotIdx = content.indexOf('<span class="satellite-orbit-satellite__price">');
-          if (slotIdx !== -1) {
-              const i = content.indexOf('<span class="satellite-icon"><i></i>', slotIdx);
-              if (i !== -1) {
-                  const j = content.indexOf('</span>', i);
-                  slotDetails = parseAmount(content.substring(i + 36, j));
-              }
-          }
+          const slotOffer = parseSlotOffer(content);
+          const slotDetails = slotOffer.slotDetails;
+          const slotHoney = slotOffer.slotHoney;
 
           const initIdx = content.indexOf('Satelite.init(');
           if (initIdx === -1) throw new Error('Satelite.init не найден');
@@ -12827,40 +13089,71 @@
           const currentDetails = currentState.details + currentState.income * (currentState.time - currentState.lastTime) / 1000;
 
           const satIndex = parseSatIndex(content);
-          resetRuntime(satIndex);
+          const spend = bindCycle(satIndex, currentState.max_details);
           const plan = getPlan(satIndex);
+
+          function dash(extra) {
+              updateDashboard({
+                  satIndex,
+                  currentDetails,
+                  baseDetails: currentDetails,
+                  income: currentState.income,
+                  goalDetails: currentState.max_details + (plan.autoSlot ? slotDetails : 0),
+                  estimatedEta: extra && extra.estimatedEta,
+                  buildings: extra && extra.buildings,
+                  pulseIdx: extra && extra.pulseIdx,
+                  maxDetails: currentState.max_details,
+                  ts: Date.now()
+              });
+          }
 
           if (!plan.enabled) {
               addLog('План спутника #' + satIndex + ' выключен — жду');
               delay = 60;
-              updateDashboard({ satIndex, currentDetails, baseDetails: currentDetails, income: currentState.income, goalDetails: currentState.max_details, ts: Date.now() });
+              dash();
               return;
           }
 
-          updateDashboard({
-              satIndex,
-              currentDetails,
-              baseDetails: currentDetails,
-              income: currentState.income,
-              goalDetails: currentState.max_details + (plan.autoSlot ? slotDetails : 0),
-              ts: Date.now()
-          });
+          dash();
 
-          const hasHalfBtn = content.indexOf("action: 'get-half'") !== -1 || content.indexOf('action: \'get-half\'') !== -1;
-          const hasBoostBtn = content.indexOf("action: 'get-boost'") !== -1 || content.indexOf('action: \'get-boost\'') !== -1;
+          const halfOffer = parseHalfOffer(content);
+          const boostOffer = parseBoostOffer(content);
 
-          if (plan.autoBoost && !runtime.boostUsed && hasBoostBtn) {
-              addLog('Применяем x2 эффективность (49🍯)');
+          if (plan.autoBoost && !runtime.boostUsed && boostOffer.available) {
+              const nextBoost = (spend.boost || 0) + 1;
+              writeSpend(runtime.cycleKey, { boost: nextBoost });
               runtime.boostUsed = true;
-              postAction('get-boost', {}, () => { delay = 2; });
+              addLog('Применяем x2 эффективность (' + (boostOffer.honeyCost || 49) + ' меда). Повторно после F5 не купим.');
+              postAction('get-boost', {}, (dd, ok) => {
+                  if (!ok) addLog('x2: ответ неясен. В журнале уже отмечен — повторно за мед не купим.');
+                  delay = 2;
+              });
               return;
           }
 
-          if (runtime.halfPriceUsed < plan.halfPriceCount && hasHalfBtn) {
-              addLog('Скидка «цена пополам» (' + (runtime.halfPriceUsed + 1) + '/' + plan.halfPriceCount + ')');
-              runtime.halfPriceUsed++;
-              postAction('get-half', {}, () => { delay = 2; });
-              return;
+          if (runtime.halfPriceUsed < plan.halfPriceCount && halfOffer.available) {
+              if (halfOffer.isPaid && !plan.buyHalfWithHoney) {
+                  if (!runtime._loggedSkipHalf) {
+                      addLog('Скидка за мед (' + halfOffer.honeyCost + ') пропущена: нет галки «покупать скидки за мед». Купонов на кнопке нет.');
+                      runtime._loggedSkipHalf = true;
+                  }
+              } else if (!halfOffer.isPaid || plan.buyHalfWithHoney) {
+                  const nextHalf = runtime.halfPriceUsed + 1;
+                  writeSpend(runtime.cycleKey, { half: nextHalf });
+                  runtime.halfPriceUsed = nextHalf;
+                  const via = halfOffer.isPaid ? ('за ' + halfOffer.honeyCost + ' меда') : 'купоном';
+                  addLog('Скидка «цена пополам» ' + nextHalf + '/' + plan.halfPriceCount + ' (' + via + '). Журнал круга: ' + runtime.cycleKey);
+                  postAction('get-half', {}, (dd, ok) => {
+                      if (!ok) addLog('Скидка: ответ неясен. В журнале уже ' + nextHalf + '/' + plan.halfPriceCount + ' — повторно не покупаем');
+                      delay = 2;
+                  });
+                  return;
+              }
+          } else if (runtime.halfPriceUsed >= plan.halfPriceCount && plan.halfPriceCount > 0 && halfOffer.available) {
+              if (!runtime._loggedHalfCap) {
+                  addLog('Скидки этого круга уже ' + runtime.halfPriceUsed + '/' + plan.halfPriceCount + ' — повторно не покупаем (журнал ' + runtime.cycleKey + ')');
+                  runtime._loggedHalfCap = true;
+              }
           }
 
           const buildings = [];
@@ -12916,6 +13209,7 @@
           }
 
           addLog('Спутник #' + satIndex + ' · построек: ' + buildings.length + ' · детали: ' + formatNum(currentDetails));
+          dash({ buildings });
 
           function evaluatePath(buildingsList, pathIndices, curDetails, curIncome, goal) {
               let time = 0;
@@ -12961,8 +13255,26 @@
           const goalDetails = currentState.max_details + (plan.autoSlot ? slotDetails : 0);
           const currentCollectTime = (goalDetails - currentDetails) / currentState.income;
 
+          if (plan.autoSlot && slotHoney > 0 && slotOffer.canBuy && !runtime.slotHoneyUsed) {
+              if (!plan.buySlotWithHoney) {
+                  if (!runtime._loggedSkipSlotHoney) {
+                      addLog('Слот за ' + slotHoney + ' меда пропущен — нет галки «слоты 9/10 за мед»');
+                      runtime._loggedSkipSlotHoney = true;
+                  }
+              } else {
+                  writeSpend(runtime.cycleKey, { slotHoney: 1 });
+                  runtime.slotHoneyUsed = true;
+                  addLog('Покупаем слот орбиты за ' + slotHoney + ' меда. Повторно после F5 не купим.');
+                  postAction('buy-slot', {}, (dd, ok) => {
+                      if (!ok) addLog('Слот за мед: ответ неясен. В журнале уже отмечен — повторно не купим.');
+                      delay = 2;
+                  });
+                  return;
+              }
+          }
+
           if (plan.autoSlot && slotDetails > 0 && currentDetails >= slotDetails) {
-              addLog('Покупаем слот орбиты');
+              addLog('Покупаем слот орбиты за детали');
               postAction('buy-slot', {}, () => { delay = 2; });
               return;
           }
@@ -13010,11 +13322,15 @@
           }
 
           currentState.estimatedEta = estimatedEta;
+          dash({ buildings, estimatedEta });
 
           if (targetIdx === -1) {
               if (currentCollectTime <= 0 && plan.autoLaunch) {
                   addLog('Запускаем спутник «ПОЕХАЛИ»');
-                  postAction('start-build', {}, () => { delay = 3; });
+                  postAction('start-build', {}, (dd, ok) => {
+                      if (ok) celebrateLaunch(satIndex);
+                      delay = 3;
+                  });
               } else if (currentCollectTime <= 0 && !plan.autoLaunch) {
                   addLog('Детали собраны — автозапуск выключен');
                   delay = 60;
@@ -13031,10 +13347,16 @@
           if (currentDetails >= targetBuilding.price) {
               const value = pickUpgradeValue(planB, targetBuilding, currentDetails);
               if (!value) { delay = 10; return; }
+              if (value === 'honey' && planB.mode !== 'honey') {
+                  addLog('Отказ: апгрейд за мед только если в плане режим «Мёд»');
+                  delay = 15;
+                  return;
+              }
               addLog('Апгрейд ' + BUILDING_NAMES[targetIdx] + ' (' + value + ') → M' + (getLevel(targetBuilding) + 1));
-              postAction('upgrade-detail', { partId: targetIdx, value }, function(dd) {
+              dash({ buildings, pulseIdx: targetIdx, estimatedEta });
+              postAction('upgrade-detail', { partId: targetIdx, value }, function(dd, ok) {
                   const key = runtime.satIndex + '_' + targetIdx;
-                  runtime.upgradeCounts[key] = (runtime.upgradeCounts[key] || 0) + 1;
+                  if (ok) runtime.upgradeCounts[key] = (runtime.upgradeCounts[key] || 0) + 1;
                   if (dd && dd.data) addLog('Осталось ' + formatNum(dd.data.details) + ' дет.');
                   delay = 1;
               });
