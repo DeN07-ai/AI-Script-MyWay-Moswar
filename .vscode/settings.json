@@ -1,0 +1,9 @@
+{
+  "javascript.validate.enable": false,
+  "typescript.validate.enable": false,
+  "js/ts.validate.enable": false,
+  "js/ts.implicitProjectConfig.checkJs": false,
+  "editor.maxTokenizationLineLength": 2000000,
+  "scm.diffDecorations": "gutter",
+  "problems.decorations.enabled": false
+}
