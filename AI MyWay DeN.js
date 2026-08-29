@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.4.8
+// @version      2.4.9
+// @author       MyWay DeN
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info

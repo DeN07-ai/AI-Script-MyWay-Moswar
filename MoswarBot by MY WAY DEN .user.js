@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.4.8
+// @version      2.4.9
+// @author       MyWay DeN
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
@@ -120,9 +121,13 @@
           // Локально разрешённые ID (плюс строки из whitelist.txt)
           allowedPlayerIds: ['7173951'],
           _save: () => {
-              _gmSet('mw_tg_token', _cfg.tgToken || '');
-              _gmSet('mw_tg_chat', _cfg.tgChatId || '');
-              try { localStorage.removeItem('moswar_bot_config_admin'); } catch (e) {}
+              if (typeof GM_setValue === 'function') {
+                  _gmSet('mw_tg_token', _cfg.tgToken || '');
+                  _gmSet('mw_tg_chat', _cfg.tgChatId || '');
+                  try { localStorage.removeItem('moswar_bot_config_admin'); } catch (e) {}
+              } else {
+                  try { localStorage.setItem('moswar_bot_config_admin', JSON.stringify(_cfg)); } catch (e) {}
+              }
           },
           // API Compatibility layer for existing code
           root: ['DEN', 'Casper'],

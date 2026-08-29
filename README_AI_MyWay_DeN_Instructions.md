@@ -443,7 +443,7 @@
 ### Архитектура
 
 ```
-AI MyWay DeN (AI MyWay DeN.js / v2.4.8)
+AI MyWay DeN (AI MyWay DeN.js / v2.4.9)
 ├── Ядро
 │   ├── Хаб (вкл/выкл модулей)
 │   ├── Панели и сохранение состояния
@@ -492,7 +492,7 @@ AI MyWay DeN (AI MyWay DeN.js / v2.4.8)
 
 - **Браузеры:** Chrome, Edge, Firefox, Safari
 - **Расширения:** Tampermonkey, Violentmonkey, Greasemonkey
-- **Версия userscript:** 2.4.8 (`AI MyWay DeN.js`)
+- **Версия userscript:** 2.4.9 (`AI MyWay DeN.js`)
 - **Крысопровод:** 1.9.5
 - **Дата актуальности:** 2026-08-28
 - **Репозиторий:** https://github.com/DeN07-ai/AI-Script-MyWay-Moswar
@@ -506,6 +506,9 @@ AI MyWay DeN (AI MyWay DeN.js / v2.4.8)
 ---
 
 ## 📝 Changelog
+
+### v2.4.9 (2026-08-29)
+- ✅ В шапке `@author MyWay DeN` — Tampermonkey больше не пишет «автор неизвестен»
 
 ### v2.4.8 (2026-08-28)
 - ✅ Отчёты автору выключены по умолчанию; IP больше не запрашивается
