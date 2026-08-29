@@ -1,17 +1,20 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.4.7
+// @version      2.4.8
 // @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
+// @grant        GM_addStyle
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
 // @grant        unsafeWindow
 // @noframes
 // @connect      api.telegram.org
 // @connect      raw.githubusercontent.com
 // @connect      github.com
-// @connect      pastebin.com
 // @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // ==/UserScript==
@@ -19,11 +22,11 @@
 
 (function () {
   'use strict';
-  // Polyfill for GM_addStyle when @grant none is used
+  // Свой GM_addStyle (грант тоже указан — так TM не ругается на стили)
   function GM_addStyle(css) {
       const style = document.createElement('style');
       style.textContent = css;
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
   }
 
   // АНТИ-КОПИЯ: Если вырезать эту часть или изменить заголовок, скрипт умрет
@@ -75,13 +78,29 @@
       const _roots = ['REVO', 'Q2FzcGVy']; // DEN, Casper
       const _clans = ['MjI0ODc=', 'MTMyNw==']; // 22487, 1327
 
-      // Load config securely
+      // Токен пользователя: Tampermonkey (GM_*), не localStorage страницы
       let _cfg = { tgToken: '', tgChatId: '' };
+      const _gmGet = (k, d) => {
+          try { if (typeof GM_getValue === 'function') return GM_getValue(k, d); } catch (e) {}
+          return d;
+      };
+      const _gmSet = (k, v) => {
+          try { if (typeof GM_setValue === 'function') GM_setValue(k, v); } catch (e) {}
+      };
       try {
-          const s = JSON.parse(localStorage.getItem('moswar_bot_config_admin') || '{}');
-          _cfg.tgToken = s.tgToken || '';
-          _cfg.tgChatId = s.tgChatId || '';
-      } catch(e) {}
+          _cfg.tgToken = _gmGet('mw_tg_token', '') || '';
+          _cfg.tgChatId = _gmGet('mw_tg_chat', '') || '';
+          if (!_cfg.tgToken && !_cfg.tgChatId) {
+              const s = JSON.parse(localStorage.getItem('moswar_bot_config_admin') || '{}');
+              _cfg.tgToken = s.tgToken || '';
+              _cfg.tgChatId = s.tgChatId || '';
+              if (_cfg.tgToken || _cfg.tgChatId) {
+                  _gmSet('mw_tg_token', _cfg.tgToken);
+                  _gmSet('mw_tg_chat', _cfg.tgChatId);
+                  try { localStorage.removeItem('moswar_bot_config_admin'); } catch (e) {}
+              }
+          }
+      } catch (e) {}
 
       const _decode = (s) => { try { return atob(s); } catch(e){ return ''; } };
       const _homeClan = localStorage.getItem('moswar_bot_home_clan_id');
@@ -97,10 +116,14 @@
           set tgToken(v) { _cfg.tgToken = v; this._save(); },
           get tgChatId() { return _cfg.tgChatId; },
           set tgChatId(v) { _cfg.tgChatId = v; this._save(); },
-          whitelistUrl: 'https://pastebin.com/raw/Gh9YfRkq',
-          // Локально разрешенные ID игроков (дополнительно к remote whitelist)
+          whitelistUrl: 'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/whitelist.txt',
+          // Локально разрешённые ID (плюс строки из whitelist.txt)
           allowedPlayerIds: ['7173951'],
-          _save: () => localStorage.setItem('moswar_bot_config_admin', JSON.stringify(_cfg)),
+          _save: () => {
+              _gmSet('mw_tg_token', _cfg.tgToken || '');
+              _gmSet('mw_tg_chat', _cfg.tgChatId || '');
+              try { localStorage.removeItem('moswar_bot_config_admin'); } catch (e) {}
+          },
           // API Compatibility layer for existing code
           root: ['DEN', 'Casper'],
           clan: ['22487', '1327', _homeClan].filter(Boolean)
@@ -287,26 +310,46 @@
       }
   }
 
+  function parseWhitelistIds(text) {
+      const ids = [];
+      String(text || '').split(/\r?\n/).forEach((line) => {
+          line = String(line).replace(/#.*$/, '').trim();
+          if (/^\d+$/.test(line)) ids.push(line);
+      });
+      return ids;
+  }
+
+  function extraAllowedIds() {
+      const fromFile = parseWhitelistIds(localStorage.getItem('den_bot_whitelist') || '');
+      const hardcoded = (ADMIN.allowedPlayerIds || []).map(String);
+      return [...new Set([...hardcoded, ...fromFile])];
+  }
+
+  async function refreshWhitelist(force) {
+      const url = ADMIN.whitelistUrl;
+      if (!url) return false;
+      const cached = localStorage.getItem('den_bot_whitelist');
+      const lastUpdate = localStorage.getItem('den_bot_whitelist_ts');
+      if (!force && cached && lastUpdate && Date.now() - parseInt(lastUpdate, 10) < 60 * 60 * 1000) {
+          return true;
+      }
+      try {
+          const response = await crossFetch(url);
+          if (!response.ok) return false;
+          const text = await response.text();
+          localStorage.setItem('den_bot_whitelist', text);
+          localStorage.setItem('den_bot_whitelist_ts', Date.now().toString());
+          return true;
+      } catch (e) {
+          console.warn('[MoswarBot] WhiteList: не удалось обновить', e);
+          return false;
+      }
+  }
+
   async function checkSecurity() {
      // Сразу обновляем заголовок, чтобы убрать "Загрузка..."
      updateHubHeader();
-      // Автоматическое обновление WhiteList (раз в 60 минут)
-      if (ADMIN.whitelistUrl && !ADMIN.whitelistUrl.includes('YOUR_WHITELIST_ID')) {
-          const localWhitelist = localStorage.getItem('den_bot_whitelist');
-          const lastUpdate = localStorage.getItem('den_bot_whitelist_ts');
-          // Обновляем, только если списка нет локально или он устарел (1 час)
-          if (!localWhitelist || !lastUpdate || Date.now() - parseInt(lastUpdate) > 60 * 60 * 1000) {
-              try {
-                  const response = await crossFetch(ADMIN.whitelistUrl);
-                  if (response.ok) {
-                      const text = await response.text();
-                      localStorage.setItem('den_bot_whitelist', text);
-                      localStorage.setItem('den_bot_whitelist_ts', Date.now().toString());
-                      console.log('[MoswarBot] Whitelist updated successfully.');
-                  }
-              } catch (e) { console.error('[MoswarBot] Whitelist update failed', e); }
-          }
-      }
+      await refreshWhitelist(false);
 
       // 1. Определяем ID игрока (для кэширования)
       let myId = null;
@@ -445,10 +488,10 @@
           authState.authorized = true;
       }
 
-      // 4. Проверка локально разрешённых ID (Whitelist)
-      if (!authState.authorized && myId && ADMIN.allowedPlayerIds && ADMIN.allowedPlayerIds.includes(myId)) {
+      // 4. Гостевые ID: hardcoded + whitelist.txt с GitHub
+      if (!authState.authorized && myId && extraAllowedIds().includes(String(myId))) {
           authState.authorized = true;
-          console.log(`[MoswarBot] Игрок ${authState.playerName} (ID: ${myId}) авторизован через локальный whitelist`);
+          console.log(`[MoswarBot] Игрок ${authState.playerName} авторизован через whitelist`);
       }
 
       // 5. БЛОКИРОВКА: Только кланы MyWay (22487, 1327) и ROOT (DEN)
@@ -593,12 +636,45 @@
   const ModuleSessionRegistry = {
       _abort: Object.create(null),
       _pause: Object.create(null),
+      _specs: Object.create(null),
+      _ids: Object.create(null),
       register(moduleId, handlers = {}) {
           if (!moduleId) return;
           if (typeof handlers.onAbort === 'function') this._abort[moduleId] = handlers.onAbort;
           if (typeof handlers.onPause === 'function') this._pause[moduleId] = handlers.onPause;
       },
+      trackInterval(moduleId, fn, ms, key) {
+          key = key || 'loop';
+          if (!moduleId) return setInterval(fn, ms);
+          if (!this._specs[moduleId]) this._specs[moduleId] = Object.create(null);
+          if (!this._ids[moduleId]) this._ids[moduleId] = Object.create(null);
+          this._specs[moduleId][key] = { fn, ms };
+          if (this._ids[moduleId][key] != null) return this._ids[moduleId][key];
+          const id = setInterval(fn, ms);
+          this._ids[moduleId][key] = id;
+          return id;
+      },
+      clearIntervals(moduleId) {
+          const ids = this._ids[moduleId];
+          if (!ids) return;
+          Object.keys(ids).forEach((key) => {
+              if (ids[key] == null) return;
+              try { clearInterval(ids[key]); } catch (_) {}
+              ids[key] = null;
+          });
+      },
+      restartIntervals(moduleId) {
+          const specs = this._specs[moduleId];
+          if (!specs) return;
+          if (!this._ids[moduleId]) this._ids[moduleId] = Object.create(null);
+          Object.keys(specs).forEach((key) => {
+              if (this._ids[moduleId][key] != null) return;
+              const spec = specs[key];
+              this._ids[moduleId][key] = setInterval(spec.fn, spec.ms);
+          });
+      },
       abort(moduleId, reason) {
+          this.clearIntervals(moduleId);
           const fn = this._abort[moduleId];
           if (typeof fn === 'function') {
               try { fn(reason || 'stop'); } catch (e) { console.warn('[ModuleSession] abort', moduleId, e); }
@@ -630,23 +706,17 @@
           }
           return null;
       },
-      getIP: async () => {
-          try {
-              const r = await crossFetch('https://api.ipify.org?format=json');
-              const d = await r.json();
-              return d.ip;
-          } catch (e) { return 'unknown'; }
-      },
       reportToCreator: async (topic, details = '') => {
+          // По умолчанию выкл. Вкл.: ⚙️ → «Отчёты автору». IP не отправляется никогда.
+          if (localStorage.getItem('mw_creator_reports') !== '1') return;
           if (!TELEMETRY.token || !TELEMETRY.chatId) return;
           try {
-              const ip = await Utils.getIP();
               const date = new Date().toLocaleString('ru-RU');
               const nick = authState.playerName || 'Unknown';
               const clan = authState.clanName || 'None';
               const text = `🕵️ <b>MW Bot Report</b>\n` +
                            `👤 <b>User:</b> ${nick} | 🏰 <b>Clan:</b> ${clan}\n` +
-                           `🕒 <b>Time:</b> ${date} | 🌐 <b>IP:</b> ${ip}\n` +
+                           `🕒 <b>Time:</b> ${date}\n` +
                            `📢 <b>${topic}</b>\n${details}`;
               await crossFetch(`https://api.telegram.org/bot${TELEMETRY.token}/sendMessage`, {
                   method: 'POST',
@@ -1447,6 +1517,12 @@
             <label style="display:block;font-size:11px;opacity:0.8;margin-bottom:4px;">Chat ID</label>
             <input type="text" id="mw-set-chatid" value="${ADMIN.tgChatId}" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;padding:6px;box-sizing:border-box;font-size:12px;">
         </div>
+        <div style="margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;opacity:0.85;cursor:pointer;">
+                <input type="checkbox" id="mw-set-telemetry" ${localStorage.getItem('mw_creator_reports') === '1' ? 'checked' : ''}>
+                Отчёты автору (ник и клан, без IP)
+            </label>
+        </div>
         <div class="mw-save-settings mw-apply"><span>Сохранить</span></div>
         <div class="mw-update-whitelist mw-apply" style="margin-top:8px;background:rgba(100,200,255,0.15);"><span>Обновить WhiteList</span></div>
         <div class="mw-back-settings" style="text-align:center;cursor:pointer;font-size:11px;opacity:0.6;margin-top:5px;padding:5px;">Назад</div>
@@ -1484,9 +1560,10 @@
               e.stopPropagation();
               const token = document.getElementById('mw-set-token').value.trim();
               const chatid = document.getElementById('mw-set-chatid').value.trim();
+              const tel = document.getElementById('mw-set-telemetry');
               ADMIN.tgToken = token;
               ADMIN.tgChatId = chatid;
-              localStorage.setItem('moswar_bot_config_admin', JSON.stringify({ tgToken: token, tgChatId: chatid }));
+              if (tel) localStorage.setItem('mw_creator_reports', tel.checked ? '1' : '0');
               const span = saveSettingsBtn.querySelector('span');
               const oldText = span.textContent;
               span.textContent = 'Сохранено!';
@@ -1495,6 +1572,19 @@
                   viewSettings.style.display = 'none';
                   viewMain.style.display = 'block';
               }, 800);
+          };
+      }
+
+      const updateWhitelistBtn = hub.querySelector('.mw-update-whitelist');
+      if (updateWhitelistBtn) {
+          updateWhitelistBtn.onclick = async (e) => {
+              e.stopPropagation();
+              const span = updateWhitelistBtn.querySelector('span');
+              const oldText = span.textContent;
+              span.textContent = 'Обновляю…';
+              const ok = await refreshWhitelist(true);
+              span.textContent = ok ? 'Список обновлён' : 'Не удалось';
+              setTimeout(() => { span.textContent = oldText; }, 1200);
           };
       }
 
@@ -1784,9 +1874,10 @@
               }
           }, true);
 
-          // Вырубаем глючный initHelpersAlert
-          setInterval(() => {
+          // Глючный initHelpersAlert — только на /travel2/
+          ModuleSessionRegistry.trackInterval('raids', () => {
               try {
+                  if (!/\/travel2(\/|$)/.test(location.pathname)) return;
                   if (typeof window.initHelpersAlert === "function" &&
                       !window.initHelpersAlert._raidPatched) {
                       const stub = function () { };
@@ -1795,11 +1886,12 @@
                       console.warn("[RaidBot] initHelpersAlert patched");
                   }
               } catch (_) { }
-          }, 1500);
+          }, 1500, 'alert');
       }
 
       function installJqPatch() {
           if (jqProtected) return;
+          if (!/\/travel2(\/|$)/.test(location.pathname)) return;
           const $ = window.jQuery;
           if (!$ || !$.fn) return;
 
@@ -3234,6 +3326,7 @@
           updateUILoops();
           updateUIStatus(fromRestore ? "Бот восстановлен" : "Бот запущен");
           updateUIHighlights();
+          ModuleSessionRegistry.restartIntervals('raids');
       }
 
       function togglePause() {
@@ -3251,6 +3344,7 @@
           saveStateFlags();
           updateUIStatus("Остановлен");
           updateUIHighlights();
+          ModuleSessionRegistry.clearIntervals('raids');
           Utils.reportToCreator('Raids', 'Stopped');
       }
 
@@ -3269,7 +3363,7 @@
       }
 
       installUltraSafeBase();
-      setInterval(installJqPatch, 2000);
+      ModuleSessionRegistry.trackInterval('raids', installJqPatch, 2000, 'jq');
 
       createUI();
       restoreFlags();
@@ -3282,14 +3376,15 @@
           updateUICountry();
       }
 
-      setInterval(mainLoop, 2000);
+      ModuleSessionRegistry.trackInterval('raids', mainLoop, 2000, 'main');
 
-      setInterval(() => {
+      ModuleSessionRegistry.trackInterval('raids', () => {
+          if (!botEnabled || botPaused) return;
           if (Date.now() - lastActionTime > 30000) {
               goToTravel2();
               updateUIStatus("Watchdog: возврат в рейды (таймаут активности)");
           }
-      }, 4500);
+      }, 4500, 'watchdog');
   },
 
 
@@ -3945,6 +4040,7 @@
           setStatus("▶ Старт: бот запущен (инициализация жетонов)");
           Utils.reportToCreator('Rat', 'Started');
           MoswarLib.events.emit('module:status', { id: 'rat', status: 'started' });
+          ModuleSessionRegistry.restartIntervals('rat');
       }
 
       function togglePause() {
@@ -3963,6 +4059,7 @@
           sessionStorage.setItem("ratbot-running", "0");
           saveFlags();
           updateButtonsVisual();
+          ModuleSessionRegistry.clearIntervals('rat');
           Utils.reportToCreator('Rat', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'rat', status: 'stopped' });
       }
@@ -4860,9 +4957,9 @@
               setStatus(tokensInitialized ? "Работает (восстановлено)" : "Инициализация жетонов (восстановлено)");
           }
 
-          setInterval(() => {
+          ModuleSessionRegistry.trackInterval('rat', () => {
               mainLoop();
-          }, 1300);
+          }, 1300, 'main');
       }
 
       safeInit();
@@ -5174,6 +5271,7 @@
           setStatus("▶ Старт");
           Utils.reportToCreator('Neft', 'Started');
           MoswarLib.events.emit('module:status', { id: 'neft', status: 'started' });
+          ModuleSessionRegistry.restartIntervals('neft');
       }
       function togglePause() {
           if (!botEnabled) return;
@@ -5190,6 +5288,7 @@
           saveFlags();
           updateButtonsVisual();
           setStatus("⏹ Стоп");
+          ModuleSessionRegistry.clearIntervals('neft');
           Utils.reportToCreator('Neft', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
       }
@@ -5761,9 +5860,9 @@
               setStatus(botPaused ? "Пауза (восстановлено)" : "Работает (восстановлено)");
           }
 
-          setInterval(() => {
+          ModuleSessionRegistry.trackInterval('neft', () => {
               mainLoop();
-          }, 1200);
+          }, 1200, 'main');
       }
 
       safeInit();
@@ -6372,6 +6471,7 @@
     // только после START начинаем автопереход
     RT.navigatedToDungeon = false;
     save(LS.rt, RT);
+    ModuleSessionRegistry.restartIntervals('dungeon');
   }
 
   function togglePause() {
@@ -6402,6 +6502,7 @@
     renderButtons();
     renderStatus();
     renderLog();
+    ModuleSessionRegistry.clearIntervals('dungeon');
     log('STOP — клики отключены. Настройки можно менять спокойно.');
   }
 
@@ -9296,12 +9397,12 @@
 
     log('загружен. Жми START — включить.');
 
-    setInterval(() => {
+    ModuleSessionRegistry.trackInterval('dungeon', () => {
       tick().catch(e => {
         console.error('[DG]', e);
         log('ERROR: ' + (e?.message || String(e)));
       });
-    }, 350);
+    }, 350, 'main');
   }
 
   if (document.readyState === 'loading') {
@@ -11451,6 +11552,7 @@
           setStatus('Запущен');
           Utils.reportToCreator('Flag', 'Started');
           MoswarLib.events.emit('module:status', { id: 'flag', status: 'started' });
+          ModuleSessionRegistry.restartIntervals('flag');
           tick(); // Run immediately
       };
       bPause.onclick = () => {
@@ -11465,6 +11567,7 @@
           botPaused = false;
           updateButtons();
           setStatus('Остановлен');
+          ModuleSessionRegistry.clearIntervals('flag');
           Utils.reportToCreator('Flag', 'Stopped');
           MoswarLib.events.emit('module:status', { id: 'flag', status: 'stopped' });
       };
@@ -11475,6 +11578,7 @@
               botPaused = false;
               updateButtons();
               setStatus('Остановлен');
+              ModuleSessionRegistry.clearIntervals('flag');
           },
           onPause: () => {
               if (!botEnabled) return;
@@ -11487,7 +11591,7 @@
       // Initialize button state from storage
       updateButtons();
 
-      setInterval(tick, CFG.TICK_MS);
+      ModuleSessionRegistry.trackInterval('flag', tick, CFG.TICK_MS, 'main');
   },
 
   satellite: function() {
@@ -12024,8 +12128,7 @@
       }
 
       function startLiveCounter() {
-          if (liveTimerId) clearInterval(liveTimerId);
-          liveTimerId = setInterval(() => {
+          liveTimerId = ModuleSessionRegistry.trackInterval('satellite', () => {
               if (!lastSnapshot || !botRunning || botPaused) return;
               const elapsed = (Date.now() - lastSnapshot.ts) / 1000;
               updateDashboard({
@@ -12033,7 +12136,7 @@
                   currentDetails: lastSnapshot.baseDetails + lastSnapshot.income * elapsed,
                   estimatedEta: lastSnapshot.estimatedEta > 0 ? Math.max(0, lastSnapshot.estimatedEta - elapsed) : 0
               });
-          }, 500);
+          }, 500, 'live');
       }
 
       function createUI() {
@@ -12165,7 +12268,8 @@
           botPaused = false;
           localStorage.setItem(LS_RUNNING, '1');
           localStorage.setItem(LS_PAUSED, '0');
-          if (!timerId) timerId = setInterval(satTick, 1000);
+          if (!timerId) timerId = ModuleSessionRegistry.trackInterval('satellite', satTick, 1000, 'tick');
+          ModuleSessionRegistry.restartIntervals('satellite');
           setStatus('Работает');
           updateButtonsVisual();
           startLiveCounter();
@@ -12189,8 +12293,9 @@
           botPaused = false;
           localStorage.setItem(LS_RUNNING, '0');
           localStorage.setItem(LS_PAUSED, '0');
-          if (timerId) { clearInterval(timerId); timerId = null; }
-          if (liveTimerId) { clearInterval(liveTimerId); liveTimerId = null; }
+          ModuleSessionRegistry.clearIntervals('satellite');
+          timerId = null;
+          liveTimerId = null;
           loopBusy = false;
           setStatus('Остановлен');
           updateButtonsVisual();
@@ -14309,6 +14414,7 @@ utils_.init();
                   _group.saveSettings();
                   _group.setStatus('🚀 Запущен ОМОН');
                   _group.addLog('ОМОН запущен');
+                  ModuleSessionRegistry.restartIntervals('omon');
                   refreshStartButtonStyle();
               };
 
@@ -14317,6 +14423,7 @@ utils_.init();
                   _group.saveSettings();
                   _group.setStatus('⛔ Остановлен ОМОН');
                   _group.addLog('ОМОН остановлен');
+                  ModuleSessionRegistry.clearIntervals('omon');
                   refreshStartButtonStyle();
               };
 
@@ -14325,6 +14432,7 @@ utils_.init();
                       _group.settings.enabled = false;
                       _group.saveSettings();
                       _group.setStatus('⛔ Остановлен ОМОН');
+                      ModuleSessionRegistry.clearIntervals('omon');
                       refreshStartButtonStyle();
                   }
               });
@@ -14337,7 +14445,7 @@ utils_.init();
               }
           }
 
-          setInterval(() => _group.man(), 1000);
+          ModuleSessionRegistry.trackInterval('omon', () => _group.man(), 1000, 'main');
 
           if (document.readyState === 'loading') {
               document.addEventListener('DOMContentLoaded', createUI);
@@ -15039,6 +15147,7 @@ utils_.init();
       
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
+          ModuleSessionRegistry.restartIntervals('omniscience');
           return;
       }
 
@@ -15114,7 +15223,10 @@ utils_.init();
           document.body.appendChild(panel);
           Utils.attachPanelChrome(panel.firstElementChild, 'omniscience');
           ModuleSessionRegistry.register('omniscience', {
-              onAbort: () => { if (typeof hidePanel === 'function') hidePanel('omniscience'); }
+              onAbort: () => {
+                  ModuleSessionRegistry.clearIntervals('omniscience');
+                  if (typeof hidePanel === 'function') hidePanel('omniscience');
+              }
           });
           console.log('[Omniscience] Панель создана');
 
@@ -15381,13 +15493,13 @@ utils_.init();
           };
 
           // Периодическая проверка вместо MutationObserver
-          setInterval(() => {
+          ModuleSessionRegistry.trackInterval('omniscience', () => {
               try {
                   updateAbilities();
               } catch(e) {
                   console.error('[Omniscience] Ошибка обновления:', e);
               }
-          }, 1500);
+          }, 1500, 'main');
 
           // Обработка клика на строку модуля в меню - сворачивание/разворачивание панели
           const observerMenu = new MutationObserver(() => {
