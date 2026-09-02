@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.4.9
+// @version      2.5.0
 // @author       MyWay DeN
-// @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Фу-Баги, ОМОН, Око Провидения
+// @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
@@ -604,6 +604,7 @@
       { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.11' },
+      { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
@@ -989,6 +990,43 @@
   .mw-mod-icon img { width:75%; height:75%; object-fit:contain; pointer-events:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
   .mw-mod-icon img.mirrorY { transform: scaleX(-1); }
 
+  .mw-mod-icon .tcshop-ico {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      overflow: hidden;
+      border-radius: 50%;
+      display: block;
+  }
+  .mw-mod-icon .tcshop-ico .tcshop-pers {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 26px;
+      transform: translate(-50%, -50%);
+      object-fit: contain;
+      object-position: center bottom;
+      background: transparent url(/@/images/pers/man10.png) no-repeat center bottom;
+      background-size: contain;
+      filter: none;
+      z-index: 2;
+  }
+  .mw-mod-icon .tcshop-ico .tcshop-gun,
+  .mw-mod-icon .tcshop-ico .tcshop-val,
+  .mw-mod-icon .tcshop-ico .tcshop-mix,
+  .mw-mod-icon .tcshop-ico .tcshop-mask {
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      z-index: 3;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.65));
+  }
+  .mw-mod-icon .tcshop-ico .tcshop-gun { left: 5px; top: 5px; }
+  .mw-mod-icon .tcshop-ico .tcshop-val { right: 5px; top: 5px; left: auto; }
+  .mw-mod-icon .tcshop-ico .tcshop-mix { left: 5px; bottom: 5px; top: auto; }
+  .mw-mod-icon .tcshop-ico .tcshop-mask { right: 5px; bottom: 5px; top: auto; left: auto; }
+
   .mw-mod-label {
       flex:1; opacity:0.9; white-space:nowrap; overflow:hidden;
       font-weight:500; font-size:13px; letter-spacing:0.3px;
@@ -1209,21 +1247,36 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 
+  @keyframes pulse-mw-start {
+      0%, 100% { background: rgba(60, 200, 110, 0.28); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 10px rgba(100, 255, 150, 0.25); }
+      50% { background: rgba(60, 220, 120, 0.7); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 22px rgba(100, 255, 150, 0.65); }
+  }
+  @keyframes pulse-mw-pause {
+      0%, 100% { background: rgba(255, 190, 70, 0.28); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 10px rgba(255, 200, 100, 0.25); }
+      50% { background: rgba(255, 200, 80, 0.7); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 22px rgba(255, 200, 100, 0.65); }
+  }
+
   /* Start Button - Green tint */
   .mw-btn[id$="-start"]:hover,
   .mw-btn:active:has(+ .mw-btn[id$="-pause"]),
   .mw-btn.active-start {
-      background: rgba(100, 255, 150, 0.15);
-      border-color: rgba(100, 255, 150, 0.4);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(100, 255, 150, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      background: rgba(60, 200, 110, 0.35);
+      border-color: rgba(100, 255, 150, 0.7);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(100, 255, 150, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  .mw-btn.active-start {
+      animation: pulse-mw-start 1.2s infinite;
   }
 
   /* Pause Button - Yellow/Orange tint */
   .mw-btn[id$="-pause"]:hover,
   .mw-btn.active-pause {
-      background: rgba(255, 200, 100, 0.15);
-      border-color: rgba(255, 200, 100, 0.4);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(255, 200, 100, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      background: rgba(255, 200, 100, 0.25);
+      border-color: rgba(255, 200, 100, 0.55);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(255, 200, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  .mw-btn.active-pause {
+      animation: pulse-mw-pause 1.2s infinite;
   }
 
   /* Stop Button - Red tint */
@@ -1364,6 +1417,7 @@
       'uluchshator': 'assistant-container',
       'flag': 'flag-panel',
       'fulldope': 'fulldope-modal',
+      'tcshop': 'tcshop-panel',
       'omon': 'omon-panel',
       'omniscience': 'mw-omniscience-panel'
   };
@@ -1622,6 +1676,7 @@
               'dungeon': 'dg-stop',
               'satellite': 'sat-stop',
               'flag': 'flag-stop',
+              'tcshop': 'tcshop-stop',
               'omon': 'omon-stop',
               'omniscience': 'omniscience-stop-btn'
           };
@@ -13463,6 +13518,1155 @@ utils_.init();
       })();
 //# sourceMappingURL=bundle.js.map
 },
+  tcshop: function() {
+      if (document.getElementById('tcshop-panel')) return;
+      console.log('[MODULE_tcshop] v1.9');
+
+      const LS_QTY = 'mw_tcshop_qty_v2';
+      const LS_QTY_OLD = 'mw_tcshop_qty_v1';
+      const LS_CFG = 'mw_tcshop_cfg_v1';
+      const LS_EXTRA = 'mw_tcshop_extra_v2';
+      const LS_RUN = 'mw_tcshop_run_v1';
+      const LS_LOG = 'mw_tcshop_log_v1';
+      const MIX_ID = '51';
+      const MIX_PRICE = 100;
+      const STAT6 = ['Здоровье', 'Сила', 'Ловкость', 'Выносливость', 'Хитрость', 'Внимательность'];
+      const PAY_RU = { honey: 'мёд', neft: 'нефть', ruda: 'руда', tugriki: 'тугр.', power_points: 'ОС', mixed: 'смесь' };
+
+      function six(startId, title, imgs, pay, price) {
+          return STAT6.map((st, i) => ({
+              id: String(startId + i),
+              name: title + ' +' + st,
+              img: '/@/images/obj/drugs' + imgs[i] + '.png',
+              pay: pay,
+              price: price,
+              section: 'pharmacy',
+              kind: 'buy'
+          }));
+      }
+      function seq(from, n) {
+          return Array.from({ length: n }, (_, i) => from + i);
+      }
+      function gift(id, name, img, pay, price) {
+          const src = String(img).indexOf('/') === 0 ? img : ('/@/images/obj/' + img);
+          return { id: String(id), name: name, img: src, pay: pay, price: price, section: 'gifts', kind: 'present' };
+      }
+
+      const BUILTIN = []
+          .concat([
+              { id: '53', name: 'Волшебный творожок', img: '/@/images/obj/drugs2.png', pay: 'honey', price: 9, section: 'pharmacy', kind: 'buy' },
+              { id: '52', name: 'Пяни', img: '/@/images/obj/drugs3.png', pay: 'honey', price: 9, section: 'pharmacy', kind: 'buy' }
+          ])
+          .concat(six(12377, 'Пончик', seq(290, 6), 'neft', 200))
+          .concat(six(7882, 'Чупа-чупс', seq(252, 6), 'neft', 80))
+          .concat(six(5860, 'Трубочка с кремом', [238, 235, 237, 239, 234, 236], 'neft', 55))
+          .concat(six(5853, 'Ментос', [244, 240, 243, 245, 241, 242], 'ruda', 22))
+          .concat([
+              { id: '3898', name: 'Фруктовая корзинка +Выносливость', img: '/@/images/obj/drugs233.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' },
+              { id: '3899', name: 'Фруктовая корзинка +Хитрость', img: '/@/images/obj/drugs229.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' },
+              { id: '3900', name: 'Фруктовая корзинка +Внимательность', img: '/@/images/obj/drugs230.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' },
+              { id: '3907', name: 'Фруктовая корзинка +Здоровье', img: '/@/images/obj/drugs232.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' },
+              { id: '3908', name: 'Фруктовая корзинка +Сила', img: '/@/images/obj/drugs228.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' },
+              { id: '3909', name: 'Фруктовая корзинка +Ловкость', img: '/@/images/obj/drugs231.png', pay: 'neft', price: 50, section: 'pharmacy', kind: 'buy' }
+          ])
+          .concat(six(3901, 'Жевательный червячок', [226, 222, 225, 227, 223, 224], 'ruda', 20))
+          .concat(six(3596, 'Иностранная жвачка', [208, 204, 207, 209, 205, 206], 'neft', 45))
+          .concat(six(3602, 'Отечественная жвачка', [214, 210, 213, 215, 211, 212], 'ruda', 18))
+          .concat(six(3333, 'Вкусный единорожек', seq(180, 6), 'neft', 40))
+          .concat(six(3339, 'Эклер', seq(186, 6), 'ruda', 16))
+          .concat(six(3240, 'Шоколадные плитки', seq(167, 6), 'neft', 30))
+          .concat(six(3246, 'Розочка', seq(173, 6), 'ruda', 12))
+          .concat(six(3060, 'Рулеты', [163, 165, 161, 166, 164, 162], 'neft', 25))
+          .concat(six(3054, 'Кругляши', [157, 159, 155, 160, 158, 156], 'ruda', 9))
+          .concat(six(2609, 'Пралинетки', [142, 146, 143, 141, 145, 144], 'ruda', 3))
+          .concat(six(84, 'Жвачка', seq(6, 6), 'ruda', 12))
+          .concat([
+              { id: '51', name: 'Микстура', img: '/@/images/obj/drugs4.png', pay: 'tugriki', price: 100, section: 'pharmacy', kind: 'buy' },
+              { id: '83', name: 'Сироп', img: '/@/images/obj/drugs5.png', pay: 'tugriki', price: 50, section: 'pharmacy', kind: 'buy' }
+          ])
+          .concat([
+              gift(11131, 'Собака-сопротивляка', 'gift237.png', 'tugriki', 100000),
+              gift(11129, 'Асенькин цветочек', 'gift236.png', 'ruda', 1000),
+              gift(11130, 'Вам телеграмчик!', 'gift235.png', 'neft', 1000),
+              gift(10274, 'Кроличья... а впрочем, кролик целиком', 'luck1.png', 'ruda', 1500),
+              gift(10275, 'Лампа с Джинном или Коньяком на худой конец', 'luck2.png', 'mixed', '2500р+500н'),
+              gift(10276, 'След Йети или дяди Вовы', 'luck3.png', 'mixed', '3500р+1500н'),
+              gift(10277, 'Шапка Ахалай Махалаевича', 'luck5.png', 'mixed', '4500р+2000н'),
+              gift(3351, 'Валуйки «Heavy Edition»', 'gift166.png', 'mixed', '40р+100н'),
+              gift(309, 'Валуйки', 'gift49.png', 'ruda', 10),
+              gift(793, 'Легомэн', 'gift84.png', 'tugriki', 1500),
+              gift(794, 'Чашка кофе', 'gift83.png', 'tugriki', 1500),
+              gift(795, 'Телескоп', 'gift85.png', 'tugriki', 1500),
+              gift(1094, 'Бодрящий коктейль', 'gift101.png', 'tugriki', 1500),
+              gift(3921, 'Чай в подстаканнике', 'gift173.png', 'tugriki', 1500),
+              gift(670, 'Респиратор', 'gift74.png', 'ruda', 9),
+              gift(671, 'Противогаз', 'gift75.png', 'ruda', 9),
+              gift(5640, 'Чудесная ромашка', 'git160.png', 'honey', 2),
+              gift(765, 'Малиновый торт', 'gift80.png', 'tugriki', 1000),
+              gift(770, 'Вечная ипотека', 'gift78.png', 'tugriki', 2000),
+              gift(773, 'Поэзия гербер', 'gift77.png', 'tugriki', 1000),
+              gift(3912, 'Злой зелёный баг', 'gift172.png', 'mixed', '100т+10р'),
+              gift(3913, 'Маленький совёнок', 'gift174.png', 'mixed', '1500т+15р'),
+              gift(3914, 'Кожаная плетка', 'gift175.png', 'ruda', 10),
+              gift(329, 'Долой!', 'gift51.png', 'honey', 5),
+              gift(1331, 'Мохито', 'gift148.png', 'ruda', 2),
+              gift(1332, 'Сарделька', 'gift144.png', 'ruda', 2),
+              gift(1333, 'Чемоданное настроение', 'gift147.png', 'ruda', 2),
+              gift(1334, 'Красная панда', 'gift145.png', 'ruda', 2),
+              gift(3910, 'Белая ленточка', 'gift170.png', 'mixed', '1000т+5р'),
+              gift(3919, 'Букет лилий', 'gift180.png', 'ruda', 15),
+              gift(3920, 'Букетик ирисов', 'gift181.png', 'ruda', 5),
+              gift(1047, 'Наручники', 'gift126.png', 'mixed', '500т+5р'),
+              gift(1049, 'Трусики «Хэллоу Банни»', 'gift123.png', 'mixed', '500т+5р'),
+              gift(1050, 'Пингви', 'gift120.png', 'tugriki', 1000),
+              gift(2879, 'Ну почему?', 'gifts/why2.png', 'honey', 1),
+              gift(2880, 'Будь мужиком!', 'gifts/bud2.png', 'honey', 1),
+              gift(2881, 'Проблемы?', 'gifts/trol2.png', 'honey', 1),
+              gift(2882, 'Ну ладно', 'gifts/okay2.png', 'honey', 1),
+              gift(2883, 'А-а-а-а-а-а-а!', 'gifts/fuu2.png', 'honey', 1),
+              gift(2884, 'В восторге!', 'gifts/tears2.png', 'honey', 1),
+              gift(2885, 'Да мне пофиг!', 'gifts/pofig2.png', 'honey', 1),
+              gift(2886, 'Пришел, увидел, победил!', 'gifts/yeah2.png', 'honey', 1),
+              gift(2950, 'Всегда одинок', 'gifts/forever-alone.png', 'honey', 1),
+              gift(3916, 'Подброшенный бюстгальтер', 'gift177.png', 'mixed', '500т+5р'),
+              gift(55, 'Плюшевый мишка', 'gift5.png', 'ruda', 5),
+              gift(56, 'Сердечко', 'gift2.png', 'honey', 15),
+              gift(206, 'Тэдди Бир', 'gift28.png', 'honey', 10),
+              gift(208, 'Миллион алых роз', 'gift32.png', 'honey', 10),
+              gift(308, 'Зажигалка «Зикко»', 'gift46.png', 'honey', 10),
+              gift(854, 'Приятная посылка', 'gift86.png', 'ruda', 3),
+              gift(855, 'Ямайка-майка', 'gift87.png', 'tugriki', 1000),
+              gift(856, 'Вантус', 'gift88.png', 'ruda', 3),
+              gift(857, 'Веер', 'gift89.png', 'ruda', 5),
+              gift(858, 'Подлые кости', 'gift90.png', 'tugriki', 1000),
+              gift(859, 'Противорадиационный кактус', 'gift91.png', 'tugriki', 1000),
+              gift(860, 'Шампанское', 'gift92.png', 'ruda', 5),
+              gift(861, 'Серп и молот', 'gift93.png', 'ruda', 5),
+              gift(862, 'Шильдик с харлея', 'gift94.png', 'ruda', 5),
+              gift(863, 'Пацифик', 'gift95.png', 'ruda', 7),
+              gift(864, 'Инь-Ян', 'gift96.png', 'ruda', 7),
+              gift(1048, 'Тюльпаны', 'gift122.png', 'tugriki', 1500),
+              gift(3911, 'Плюшевый щенок', 'gift171.png', 'mixed', '300т+3р'),
+              gift(3917, 'Игрушечная машинка', 'gift178.png', 'mixed', '100т+3р'),
+              gift(3918, 'Косметичка', 'gift179.png', 'mixed', '3000т+3р'),
+              gift(54, 'Роза', 'gift3.png', 'ruda', 5),
+              gift(57, 'Черная метка', 'gift4.png', 'ruda', 5),
+              gift(58, 'Кружка пива', 'gift1.png', 'honey', 5),
+              gift(766, 'Чемодан денег', 'gift81.png', 'ruda', 5),
+              gift(767, 'Радость соседей', 'gift79.png', 'ruda', 7),
+              gift(774, 'Желтые тюльпаны', 'gift76.png', 'ruda', 7),
+              gift(776, 'Загадочные фиолетики', 'gift82.png', 'ruda', 3),
+              gift(1051, 'Пудреница', 'gift119.png', 'mixed', '200т+3р'),
+              gift(1052, 'Розовый фламинго', 'gift125.png', 'tugriki', 1000),
+              gift(1053, 'Птенчик', 'gift124.png', 'tugriki', 1000),
+              gift(330, 'Шарике!', 'gift55.png', 'ruda', 2),
+              gift(331, 'Шарике!', 'gift56.png', 'ruda', 2),
+              gift(332, 'Шарике!', 'gift57.png', 'ruda', 2),
+              gift(353, 'Фом-фингер', 'gift66.png', 'honey', 5),
+              gift(1095, 'Крабс', 'gift128.png', 'tugriki', 1000),
+              gift(1096, 'Пчелка', 'gift100.png', 'tugriki', 1000),
+              gift(10394, 'Злой Гений', 'gifts/newbad1.png', 'power_points', 800),
+              gift(10395, 'Очень ч0рная Метка', 'gifts/newbad2.png', 'power_points', 1500),
+              gift(77, 'Заяц несудьбы', 'gift6.png', 'honey', 10),
+              gift(3915, 'Вуглускр', 'gift176.png', 'mixed', '1500т+5р'),
+              gift(1046, 'Мимоза', 'gift127.png', 'tugriki', 500)
+          ]);
+
+      function loadJson(key, fallback) {
+          try {
+              const v = JSON.parse(localStorage.getItem(key) || 'null');
+              return v && typeof v === 'object' ? v : fallback;
+          } catch (e) { return fallback; }
+      }
+      function saveJson(key, val) {
+          try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+      }
+
+      function itemKey(it) {
+          return String(it.section || 'pharmacy') + ':' + String(it.id);
+      }
+
+      function loadExtra() {
+          const v = loadJson(LS_EXTRA, null);
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+              return {
+                  pharmacy: (v.pharmacy && typeof v.pharmacy === 'object' && !Array.isArray(v.pharmacy)) ? v.pharmacy : {},
+                  gifts: (v.gifts && typeof v.gifts === 'object' && !Array.isArray(v.gifts)) ? v.gifts : {}
+              };
+          }
+          return { pharmacy: {}, gifts: {} };
+      }
+
+      function migrateQty(raw) {
+          const out = {};
+          const byId = Object.create(null);
+          BUILTIN.forEach((it) => {
+              if (!byId[it.id]) byId[it.id] = [];
+              if (byId[it.id].indexOf(it.section) < 0) byId[it.id].push(it.section);
+          });
+          Object.keys(raw || {}).forEach((k) => {
+              const n = parseInt(raw[k], 10) || 0;
+              if (n <= 0) return;
+              if (k.indexOf(':') >= 0) {
+                  out[k] = n;
+                  return;
+              }
+              const secs = byId[k] || [];
+              if (secs.length === 1) out[secs[0] + ':' + k] = n;
+          });
+          return out;
+      }
+
+      let qtyMap = loadJson(LS_QTY, null);
+      if (!qtyMap || typeof qtyMap !== 'object' || Array.isArray(qtyMap)) {
+          qtyMap = migrateQty(loadJson(LS_QTY_OLD, {}));
+          saveJson(LS_QTY, qtyMap);
+      } else {
+          qtyMap = migrateQty(qtyMap);
+      }
+      let cfg = Object.assign({ allowHoney: false, tab: 'pharmacy', onlyPicked: false, q: '', minimized: false }, loadJson(LS_CFG, {}));
+      if (cfg.tab !== 'gifts' && cfg.tab !== 'pharmacy') cfg.tab = 'pharmacy';
+      let extraBySection = loadExtra();
+
+      function catalog() {
+          const byKey = Object.create(null);
+          BUILTIN.forEach((it) => { byKey[itemKey(it)] = Object.assign({}, it); });
+          ['pharmacy', 'gifts'].forEach((sec) => {
+              const bag = extraBySection[sec] || {};
+              Object.keys(bag).forEach((id) => {
+                  const it = bag[id];
+                  if (!it) return;
+                  const row = Object.assign({}, it, {
+                      id: String(id),
+                      section: sec,
+                      kind: sec === 'gifts' ? 'present' : 'buy'
+                  });
+                  const k = itemKey(row);
+                  byKey[k] = Object.assign({}, byKey[k] || {}, row, { section: sec, kind: row.kind });
+              });
+          });
+          return Object.keys(byKey).map((k) => byKey[k]);
+      }
+
+      function getQty(it) {
+          const k = itemKey(it);
+          if (Object.prototype.hasOwnProperty.call(qtyMap, k)) return parseInt(qtyMap[k], 10) || 0;
+          return 0;
+      }
+
+      function setQtyLeft(job, left) {
+          const k = String(job.section) + ':' + String(job.id);
+          left = Math.max(0, parseInt(left, 10) || 0);
+          if (left <= 0) delete qtyMap[k];
+          else qtyMap[k] = left;
+          saveJson(LS_QTY, qtyMap);
+      }
+
+      function loadRun() {
+          const r = loadJson(LS_RUN, null);
+          if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+          return r;
+      }
+
+      function saveRun(run) {
+          try { localStorage.setItem(LS_RUN, JSON.stringify(run)); } catch (e) {}
+      }
+
+      function clearRun() {
+          try { localStorage.removeItem(LS_RUN); } catch (e) {}
+      }
+
+      let runState = loadRun();
+
+      function persistRun() {
+          if (!runState || !runState.running) return;
+          runState.ts = Date.now();
+          saveRun(runState);
+      }
+
+      const logEntries = (function () {
+          const raw = loadJson(LS_LOG, null);
+          return Array.isArray(raw) ? raw.slice(-60) : [];
+      })();
+
+      const sess = Utils.createModuleSessionControl({
+          moduleId: 'tcshop',
+          onAbort: () => {
+              if (runState) {
+                  runState.running = false;
+                  runState.paused = false;
+                  saveRun(runState);
+              }
+              clearRun();
+              runState = null;
+              paintButtons();
+              logLine('Стоп');
+          },
+          onPause: (paused) => {
+              if (runState) {
+                  runState.paused = !!paused;
+                  runState.running = true;
+                  persistRun();
+              }
+              paintButtons();
+              logLine(paused ? 'Пауза' : 'Продолжаю');
+          }
+      });
+
+      const ui = Utils.createPanel('tcshop-panel', '🛒 Закупка ТЦ', { moduleId: 'tcshop' });
+      if (!ui) return;
+      ui.panel.style.width = '430px';
+      if (cfg.minimized) ui.panel.classList.add('mw-panel-hidden');
+      try {
+          new MutationObserver(() => {
+              const hidden = ui.panel.classList.contains('mw-panel-hidden');
+              if (!!cfg.minimized !== hidden) {
+                  cfg.minimized = hidden;
+                  saveCfg();
+              }
+          }).observe(ui.panel, { attributes: true, attributeFilter: ['class'] });
+      } catch (e) {}
+      const body = ui.body;
+
+      function paintLog() {
+          const box = document.getElementById('tcshop-log');
+          if (!box) return;
+          box.innerHTML = logEntries.map((l) => '<div>' + String(l).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</div>').join('');
+          box.scrollTop = box.scrollHeight;
+      }
+
+      function logLine(msg) {
+          const t = new Date().toLocaleTimeString();
+          logEntries.push('[' + t + '] ' + msg);
+          if (logEntries.length > 60) logEntries.splice(0, logEntries.length - 60);
+          saveJson(LS_LOG, logEntries);
+          paintLog();
+          console.log('[tcshop]', msg);
+      }
+
+      function saveCfg() { saveJson(LS_CFG, cfg); }
+      function saveQty() { saveJson(LS_QTY, qtyMap); }
+
+      function payOfCard(li) {
+          const pays = [];
+          if (li.querySelector('.med')) pays.push('honey');
+          if (li.querySelector('.neft')) pays.push('neft');
+          if (li.querySelector('.ruda')) pays.push('ruda');
+          if (li.querySelector('.tugriki')) pays.push('tugriki');
+          if (li.querySelector('.power_points')) pays.push('power_points');
+          if (pays.length > 1) return 'mixed';
+          return pays[0] || '';
+      }
+
+      function pageSection() {
+          const path = (location.pathname || '').replace(/\/+$/, '');
+          if (path.indexOf('/shop/section/pharmacy') === 0) return 'pharmacy';
+          if (path.indexOf('/shop/section/gifts') === 0) return 'gifts';
+          return '';
+      }
+
+      function scanPage() {
+          const urlSec = pageSection();
+          const found = [];
+          document.querySelectorAll('#content.shop ul.objects.shop-objects > li.object[rel], #content ul.objects.shop-objects > li.object[rel]').forEach((li) => {
+              const id = (li.getAttribute('rel') || '').trim();
+              if (!id) return;
+              const onclick = ((li.querySelector('.actions span.f, .button span.f') || {}).getAttribute('onclick') || '');
+              const kind = /type\s*:\s*['"]present['"]/.test(onclick) ? 'present' : (/type\s*:\s*['"]buy['"]/.test(onclick) ? 'buy' : '');
+              let section = '';
+              if (kind === 'present') section = 'gifts';
+              else if (kind === 'buy') section = 'pharmacy';
+              else section = urlSec;
+              if (!section) return;
+              if (urlSec && section !== urlSec) return;
+              const nameEl = li.querySelector('h2');
+              const imgEl = li.querySelector('img');
+              found.push({
+                  id: id,
+                  name: nameEl ? nameEl.textContent.replace(/\s+/g, ' ').trim() : ('#' + id),
+                  img: imgEl ? imgEl.getAttribute('src') : '',
+                  pay: payOfCard(li),
+                  price: '',
+                  section: section,
+                  kind: kind || (section === 'gifts' ? 'present' : 'buy')
+              });
+          });
+          if (!found.length) return 0;
+          const grouped = { pharmacy: {}, gifts: {} };
+          found.forEach((it) => { grouped[it.section][it.id] = it; });
+          if (Object.keys(grouped.pharmacy).length) extraBySection.pharmacy = grouped.pharmacy;
+          if (Object.keys(grouped.gifts).length) extraBySection.gifts = grouped.gifts;
+          saveJson(LS_EXTRA, extraBySection);
+          return found.length;
+      }
+
+      function pickedCount() {
+          return catalog().filter((it) => getQty(it) > 0).length;
+      }
+
+      function renderList() {
+          const wrap = document.getElementById('tcshop-list');
+          if (!wrap) return;
+          const q = (cfg.q || '').toLowerCase().trim();
+          const items = catalog().filter((it) => {
+              if (it.section !== cfg.tab) return false;
+              if (cfg.tab === 'gifts' && it.kind !== 'present') return false;
+              if (cfg.tab === 'pharmacy' && it.kind === 'present') return false;
+              if (cfg.onlyPicked && getQty(it) <= 0) return false;
+              if (q && (it.name || '').toLowerCase().indexOf(q) < 0) return false;
+              return true;
+          });
+          wrap.innerHTML = items.map((it) => {
+              const n = getQty(it);
+              const pay = PAY_RU[it.pay] || it.pay || '';
+              const honeyMark = it.pay === 'honey' ? ' <span style="color:#f6c">мёд</span>' : '';
+              const img = it.img ? `<img src="${it.img}" alt="" style="width:28px;height:28px;object-fit:contain;flex-shrink:0;">` : '';
+              return `<div class="tcshop-row" data-id="${it.id}" data-section="${it.section}" style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+                  ${img}
+                  <div style="flex:1;min-width:0;line-height:1.25;">
+                      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}</div>
+                      <div style="opacity:0.7;font-size:10px;">${pay}${it.price ? ' ' + it.price : ''}${honeyMark}</div>
+                  </div>
+                  <input class="tcshop-qty" data-id="${it.id}" data-section="${it.section}" type="number" min="0" step="1" value="${n}" style="width:64px;padding:3px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.35);color:#fff;">
+              </div>`;
+          }).join('') || '<div style="opacity:0.6;padding:8px 0;">Ничего не найдено</div>';
+          wrap.querySelectorAll('.tcshop-qty').forEach((inp) => {
+              inp.addEventListener('change', onQty);
+              inp.addEventListener('keyup', onQty);
+          });
+          const sum = document.getElementById('tcshop-picked');
+          if (sum) sum.textContent = String(pickedCount());
+      }
+
+      function onQty(e) {
+          const id = e.target.getAttribute('data-id');
+          const section = e.target.getAttribute('data-section') || cfg.tab || 'pharmacy';
+          let n = parseInt(e.target.value, 10);
+          if (isNaN(n) || n < 0) n = 0;
+          n = Math.floor(n);
+          const k = section + ':' + id;
+          if (n === 0) delete qtyMap[k];
+          else qtyMap[k] = n;
+          saveQty();
+          const sum = document.getElementById('tcshop-picked');
+          if (sum) sum.textContent = String(pickedCount());
+      }
+
+      function paintButtons() {
+          const start = document.getElementById('tcshop-start');
+          const pause = document.getElementById('tcshop-pause');
+          const stop = document.getElementById('tcshop-stop');
+          const live = !!(sess.session.running && !sess.session.aborted);
+          const paused = live ? !!sess.session.paused : !!(runState && runState.running && runState.paused);
+          const working = live && !sess.session.paused;
+          if (start) {
+              start.className = 'mw-btn' + (working ? ' active-start' : '');
+              start.textContent = working ? '▶ Работает' : (paused ? '▶ Продолжить' : '▶ Старт');
+          }
+          if (pause) {
+              pause.className = 'mw-btn' + (paused ? ' active-pause' : '');
+              pause.textContent = paused ? '▶ Дальше' : '⏸ Пауза';
+          }
+          if (stop) stop.className = 'mw-btn';
+      }
+
+      body.innerHTML = `
+          <div style="display:flex;gap:4px;margin-bottom:8px;">
+              <button id="tcshop-start" class="mw-btn">▶ Старт</button>
+              <button id="tcshop-pause" class="mw-btn">⏸ Пауза</button>
+              <button id="tcshop-stop" class="mw-btn">⏹ Стоп</button>
+          </div>
+          <div style="display:flex;gap:4px;margin-bottom:8px;">
+              <button id="tcshop-tab-pharmacy" class="tcshop-tab" data-tab="pharmacy" style="flex:1;padding:5px;border-radius:6px;">Киоск</button>
+              <button id="tcshop-tab-gifts" class="tcshop-tab" data-tab="gifts" style="flex:1;padding:5px;border-radius:6px;">Подарки</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;">
+              <input type="checkbox" id="tcshop-honey"> Можно тратить мёд
+          </label>
+          <div style="font-size:11px;opacity:0.8;margin-bottom:6px;">В строке — сколько купить (любое число, 0 = не брать). Выбрано: <b id="tcshop-picked">0</b></div>
+          <input id="tcshop-search" type="text" placeholder="Поиск по названию..." style="width:100%;box-sizing:border-box;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.35);color:#fff;margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;font-size:11px;">
+              <input type="checkbox" id="tcshop-only"> Только с количеством
+          </label>
+          <div style="display:flex;gap:4px;margin-bottom:6px;">
+              <button id="tcshop-scan" style="flex:1;padding:4px;border-radius:6px;font-size:11px;">Считать витрину</button>
+              <button id="tcshop-tug2mix" style="flex:1;padding:4px;border-radius:6px;font-size:11px;">Тугри → микстуры</button>
+              <button id="tcshop-clear" style="padding:4px 8px;border-radius:6px;font-size:11px;">Сброс</button>
+          </div>
+          <div id="tcshop-list" style="max-height:260px;overflow:auto;margin-bottom:8px;"></div>
+          <div id="tcshop-log" style="max-height:140px;overflow:auto;font-size:11px;opacity:0.9;border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;"></div>
+      `;
+
+      function paintTabs() {
+          body.querySelectorAll('.tcshop-tab').forEach((b) => {
+              const on = b.getAttribute('data-tab') === cfg.tab;
+              b.style.background = on ? 'rgba(80,140,255,0.45)' : '';
+              b.style.fontWeight = on ? '700' : '';
+          });
+      }
+
+      document.getElementById('tcshop-honey').checked = !!cfg.allowHoney;
+      document.getElementById('tcshop-only').checked = !!cfg.onlyPicked;
+      document.getElementById('tcshop-search').value = cfg.q || '';
+      paintTabs();
+      renderList();
+      paintLog();
+
+      document.getElementById('tcshop-honey').onchange = (e) => { cfg.allowHoney = !!e.target.checked; saveCfg(); };
+      document.getElementById('tcshop-only').onchange = (e) => { cfg.onlyPicked = !!e.target.checked; saveCfg(); renderList(); };
+      document.getElementById('tcshop-search').oninput = (e) => { cfg.q = e.target.value || ''; saveCfg(); renderList(); };
+      body.querySelectorAll('.tcshop-tab').forEach((b) => {
+          b.onclick = () => { cfg.tab = b.getAttribute('data-tab'); saveCfg(); paintTabs(); renderList(); };
+      });
+      document.getElementById('tcshop-scan').onclick = () => {
+          const n = scanPage();
+          if (!n) logLine('Откройте Киоск или Подарки и нажмите ещё раз');
+          else { logLine('С витрины: ' + n + ' шт.'); renderList(); }
+      };
+      document.getElementById('tcshop-clear').onclick = () => {
+          qtyMap = {};
+          saveQty();
+          renderList();
+          logLine('Числа сброшены');
+      };
+      document.getElementById('tcshop-tug2mix').onclick = () => { convertTugToMix(); };
+
+      let ox = 0, oy = 0, drag = false;
+      ui.panel.addEventListener('mousedown', (e) => {
+          if (e.target.closest('button') || e.target.closest('input') || e.target.closest('#tcshop-list')) return;
+          drag = true;
+          ox = e.clientX - ui.panel.offsetLeft;
+          oy = e.clientY - ui.panel.offsetTop;
+      });
+      document.addEventListener('mousemove', (e) => {
+          if (!drag) return;
+          ui.panel.style.left = (e.clientX - ox) + 'px';
+          ui.panel.style.top = (e.clientY - oy) + 'px';
+      });
+      document.addEventListener('mouseup', () => { drag = false; });
+
+      async function pause(a, b) {
+          const ms = a + Math.floor(Math.random() * Math.max(1, (b - a)));
+          await sess.sleep(ms);
+          await sess.waitWhilePaused();
+      }
+
+      function normPath(p) {
+          return String(p || '').replace(/\/+$/, '') || '/';
+      }
+
+      function unlockNav() {
+          try {
+              if (typeof MoswarLib !== 'undefined' && MoswarLib.Navigation && MoswarLib.Navigation.unlock) {
+                  MoswarLib.Navigation.unlock();
+              }
+          } catch (e) {}
+      }
+
+      function showAllShopFilter() {
+          const links = document.querySelectorAll('.filters a.dashedlink, a[href*="Shop.filter"]');
+          for (let i = 0; i < links.length; i++) {
+              const t = (links[i].textContent || '').replace(/\s+/g, ' ').trim();
+              if (t === 'Все') {
+                  try { links[i].click(); } catch (e) {}
+                  return;
+              }
+          }
+          try {
+              const Shop = (typeof unsafeWindow !== 'undefined' && unsafeWindow.Shop) || window.Shop;
+              if (Shop && typeof Shop.filter === 'function') Shop.filter();
+          } catch (e) {}
+      }
+
+      function presentFormReady() {
+          const panel = document.getElementById('present-panel');
+          if (!panel) return false;
+          return !!(panel.querySelector('#present-form') && panel.querySelector('#to-me'));
+      }
+
+      function ensurePresentHooks() {
+          if (presentFormReady()) return true;
+          const panel = document.getElementById('present-panel');
+          if (!panel) return false;
+          let form = panel.querySelector('#present-form') || panel.querySelector('form');
+          if (!form) return false;
+          if (!form.id) form.id = 'present-form';
+          if (!panel.querySelector('#to-me')) {
+              const me = document.createElement('input');
+              me.type = 'checkbox';
+              me.id = 'to-me';
+              me.name = 'to_me';
+              me.value = '1';
+              me.checked = true;
+              me.setAttribute('checked', 'checked');
+              form.insertBefore(me, form.firstChild);
+          }
+          return presentFormReady();
+      }
+
+      async function goSection(path, opts) {
+          opts = opts || {};
+          const needPresent = !!opts.needPresent;
+          unlockNav();
+          if (normPath(location.pathname) === normPath(path)) {
+              if (document.querySelector('ul.objects.shop-objects li.object, #content.shop li.object')) {
+                  if (!needPresent) return true;
+                  if (presentFormReady() || ensurePresentHooks()) return true;
+              }
+          }
+          try {
+              if (typeof MoswarLib !== 'undefined' && MoswarLib.Navigation && typeof MoswarLib.Navigation.goToUrl === 'function') {
+                  MoswarLib.Navigation.goToUrl(path);
+              } else if (typeof AngryAjax !== 'undefined' && typeof AngryAjax.goToUrl === 'function') {
+                  AngryAjax.goToUrl(path);
+              } else {
+                  location.href = path;
+              }
+          } catch (e) {
+              location.href = path;
+          }
+          for (let i = 0; i < 80; i++) {
+              if (sess.isAborted()) return false;
+              await sess.sleep(250);
+              await sess.waitWhilePaused();
+              if (normPath(location.pathname) === normPath(path) && document.querySelector('ul.objects.shop-objects li.object, #content.shop li.object')) {
+                  if (!needPresent) return true;
+                  if (presentFormReady() || ensurePresentHooks()) return true;
+              }
+          }
+          if (!needPresent) return !!document.querySelector('ul.objects.shop-objects li.object');
+          return presentFormReady() || ensurePresentHooks();
+      }
+
+      function cardById(id) {
+          return document.querySelector('#content li.object[rel="' + id + '"], ul.objects.shop-objects li.object[rel="' + id + '"]');
+      }
+
+      function buyBtn(card, id) {
+          return card.querySelector('.button[data-button-for-id="' + id + '"] span.f') || card.querySelector('.actions span.f, .button span.f');
+      }
+
+      async function waitCard(id, ms) {
+          const until = Date.now() + (ms || 12000);
+          while (Date.now() < until) {
+              if (sess.isAborted()) return null;
+              const c = cardById(id);
+              if (c && buyBtn(c, id)) return c;
+              await sess.sleep(200);
+          }
+          return cardById(id);
+      }
+
+      function reloadShop(path) {
+          persistRun();
+          unlockNav();
+          logLine('  обновляю страницу и продолжу');
+          location.href = path;
+      }
+
+      function presentPanel() {
+          const el = document.getElementById('present-panel');
+          if (!el) return null;
+          const st = (el.style && el.style.display) || '';
+          if (st === 'none') return null;
+          if (st === 'block' || el.offsetWidth > 0 || el.offsetHeight > 0) return el;
+          return null;
+      }
+
+      function presentErrorText(panel) {
+          if (!panel) return '';
+          const wrap = panel.querySelector('.report');
+          if (wrap) {
+              const ds = (wrap.style && wrap.style.display) || '';
+              if (ds === 'none') return '';
+          }
+          const err = panel.querySelector('.report .error, .error');
+          return err ? (err.textContent || '').replace(/\s+/g, ' ').trim() : '';
+      }
+
+      function popupKind() {
+          if (presentPanel()) return 'present';
+          const nodes = document.querySelectorAll('.alert, .popup, #popup, .window, .block-rounded');
+          for (let i = 0; i < nodes.length; i++) {
+              const el = nodes[i];
+              if (!el || el.id === 'present-panel') continue;
+              if (el.offsetParent === null) continue;
+              const t = (el.textContent || '').replace(/\s+/g, ' ').toLowerCase();
+              if (!t || t.length > 900) continue;
+              if (/недостаточно|не хватает|мало денег|не хватит/.test(t)) return 'nomoney';
+              if (/мёд|мед|honey/.test(t) && /потрат|купит|уверены/.test(t)) return 'honey';
+          }
+          return '';
+      }
+
+      function clickConfirm() {
+          const cands = document.querySelectorAll('.alert .button span.f, .popup .button span.f, #popup .button span.f, .alert a.f');
+          for (let i = 0; i < cands.length; i++) {
+              const n = cands[i];
+              if (!n || n.offsetParent === null) continue;
+              if (n.closest && n.closest('#present-panel')) continue;
+              const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
+              if (/^(ок|купить|да|подтвердить|продолжить)/i.test(t)) {
+                  n.click();
+                  return true;
+              }
+          }
+          return false;
+      }
+
+      function clickPresentGive(panel) {
+          const me = panel.querySelector('#to-me');
+          if (me && !me.checked) me.click();
+          const buttons = panel.querySelectorAll('#present-form button, form.gift-form button');
+          for (let i = 0; i < buttons.length; i++) {
+              const b = buttons[i];
+              const t = (b.textContent || '').replace(/\s+/g, ' ').trim();
+              if (t !== 'Подарить') continue;
+              b.click();
+              return true;
+          }
+          return false;
+      }
+
+      function closePresentPanel() {
+          const panel = presentPanel();
+          if (!panel) return;
+          const buttons = panel.querySelectorAll('button');
+          for (let i = 0; i < buttons.length; i++) {
+              const t = (buttons[i].textContent || '').replace(/\s+/g, ' ').trim();
+              if (t === 'Отмена') {
+                  (buttons[i].querySelector('span.f') || buttons[i]).click();
+                  return;
+              }
+          }
+          try { panel.style.display = 'none'; } catch (e) {}
+      }
+
+      async function waitPresentPanel(ms) {
+          const until = Date.now() + ms;
+          while (Date.now() < until) {
+              if (sess.isAborted()) return null;
+              const p = presentPanel();
+              if (p) return p;
+              const kind = popupKind();
+              if (kind === 'nomoney' || kind === 'honey') return null;
+              await sess.sleep(120);
+          }
+          return presentPanel();
+      }
+
+      async function completePresentDialog() {
+          const panel = await waitPresentPanel(10000);
+          if (!panel) {
+              const kind = popupKind();
+              if (kind === 'nomoney') {
+                  clickConfirm();
+                  return 'nomoney';
+              }
+              if (kind === 'honey') return cfg.allowHoney ? 'ok' : 'honey_block';
+              return 'need_reload';
+          }
+          if (!panel.querySelector('#to-me')) ensurePresentHooks();
+          await pause(280, 520);
+          if (!clickPresentGive(panel)) return 'need_reload';
+          const until = Date.now() + 10000;
+          while (Date.now() < until) {
+              if (sess.isAborted()) return 'stop';
+              const live = presentPanel();
+              if (!live) return 'ok';
+              const err = presentErrorText(live);
+              if (err) {
+                  closePresentPanel();
+                  if (/недостаточно|не хватает|мало/.test(err.toLowerCase())) return 'nomoney';
+                  logLine('  окно: ' + err);
+                  return 'form_error';
+              }
+              await sess.sleep(140);
+          }
+          return presentPanel() ? 'need_reload' : 'ok';
+      }
+
+      async function handleAfterClick() {
+          await pause(400, 800);
+          const kind = popupKind();
+          if (kind === 'present') return await completePresentDialog();
+          if (kind === 'nomoney') {
+              clickConfirm();
+              return 'nomoney';
+          }
+          if (kind === 'honey') {
+              if (!cfg.allowHoney) return 'honey_block';
+              clickConfirm();
+              await pause(350, 700);
+          }
+          return 'ok';
+      }
+
+      function readAmount(inp) {
+          return parseInt(String(inp && inp.value != null ? inp.value : '').replace(/\D/g, ''), 10) || 0;
+      }
+
+      function pageShop() {
+          try {
+              const w = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
+              return w.Shop || null;
+          } catch (e) { return null; }
+      }
+
+      function setAmountRaw(inp, want) {
+          if (!inp) return;
+          try { inp.removeAttribute('max'); } catch (e) {}
+          try { inp.maxLength = 16; } catch (e) {}
+          inp.value = String(want);
+      }
+
+      function muteCountCap(fn) {
+          const Shop = pageShop();
+          let orig;
+          try {
+              if (Shop) {
+                  orig = Shop.onCountChange;
+                  Shop.onCountChange = function () {};
+              }
+          } catch (e) {}
+          try { return fn(); }
+          finally {
+              try { if (Shop && orig !== undefined) Shop.onCountChange = orig; } catch (e) {}
+          }
+      }
+
+      async function purchaseOnce(item, left) {
+          const isGift = item.kind === 'present' || item.section === 'gifts';
+          if (isGift && !ensurePresentHooks()) return { status: 'need_reload', bought: 0 };
+          const card = await waitCard(item.id, 12000);
+          if (!card) return { status: 'missing', bought: 0 };
+          if (payOfCard(card) === 'honey' && !cfg.allowHoney) return { status: 'honey', bought: 0 };
+          const btn = buyBtn(card, item.id);
+          if (!btn) return { status: 'missing', bought: 0 };
+          if (!isGift) {
+              const inp = card.querySelector('input[name="amount"]');
+              const step = Math.max(1, left);
+              try {
+                  muteCountCap(() => {
+                      setAmountRaw(inp, step);
+                      btn.click();
+                  });
+              } catch (e) { return { status: 'retry', bought: 0 }; }
+              const r = await handleAfterClick();
+              if (r === 'ok') return { status: 'ok', bought: step };
+              if (r === 'no_dialog' || r === 'no_give_btn' || r === 'stuck') return { status: 'need_reload', bought: 0 };
+              return { status: r, bought: 0 };
+          }
+          try { btn.click(); } catch (e) { return { status: 'need_reload', bought: 0 }; }
+          const r = await completePresentDialog();
+          if (r === 'ok') return { status: 'ok', bought: 1 };
+          if (r === 'no_dialog' || r === 'no_give_btn' || r === 'stuck' || r === 'need_reload') {
+              return { status: 'need_reload', bought: 0 };
+          }
+          return { status: r, bought: 0 };
+      }
+
+      function buildJobsFromPlan() {
+          const jobs = [];
+          catalog().forEach((it) => {
+              const n = getQty(it);
+              if (n <= 0) return;
+              if (it.pay === 'honey' && !cfg.allowHoney) return;
+              jobs.push({
+                  id: String(it.id),
+                  section: it.section,
+                  kind: it.kind,
+                  name: it.name,
+                  pay: it.pay,
+                  n: n,
+                  done: 0
+              });
+          });
+          return jobs;
+      }
+
+      let reloading = false;
+
+      async function runPlan() {
+          if (!runState || !runState.jobs || !runState.jobs.length) {
+              logLine('План пуст: поставьте числа больше 0');
+              return;
+          }
+          let lastSec = '';
+          for (let i = 0; i < runState.jobs.length; i++) {
+              if (sess.isAborted()) return;
+              runState.idx = i;
+              persistRun();
+              const job = runState.jobs[i];
+              if ((job.done || 0) >= job.n) continue;
+              const item = catalog().find((it) => String(it.id) === String(job.id) && it.section === job.section) || job;
+              const path = job.section === 'gifts' ? '/shop/section/gifts/' : '/shop/section/pharmacy/';
+              if (lastSec !== job.section) {
+                  logLine(job.section === 'gifts' ? 'Подарки...' : 'Киоск...');
+                  const ok = await goSection(path, { needPresent: job.section === 'gifts' });
+                  if (sess.isAborted()) return;
+                  if (!ok || (job.section === 'gifts' && !ensurePresentHooks())) {
+                      reloading = true;
+                      reloadShop(path);
+                      return;
+                  }
+                  showAllShopFilter();
+                  await pause(400, 800);
+                  scanPage();
+                  lastSec = job.section;
+              }
+              logLine(job.name + ' ×' + job.n + (job.done ? (' (уже ' + job.done + ')') : '') + (job.section === 'gifts' ? ' (каждое окно «Подарить»)' : ''));
+              while ((job.done || 0) < job.n) {
+                  if (sess.isAborted()) return;
+                  await sess.waitWhilePaused();
+                  const left = job.n - (job.done || 0);
+                  const res = await purchaseOnce(item, left);
+                  if (res.status === 'ok' && res.bought > 0) {
+                      if (res.bought < left && job.section === 'pharmacy' && !job._packNote) {
+                          job._packNote = true;
+                          logLine('  витрина максимум ' + res.bought + ' за клик, докупаю пачками');
+                      }
+                      job.done = (job.done || 0) + res.bought;
+                      if (job.done > job.n) job.done = job.n;
+                      setQtyLeft(job, job.n - job.done);
+                      persistRun();
+                      renderList();
+                      if (job.section === 'pharmacy' && res.bought === left) {
+                          logLine('  купил разово ' + fmtNum(res.bought));
+                      } else if (job.done < job.n) {
+                          logLine(job.section === 'gifts'
+                              ? '  подарил ' + job.done + '/' + job.n
+                              : '  купил ' + job.done + '/' + job.n);
+                      }
+                      if (job.section === 'gifts' && !ensurePresentHooks()) {
+                          reloading = true;
+                          reloadShop(path);
+                          return;
+                      }
+                      await pause(700, 1400);
+                      continue;
+                  }
+                  if (res.status === 'stop') return;
+                  if (res.status === 'need_reload') {
+                      reloading = true;
+                      reloadShop(path);
+                      return;
+                  }
+                  if (res.status === 'missing') {
+                      logLine('  нет на витрине — жду и пробую снова');
+                      showAllShopFilter();
+                      await pause(1500, 2500);
+                      const ok2 = await goSection(path, { needPresent: job.section === 'gifts' });
+                      if (!ok2) { reloading = true; reloadShop(path); return; }
+                      scanPage();
+                      lastSec = job.section;
+                      continue;
+                  }
+                  if (res.status === 'nomoney') {
+                      logLine('  не хватает валюты — жду и пробую снова');
+                      clickConfirm();
+                      await pause(4000, 6000);
+                      continue;
+                  }
+                  if (res.status === 'honey' || res.status === 'honey_block') {
+                      logLine('  мёд выключен — включи галочку или нажми Стоп');
+                      await pause(3000, 4000);
+                      continue;
+                  }
+                  if (res.status === 'form_error') {
+                      logLine('  ошибка формы — пробую снова');
+                      closePresentPanel();
+                      await pause(800, 1400);
+                      continue;
+                  }
+                  logLine('  ' + (res.status || 'сбой') + ' — пробую снова');
+                  await pause(1000, 1800);
+              }
+              logLine('  готово: ' + job.name);
+          }
+      }
+
+      function fmtNum(n) {
+          return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+      }
+
+      function parseWalletTitle(title) {
+          const t = String(title || '');
+          const m = t.match(/(\d[\d\s]*)/);
+          if (!m) return -1;
+          const n = parseInt(m[1].replace(/[^\d]/g, ''), 10);
+          return isNaN(n) ? -1 : n;
+      }
+
+      function parseCompactMoney(s) {
+          const t = String(s || '').replace(/\u00a0/g, ' ').replace(',', '.').trim();
+          const m = t.match(/([\d.]+)\s*([kKmMbBтркмдТРКМД]?)/);
+          if (!m) return -1;
+          const v = parseFloat(m[1]);
+          if (isNaN(v)) return -1;
+          const u = (m[2] || '').toLowerCase();
+          let mul = 1;
+          if (u === 'k' || u === 'к') mul = 1e3;
+          else if (u === 'm' || u === 'м') mul = 1e6;
+          else if (u === 'b' || u === 'д') mul = 1e9;
+          return Math.floor(v * mul);
+      }
+
+      function pageWin() {
+          try { if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow; } catch (e) {}
+          return window;
+      }
+
+      function readTugriki() {
+          const block = document.querySelector('ul.wallet li.tugriki-block, li.tugriki-block, .wallet .tugriki-block');
+          if (block) {
+              const fromTitle = parseWalletTitle(block.getAttribute('title'));
+              if (fromTitle > 0) return fromTitle;
+              const span = block.querySelector('span[rel="money"]');
+              if (span) {
+                  const compact = parseCompactMoney(span.textContent);
+                  if (compact > 0) return compact;
+              }
+          }
+          const w = pageWin();
+          try {
+              const $ = w.jQuery || w.$;
+              if ($ && typeof $ === 'function' && $('li.tugriki-block').length) {
+                  const fromTitle = parseWalletTitle($('li.tugriki-block').attr('title'));
+                  if (fromTitle > 0) return fromTitle;
+              }
+          } catch (e) {}
+          try {
+              const p = w.player;
+              if (p) {
+                  const cand = [p.tugriki, p.money, p.tugrik];
+                  for (let i = 0; i < cand.length; i++) {
+                      const n = parseInt(String(cand[i] == null ? '' : cand[i]).replace(/[^\d]/g, ''), 10);
+                      if (!isNaN(n) && n > 100) return n;
+                  }
+              }
+          } catch (e) {}
+          return 0;
+      }
+
+      function convertTugToMix() {
+          if (sess.session.running && !sess.session.aborted) {
+              logLine('Сначала Стоп');
+              return;
+          }
+          const leftover = runState && runState.running && runState.jobs && runState.jobs.some((j) => (j.done || 0) < j.n);
+          if (leftover) {
+              logLine('Есть незавершённая закупка — Стоп или Продолжить');
+              return;
+          }
+          const tug = readTugriki();
+          const n = Math.floor(tug / MIX_PRICE);
+          if (n < 1) {
+              logLine(tug > 0
+                  ? ('Тугри: ' + fmtNum(tug) + ' — мало на микстуру')
+                  : 'Не вижу тугрики в шапке персонажа');
+              return;
+          }
+          qtyMap['pharmacy:' + MIX_ID] = n;
+          saveQty();
+          cfg.tab = 'pharmacy';
+          saveCfg();
+          paintTabs();
+          renderList();
+          runState = {
+              running: true,
+              paused: false,
+              jobs: [{
+                  id: MIX_ID,
+                  section: 'pharmacy',
+                  kind: 'buy',
+                  name: 'Микстура',
+                  pay: 'tugriki',
+                  n: n,
+                  done: 0
+              }],
+              idx: 0,
+              ts: Date.now()
+          };
+          persistRun();
+          startLoop(true, 'Тугри ' + fmtNum(tug) + ' → микстур ' + fmtNum(n) + ' (по ' + MIX_PRICE + ')');
+      }
+
+      async function startLoop(fromRestore, note) {
+          if (sess.session.running && !sess.session.aborted) return;
+          reloading = false;
+          if (!fromRestore) {
+              const jobs = buildJobsFromPlan();
+              if (!jobs.length) {
+                  logLine('План пуст: поставьте числа больше 0');
+                  return;
+              }
+              runState = { running: true, paused: false, jobs: jobs, idx: 0, ts: Date.now() };
+              persistRun();
+              logLine('Старт: ' + jobs.length + ' позиций');
+          } else {
+              if (!runState || !runState.jobs || !runState.jobs.length) return;
+              runState.running = true;
+              runState.paused = false;
+              persistRun();
+              logLine(note || 'Продолжаю после обновления страницы');
+          }
+          sess.markRunning(true);
+          sess.session.aborted = false;
+          sess.session.paused = false;
+          paintButtons();
+          try {
+              await runPlan();
+          } catch (e) {
+              logLine('Ошибка: ' + (e && e.message ? e.message : e));
+              persistRun();
+          } finally {
+              if (reloading) return;
+              const aborted = sess.session.aborted;
+              const left = runState && runState.jobs && runState.jobs.some((j) => (j.done || 0) < j.n);
+              if (!aborted && !left) {
+                  clearRun();
+                  runState = null;
+                  logLine('Готово');
+              } else if (!aborted && left) {
+                  persistRun();
+              }
+              sess.session.running = false;
+              paintButtons();
+          }
+      }
+
+      document.getElementById('tcshop-start').onclick = () => {
+          if (sess.session.running && !sess.session.aborted) return;
+          const leftover = runState && runState.running && runState.jobs && runState.jobs.some((j) => (j.done || 0) < j.n);
+          startLoop(!!leftover);
+      };
+      document.getElementById('tcshop-pause').onclick = () => {
+          if (runState && runState.running && runState.paused && !(sess.session.running && !sess.session.aborted)) {
+              startLoop(true);
+              return;
+          }
+          sess.togglePause();
+          paintButtons();
+      };
+      document.getElementById('tcshop-stop').onclick = () => { sess.abort('stop'); paintButtons(); };
+
+      const bootSec = pageSection();
+      if (bootSec) {
+          cfg.tab = bootSec;
+          saveCfg();
+          paintTabs();
+          scanPage();
+          renderList();
+      }
+      paintButtons();
+      if (runState && runState.running && !runState.paused) {
+          setTimeout(() => { startLoop(true); }, 700);
+      } else if (runState && runState.running && runState.paused) {
+          logLine('Пауза сохранена — нажми Продолжить');
+          paintButtons();
+      }
+  },
   fubugs: function() {
       if (document.getElementById('fubugs-panel')) return;
       console.log('[MODULE_fubugs] v1.0');
@@ -14699,6 +15903,7 @@ utils_.init();
           'подземка': 'dungeon', 'данж': 'dungeon',
           'флаг': 'flag', 'автофлаг': 'flag',
           'спутники': 'satellite', 'спутник': 'satellite', 'sat': 'satellite',
+          'закупка': 'tcshop', 'тц': 'tcshop', 'киоск': 'tcshop', 'подарки': 'tcshop',
           'фубаги': 'fubugs', 'баги': 'fubugs',
           'ии': 'uluchshator', 'uluchshator': 'uluchshator',
           'фуллдоп': 'fulldope', 'фд': 'fulldope', 'допы': 'fulldope', 'fulldope': 'fulldope',
@@ -14778,6 +15983,7 @@ utils_.init();
           'dungeon': { start: 'dg-start', pause: 'dg-pause', stop: 'dg-stop', name: '🕳️ Подземка' },
           'flag': { start: 'flag-start', pause: 'flag-pause', stop: 'flag-stop', name: '🏳️ Автофлаг' },
           'satellite': { start: 'sat-start', stop: 'sat-stop', name: '🛰️ Спутники' },
+          'tcshop': { start: 'tcshop-start', pause: 'tcshop-pause', stop: 'tcshop-stop', name: '🛒 Закупка ТЦ' },
           'omon': { start: 'omon-start', pause: null, stop: 'omon-stop', name: '🛡 ОМОН' }
       };
 
