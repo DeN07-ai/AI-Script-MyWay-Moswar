@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.5.0
+// @version      2.5.1
 // @author       MyWay DeN
 // @description  Модульный скрипт: Рейды, Крысы , Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -603,7 +603,7 @@
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Ollama Intelligence', version: '4.21' },
-      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.11' },
+      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.12' },
       { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
@@ -9490,7 +9490,7 @@
       }
 
       if (document.getElementById('fulldope-modal')) return;
-      console.log('[MODULE_fulldope] v2.11');
+      console.log('[MODULE_fulldope] v2.12');
 
       // IDs from AI module for smart classification
       const RIDE_GROUPS = {
@@ -9703,7 +9703,7 @@
       modal.id = 'fulldope-modal';
       modal.innerHTML = `
           <div id="fulldope-header">
-              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.11</span></div>
+              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.12</span></div>
               <div id="fulldope-header-actions">
                   <button class="fd-header-btn" id="fd-run" title="Запустить / продолжить">Активировать</button>
                   <button class="fd-header-btn" id="fd-pause" title="Пауза">Пауза</button>
@@ -9724,7 +9724,7 @@
                   </div>
 
                   <div class="fd-item" id="fd-stash" data-type="misc">
-                      <div class="fd-icon-wrapper" title="Бизнес"><img src="/@/images/obj/business/newy2017/box_64.png"></div>
+                      <div class="fd-icon-wrapper" title="Бизнес"><img src="/@/images/obj/delivery_booster_128.png"></div>
                       <div style="font-size:10px;margin-top:2px;">Бизнес</div>
                   </div>
 
@@ -10491,8 +10491,24 @@
               const el = document.getElementById(id);
               if(el) el.classList.toggle('disabled', !available);
           };
+          const applyBusinessLook = (doc) => {
+              const wrap = document.querySelector('#fd-stash .fd-icon-wrapper');
+              if (!wrap) return;
+              const btn = doc.querySelector('[onclick*="Home.business.activate"]');
+              let pic = null;
+              if (btn) {
+                  const block = btn.closest('.bg') || btn.parentElement;
+                  pic = block && block.querySelector('img[src]');
+              }
+              if (!pic) {
+                  pic = doc.querySelector('img[src*="delivery_booster"], img[src*="business"]');
+              }
+              const src = pic && pic.getAttribute('src');
+              const img = wrap.querySelector('img');
+              if (src && img) img.src = src;
+          };
           const checks = [
-              { id: 'fd-stash', url: '/home/business/', check: d => d.querySelector('.button[onclick*="Home.business.activate"]') },
+              { id: 'fd-stash', urls: ['/home/business/', '/home/'], check: d => !!d.querySelector('[onclick*="Home.business.activate"]'), onFound: applyBusinessLook },
               { id: 'fd-autopilot', url: '/automobile/ride/', check: d => d.querySelector('.autopilot-action') },
               { id: 'fd-grumpy', url: '/grumpy/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-matrix', url: '/bigbro/', check: d => d.querySelector('.big-brother-button-inner') },
@@ -10507,7 +10523,22 @@
           ];
           checks.forEach(c => setAvailable(c.id, false));
           for (const c of checks) {
-              try { const r = await fetch(c.url); const t = await r.text(); if (c.check(new DOMParser().parseFromString(t, 'text/html'))) setAvailable(c.id, true); } catch(e) {}
+              try {
+                  const urls = c.urls || [c.url];
+                  let ok = false;
+                  for (const url of urls) {
+                      if (!url) continue;
+                      const r = await fetch(url);
+                      const t = await r.text();
+                      const d = new DOMParser().parseFromString(t, 'text/html');
+                      if (c.check(d)) {
+                          ok = true;
+                          if (typeof c.onFound === 'function') c.onFound(d);
+                          break;
+                      }
+                  }
+                  if (ok) setAvailable(c.id, true);
+              } catch (e) {}
           }
       })();
 
@@ -11134,9 +11165,60 @@
                           }
                           logs.push('🎲 Москвополия: ' + done);
                       } else if (task.id === 'fd-stash') {
-                          await request('/home/business/', { action: 'activate' });
-                          await request('/home/business/activate/', { ajax: 1, action: 'activate' });
-                          await request('/home/business/', { action: 'get' });
+                          const findBizBtn = (root) => (root || document).querySelector('.button[onclick*="Home.business.activate"], [onclick*="Home.business.activate"]');
+                          const goBiz = (url) => {
+                              if (typeof MoswarLib !== 'undefined' && MoswarLib.Navigation) {
+                                  try { MoswarLib.Navigation.unlock(); } catch (_) {}
+                                  MoswarLib.Navigation.goToUrl(url);
+                              } else if (typeof AngryAjax !== 'undefined' && typeof AngryAjax.goToUrl === 'function') {
+                                  AngryAjax.goToUrl(url);
+                              } else {
+                                  location.href = url;
+                              }
+                          };
+                          const waitBizBtn = async (tries = 10, delay = 300) => {
+                              for (let i = 0; i < tries; i++) {
+                                  if (isAborted()) return null;
+                                  const b = findBizBtn(document);
+                                  if (b) return b;
+                                  await sleep(delay);
+                              }
+                              return findBizBtn(document);
+                          };
+                          const pathNow = () => (location.pathname || '').replace(/\/+$/, '') || '/';
+                          if (!findBizBtn(document) && pathNow() !== '/home' && pathNow() !== '/home/business') {
+                              console.log('[FullDope] Business: переход в хату /home/');
+                              goBiz('/home/');
+                              await sleep(2200);
+                              if (isAborted()) return false;
+                          }
+                          let bizBtn = await waitBizBtn();
+                          if (!bizBtn && pathNow() !== '/home/business') {
+                              console.log('[FullDope] Business: кнопки нет, пробую /home/business/');
+                              goBiz('/home/business/');
+                              await sleep(2200);
+                              if (isAborted()) return false;
+                              bizBtn = await waitBizBtn();
+                          }
+                          const homeBiz = (pw.Home && pw.Home.business) || (window.Home && window.Home.business);
+                          let activated = false;
+                          if (bizBtn) {
+                              console.log('[FullDope] Business: клик по кнопке игры');
+                              if (invokeOnclickFromAttribute(bizBtn, 'onclick')) activated = true;
+                              else if (typeof bizBtn.click === 'function') { bizBtn.click(); activated = true; }
+                              await sleep(900);
+                          }
+                          if (!activated && homeBiz && typeof homeBiz.activate === 'function') {
+                              console.log('[FullDope] Business: Home.business.activate()');
+                              homeBiz.activate();
+                              activated = true;
+                              await sleep(900);
+                          }
+                          if (!activated) {
+                              console.warn('[FullDope] Business: запасной POST');
+                              await request('/home/business/', { action: 'activate' });
+                              await request('/home/business/activate/', { ajax: 1, action: 'activate' });
+                          }
                           logs.push('💰 Бизнес');
                       } else if (task.id === 'fd-autopilot') {
                           try {
