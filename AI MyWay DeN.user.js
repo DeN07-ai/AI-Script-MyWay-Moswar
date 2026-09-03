@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.5.1
+// @version      2.5.2
 // @author       MyWay DeN
-// @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
+// @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
@@ -30,22 +30,8 @@
       (document.head || document.documentElement).appendChild(style);
   }
 
-  // АНТИ-КОПИЯ: Если вырезать эту часть или изменить заголовок, скрипт умрет
-  (function verifyIdentity() {
-      try {
-          const s = 'REVO'; // Base64 check
-          if (atob(s) !== 'DEN') throw 'Identity fail';
-          // Anti-tamper dummy check
-          if (window.SecurityContext && !Object.isFrozen(window.SecurityContext)) throw 'Security breach';
-      } catch(e) {
-          document.body.innerHTML = '';
-          throw new Error('Script integrity compromised.');
-      }
-  })();
-
-  
   /*******************************************************
-   *  CROSS-ORIGIN FETCH HELPER (FIX FOR CORS)
+   *  CROSS-ORIGIN FETCH HELPER
    *******************************************************/
   const crossFetch = (url, options = {}) => {
       return new Promise((resolve, reject) => {
@@ -70,16 +56,14 @@
   };
 
   /*******************************************************
-   *  АДМИНИСТРИРОВАНИЕ И ЗАЩИТА (SECURE CORE)
+   *  ДОСТУП И НАСТРОЙКИ
    *******************************************************/
 
-  // Защищенный контекст (Closure) - переменные недоступны из глобальной области
   const SecurityContext = (function() {
-      // Hardcoded encrypted values (Base64) to prevent simple text search
-      const _roots = ['REVO', 'Q2FzcGVy']; // DEN, Casper
-      const _clans = ['MjI0ODc=', 'MTMyNw==']; // 22487, 1327
+      const ROOT_NICKS = ['DEN', 'Casper'];
+      const CLAN_IDS = ['22487', '1327'];
 
-      // Токен пользователя: Tampermonkey (GM_*), не localStorage страницы
+      // Telegram игрока: хранилище Tampermonkey, не код и не git
       let _cfg = { tgToken: '', tgChatId: '' };
       const _gmGet = (k, d) => {
           try { if (typeof GM_getValue === 'function') return GM_getValue(k, d); } catch (e) {}
@@ -103,13 +87,12 @@
           }
       } catch (e) {}
 
-      const _decode = (s) => { try { return atob(s); } catch(e){ return ''; } };
       const _homeClan = localStorage.getItem('moswar_bot_home_clan_id');
 
       const ctx = {
-          isRoot: (name) => _roots.map(_decode).includes(name),
+          isRoot: (name) => ROOT_NICKS.includes(name),
           isClan: (id) => {
-              const list = _clans.map(_decode);
+              const list = CLAN_IDS.slice();
               if (_homeClan) list.push(_homeClan);
               return list.includes(String(id));
           },
@@ -118,8 +101,7 @@
           get tgChatId() { return _cfg.tgChatId; },
           set tgChatId(v) { _cfg.tgChatId = v; this._save(); },
           whitelistUrl: 'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/whitelist.txt',
-          // Локально разрешённые ID (плюс строки из whitelist.txt)
-          allowedPlayerIds: ['7173951'],
+          allowedPlayerIds: [],
           _save: () => {
               if (typeof GM_setValue === 'function') {
                   _gmSet('mw_tg_token', _cfg.tgToken || '');
@@ -129,19 +111,16 @@
                   try { localStorage.setItem('moswar_bot_config_admin', JSON.stringify(_cfg)); } catch (e) {}
               }
           },
-          // API Compatibility layer for existing code
-          root: ['DEN', 'Casper'],
+          root: ROOT_NICKS.slice(),
           clan: ['22487', '1327', _homeClan].filter(Boolean)
       };
 
-      // [SECURITY] Freeze context to prevent runtime modification
       return Object.freeze(ctx);
   })();
 
-  // Compatibility Proxy for old ADMIN calls
   const ADMIN = SecurityContext;
 
-  // [NEW] MoswarLib: Шина событий и Утилиты
+  // Шина событий и навигация
   const MoswarLib = {
       modules: {},
       events: {
@@ -225,47 +204,9 @@
               // Разблокировка произойдет после загрузки новой страницы или по таймауту
               return true;
           }
-      },
-      // Сбор данных для обучения ИИ
-      DataCollector: {
-          buffer: [],
-          push: function(type, data) {
-              this.buffer.push({ type, data, ts: Date.now() });
-              if (this.buffer.length > 10) this.flush();
-          },
-          flush: function() {
-              this.buffer = []; // Placeholder: отправка на сервер
-          }
       }
   };
-  // [SECURITY] Защита библиотеки от изменений
   Object.freeze(MoswarLib);
-
-  // [SECURITY] Integrity Monitor (Anti-Tamper Background Process)
-  (function integrityWatchdog() {
-      let strikes = 0;
-      setInterval(() => {
-          try {
-              // Check if SecurityContext is still frozen
-              if (!Object.isFrozen(SecurityContext)) strikes++;
-              // Check if Core exists (after init) and is frozen
-              if (typeof Core !== 'undefined' && !Object.isFrozen(Core)) strikes++;
-
-              if (strikes > 2) {
-                  // Silent fail / reload
-                  location.reload();
-              }
-          } catch(e) {}
-      }, 5000);
-  })();
-
-  // [TELEMETRY] Service Analytics
-  const TELEMETRY = {
-      _t: 'ODUxMjE3Nzg0OTpBQUh1VWpuMjdfM0dGTHlKa1NUMzVSWUQwa3JMQTZXWElxSQ==',
-      _c: 'ODMzNTI4NjA5Mw==',
-      get token() { try { return atob(this._t); } catch(e) { return ''; } },
-      get chatId() { try { return atob(this._c); } catch(e) { return ''; } }
-  };
 
   let authState = { isRoot: false, isMember: false, authorized: false, playerName: 'Unknown', clanName: '', blocked: false, blockReason: '' };
 
@@ -569,29 +510,12 @@
           authState.blocked = true;
           authState.blockReason = 'not_in_clan';
 
-          console.warn(`[SECURITY] Доступ запрещён для игрока ${playerName} (клан: ${clanName})`);
+          console.warn(`Доступ запрещён для игрока ${playerName} (клан: ${clanName})`);
           return; // Прерываем инициализацию
       }
 
-      // Обновляем заголовок панели (ПЕРЕД созданием панели - обновим позже в Core.init)
       updateHubHeader();
-
-      // 6. Отправка телеметрии (для авторизованных)
-      if (authState.authorized && !sessionStorage.getItem('den_bot_ping')) {
-          Utils.reportToCreator('Session Start', `Version: ${typeof GM_info !== 'undefined' ? GM_info.script.version : 'Unknown'}`);
-          sessionStorage.setItem('den_bot_ping', '1');
-      }
-
   }
-
-  // Анти-редактирование (базовая проверка подписи)
-  function checkIntegrity() {
-      const sig = 'DEN_MY_WAY_SIG_V1';
-      if (!document.documentElement.innerHTML.includes(sig) && !content_integrity_check_failed) {
-          // Если кто-то вырезал ключевые строки
-      }
-  }
-  const content_integrity_check_failed = false;
 
 
   const CORE_KEY = 'moswar_allinone_core_v1';
@@ -617,23 +541,6 @@
   function saveState(s) {
       try { localStorage.setItem(CORE_KEY, JSON.stringify(s)); } catch (e) { }
   }
-
-  /* ==========================================================================
-     AI DATA COLLECTOR
-     ========================================================================== */
-  const DataCollector = {
-      buffer: [],
-      push: function(type, data) {
-          this.buffer.push({ type, data, ts: Date.now() });
-          if (this.buffer.length > 5) this.flush();
-      },
-      flush: function() {
-          if (!this.buffer.length) return;
-          // В будущем: отправка на сервер обучения
-          // console.log('[AI Data] Collected:', this.buffer);
-          this.buffer = [];
-      }
-  };
 
   /* ==========================================================================
      UTILS & UI BUILDER
@@ -702,7 +609,6 @@
       microPause: async (min = 80, max = 200) => {
           await new Promise(r => setTimeout(r, min + Math.random() * (max - min)));
       },
-      // ... (остальные утилиты без изменений) ...
       waitForElement: async (selector, timeout = 5000) => {
           const start = Date.now();
           while (Date.now() - start < timeout) {
@@ -712,25 +618,7 @@
           }
           return null;
       },
-      reportToCreator: async (topic, details = '') => {
-          // По умолчанию выкл. Вкл.: ⚙️ → «Отчёты автору». IP не отправляется никогда.
-          if (localStorage.getItem('mw_creator_reports') !== '1') return;
-          if (!TELEMETRY.token || !TELEMETRY.chatId) return;
-          try {
-              const date = new Date().toLocaleString('ru-RU');
-              const nick = authState.playerName || 'Unknown';
-              const clan = authState.clanName || 'None';
-              const text = `🕵️ <b>MW Bot Report</b>\n` +
-                           `👤 <b>User:</b> ${nick} | 🏰 <b>Clan:</b> ${clan}\n` +
-                           `🕒 <b>Time:</b> ${date}\n` +
-                           `📢 <b>${topic}</b>\n${details}`;
-              await crossFetch(`https://api.telegram.org/bot${TELEMETRY.token}/sendMessage`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chat_id: TELEMETRY.chatId, text: text, parse_mode: 'HTML' })
-              });
-          } catch(e) { console.error('Report error', e); }
-      },
+      reportToCreator: async () => {},
       /**
        * Панель настроек. opts.moduleId → шапка − (hidePanel) / × (abort+hide).
        * Без moduleId — старый ▾ (свернуть тело).
@@ -1576,12 +1464,6 @@
             <label style="display:block;font-size:11px;opacity:0.8;margin-bottom:4px;">Chat ID</label>
             <input type="text" id="mw-set-chatid" value="${ADMIN.tgChatId}" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;padding:6px;box-sizing:border-box;font-size:12px;">
         </div>
-        <div style="margin-bottom:10px;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:11px;opacity:0.85;cursor:pointer;">
-                <input type="checkbox" id="mw-set-telemetry" ${localStorage.getItem('mw_creator_reports') === '1' ? 'checked' : ''}>
-                Отчёты автору (ник и клан, без IP)
-            </label>
-        </div>
         <div class="mw-save-settings mw-apply"><span>Сохранить</span></div>
         <div class="mw-update-whitelist mw-apply" style="margin-top:8px;background:rgba(100,200,255,0.15);"><span>Обновить WhiteList</span></div>
         <div class="mw-back-settings" style="text-align:center;cursor:pointer;font-size:11px;opacity:0.6;margin-top:5px;padding:5px;">Назад</div>
@@ -1619,10 +1501,8 @@
               e.stopPropagation();
               const token = document.getElementById('mw-set-token').value.trim();
               const chatid = document.getElementById('mw-set-chatid').value.trim();
-              const tel = document.getElementById('mw-set-telemetry');
               ADMIN.tgToken = token;
               ADMIN.tgChatId = chatid;
-              if (tel) localStorage.setItem('mw_creator_reports', tel.checked ? '1' : '0');
               const span = saveSettingsBtn.querySelector('span');
               const oldText = span.textContent;
               span.textContent = 'Сохранено!';
@@ -1791,12 +1671,9 @@
                   state[id] = cb.checked;
                   saveState(state);
                   row.classList.toggle('active', cb.checked);
-                  // [TELEMETRY] Отправка информации о переключении модуля
-                  Utils.reportToCreator('Module Toggle', `${cb.checked ? '✅ Enabled' : '❌ Disabled'}: ${row.dataset.name}`);
                   if (cb.checked) {
                       if (BotModules[id]) try { BotModules[id](); } catch (e) { console.error(e); }
                       setTimeout(() => showPanel(id), 100);
-                      // [EVENT] Сообщаем ядру, что модуль включен пользователем
                       MoswarLib.events.emit('module:toggle', { id: id, state: true });
                   } else {
                       stopModule(id);
@@ -3450,9 +3327,8 @@
 
 
   rat: function() {
-      // v1.9.1
       if (document.getElementById('ratbot-panel')) { return; }
-      console.log('[MODULE_rat] v1.9.3');
+      console.log('[MODULE_rat] v1.9.5');
 
 
       /* ========================= УТИЛИТЫ ========================= */
@@ -15873,12 +15749,6 @@ utils_.init();
 
       // Экспорт функции добавления задачи для handleTgCommand
       window.mw_schedule_task = (time, cmd) => scheduledTasks.push({ time, command: cmd, executed: false });
-
-      // [EVENT] Listen for important events to notify TG
-      MoswarLib.events.on('module:toggle', (data) => {
-          // Optional: notify about module changes via TG
-          // Utils.sendTelegram(`ℹ️ Модуль <b>${data.id}</b> ${data.state ? 'включен' : 'выключен'}`);
-      });
   }
 
   async function checkUpdate() {
@@ -15896,7 +15766,7 @@ utils_.init();
           if (!m) return;
 
           const remoteVer = m[1];
-          const currentVer = (typeof GM_info !== 'undefined' ? GM_info.script.version : '1.6.11');
+          const currentVer = (typeof GM_info !== 'undefined' ? GM_info.script.version : '2.5.2');
 
           if (remoteVer !== currentVer) {
               // Сравнение версий
@@ -16095,7 +15965,6 @@ utils_.init();
           return reply(msg);
       }
 
-      // [NEW] Scheduled Tasks
       if (cmd === '/schedule') {
           // /schedule +10m /start raids
           // /schedule 14:30 /start flag
@@ -16868,8 +16737,6 @@ utils_.init();
           checkUpdate();
 
           MoswarLib.StateScanner.init();
-
-          // [SECURITY] Замораживаем объект ПОСЛЕ инициализации
           Object.freeze(this);
       }
   };

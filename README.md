@@ -1,52 +1,53 @@
-# ИИ скрипт MyWay Moswar
+# AI MyWay DeN
 
-Модульный userscript для [moswar.ru](https://www.moswar.ru): панель модулей и помощь на локациях.
+Userscript для [moswar.ru](https://www.moswar.ru): панель модулей и помощь на локациях.
 
-**GitHub:** [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)
+Репозиторий: [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)
 
-## Файлы проекта
+Версия: **2.5.2**
+
+## Файлы
 
 | Файл | Назначение |
 |------|------------|
-| `AI MyWay DeN.js` | исходник для разработки |
-| `AI MyWay DeN.user.js` | новая установка (имя **AI MyWay DeN**) |
-| `MoswarBot by MY WAY DEN .user.js` | мост автообновления для тех, у кого ещё старое имя |
-| `whitelist.txt` | гостевые ID (raw GitHub), не Pastebin |
-| `README_AI_MyWay_DeN_Instructions.md` | полная инструкция по модулям |
-| `SECURITY.md` | политика безопасности |
+| `AI MyWay DeN.js` | исходник |
+| `AI MyWay DeN.user.js` | установка (имя **AI MyWay DeN**) |
+| `MoswarBot by MY WAY DEN .user.js` | мост автообновления для старого имени в Tampermonkey |
+| `whitelist.txt` | гостевые ID (вне кланов MyWay) |
+| `README_AI_MyWay_DeN_Instructions.md` | инструкция по модулям |
+| `SECURITY.md` | правила публикации |
 
-**Рабочая папка на Mac:** `/Users/denisgrisko/Documents/MyWay-Moswar/AI-Script`
+Три `.js` файла — не случайный дубль: правки идут в исходник, перед релизом тело копируется в userscript и в мост. В мосте нельзя менять `@name`, `@namespace`, `@updateURL`, `@downloadURL`.
 
 ## Установка
 
-1. Установите [Tampermonkey](https://www.tampermonkey.net/) или Violentmonkey.
-2. Установите скрипт с GitHub:
-   - [AI MyWay DeN.user.js (raw)](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js)
-3. Откройте `https://*.moswar.ru/*` и включите нужные модули в панели.
+1. [Tampermonkey](https://www.tampermonkey.net/) или Violentmonkey.
+2. [AI MyWay DeN.user.js](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js)
+3. Откройте любую страницу `*.moswar.ru` и включите модули в панели.
 
-Если скрипт ставили **до переименования** (в Tampermonkey он называется `MoswarBot by MY WAY DEN`) — ничего переустанавливать не нужно. Обновление идёт со старого адреса. В меню Tampermonkey: «Проверить обновления скриптов».
+Если в Tampermonkey скрипт всё ещё называется `MoswarBot by MY WAY DEN`, переустанавливать не нужно: обновление идёт по старому адресу. Меню расширения → «Проверить обновления скриптов».
 
-## Модули (актуально)
+## Модули
 
-| Модуль | Версия | Что делает |
+| Модуль | Версия | Назначение |
 |--------|--------|------------|
 | Рейды | 6.1 | Циклы, фарм 100%, акция, сильный босс |
-| Крысопровод | 1.9.5 | Руда / акционный дроп / **тёмный тоннель** (коллекции, ларец, ключи 36–40) |
+| Крысопровод | 1.9.5 | Руда / акционный дроп / тёмный тоннель |
 | Нефтепровод | 3.7 | Нефть, сникерсы, партбилеты, акция, мини-игры, патруль |
 | Подземка | 1.3.17 | Групповая подземка, авто + циклы |
-| Автофлаг | 4.3 | Автозапись на противостояние |
-| Спутники | 3.1 | Строительство, защита меда, живая витрина |
+| Автофлаг | 4.3 | Запись на противостояние |
+| Спутники | 3.1 | Строительство, защита меда, витрина |
 | ИИ | 4.21 | Ollama Intelligence |
 | Фулл Доп | 2.12 | Допы, питомцы, бонусы |
-| Закупка ТЦ | 1.9 | Киоск и подарки: разовая покупка, тугри из кошелька (title) |
-| Фу-Баги | 1.0 | Рюкзаки КОМП, награда, нормализация багов |
-| Субботний ОМОН | 3.1 | ОМОН, каски/орехи |
+| Закупка ТЦ | 1.9 | Киоск и подарки |
+| Фу-Баги | 1.0 | Рюкзаки КОМП |
+| Субботний ОМОН | 3.1 | ОМОН, каски, орехи |
 | Око Провидения | 1.0 | Панель абилок в групповом бою |
 
 ## Разработка
 
-1. Правки в `AI MyWay DeN.js`.
-2. Перед релизом: скопировать в `AI MyWay DeN.user.js` **и** в мост `MoswarBot by MY WAY DEN .user.js` (в мосте оставить старые `@name` / `@namespace` / `@updateURL`).
-3. Commit + push в `main` на GitHub.
+1. Править только `AI MyWay DeN.js`.
+2. Перед релизом скопировать тело в оба `.user.js` (шапку моста не трогать).
+3. Поднять `@version` и отправить в `main`.
 
-Связанный проект (desktop): [Desktop-Bot-Moswar-MyWay](../Desktop-Bot) — Electron-приложение DM.
+Подробности по модулям: [инструкция](README_AI_MyWay_DeN_Instructions.md).

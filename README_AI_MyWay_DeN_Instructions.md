@@ -1,8 +1,8 @@
-# 🤖 AI MyWay DeN v1.8.1 — Инструкция пользователя
+# AI MyWay DeN — инструкция
 
-**Актуальный исходник:** `AI MyWay DeN.js` (проект `Актуальный эталон /Скрипт moswar`)  
-**GitHub:** [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)  
-**Userscript на GitHub:** `AI MyWay DeN.user.js`
+Исходник: `AI MyWay DeN.js`  
+Репозиторий: [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)  
+Установка: `AI MyWay DeN.user.js` (версия **2.5.2**)
 
 ## 📋 Содержание
 
@@ -24,7 +24,7 @@
 
 ### 🎯 Возможности
 
-- ✅ **11 модулей** (рейды, метро, нефть, подземка, флаг, спутники, ИИ, допы, баги, ОМОН, око)
+- **12 модулей** (рейды, метро, нефть, подземка, флаг, спутники, ИИ, допы, закупка ТЦ, баги, ОМОН, око)
 - 🤖 **Централизованное управление** через единую панель (Hub)
 - 🧠 **Ха́б** — включение модулей, панели, восстановление после перезагрузки
 - 🐀 **Крысопровод 1.9.5** — обычный / акционный / **тёмный тоннель** (коллекции, гигантский ларец, ключи на 36–40)
@@ -54,9 +54,9 @@
 1. Откройте [установку userscript](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js)
 2. Подтвердите установку в Tampermonkey
 
-**Вариант B — из эталона `AI MyWay DeN.js`:**
+**Вариант B — из исходника `AI MyWay DeN.js`:**
 1. Tampermonkey → «Добавить новый скрипт»
-2. Вставьте содержимое файла `AI MyWay DeN.js` из проекта `Скрипт moswar`
+2. Вставьте содержимое `AI MyWay DeN.js`
 3. `Файл` → `Сохранить` (`Ctrl+S` / `Cmd+S`)
 
 ### Шаг 3: Первая настройка
@@ -438,17 +438,16 @@
 
 **A:** Это может быть признаком:
 1. Конфликта модулей (отключите лишние)
-2. Бага в демо-модуле (обновите скрипт)
+2. Бага в модуле (обновите скрипт)
 3. Неправильной настройки таймеров
 
 ### Q: Как обновить бот?
 
 **A:**
-1. Возьмите актуальный `AI MyWay DeN.js` из проекта **Скрипт moswar** или userscript с [GitHub DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar)
-2. Откройте Tampermonkey → «Редактировать»
-3. Замените код на новый и сохраните (`Ctrl+S` / `Cmd+S`)
-4. Жёстко обновите страницу moswar.ru
-5. Проверка свежей сборки: панель крыс — **«Крысопровод Bot v1.9.4»**
+1. Возьмите актуальный `AI MyWay DeN.user.js` с [GitHub](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar) или дождитесь автообновления Tampermonkey
+2. Либо откройте Tampermonkey → «Редактировать», вставьте свежий `AI MyWay DeN.js` и сохраните
+3. Жёстко обновите страницу moswar.ru
+4. В панели крыс должна быть версия **1.9.5**
 
 ### Q: В тёмном тоннеле атакует «не те» сундуки
 
@@ -465,7 +464,7 @@
 ### Архитектура
 
 ```
-AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
+AI MyWay DeN (AI MyWay DeN.js / v2.5.2)
 ├── Ядро
 │   ├── Хаб (вкл/выкл модулей)
 │   ├── Панели и сохранение состояния
@@ -503,7 +502,6 @@ AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
 | `MYWAY_ALLINONE_POS` | Позиция панели |
 | `mw_tcshop_qty_v2` / `mw_tcshop_cfg_v1` / `mw_tcshop_run_v1` / `mw_tcshop_log_v1` | План закупки ТЦ, галочки, ход, лог панели |
 | Tampermonkey `mw_tg_token` / `mw_tg_chat` | Токен и Chat ID Telegram пользователя |
-| `mw_creator_reports` | `1` — отчёты автору (ник/клан, без IP); иначе выкл |
 | `den_bot_whitelist` / `den_bot_whitelist_ts` | Кэш `whitelist.txt` с GitHub |
 
 ### Логи и отладка
@@ -516,20 +514,21 @@ AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
 
 - **Браузеры:** Chrome, Edge, Firefox, Safari
 - **Расширения:** Tampermonkey, Violentmonkey, Greasemonkey
-- **Версия userscript:** 2.5.1 (`AI MyWay DeN.js`)
+- **Версия userscript:** 2.5.2 (`AI MyWay DeN.js`)
 - **Крысопровод:** 1.9.5
 - **Дата актуальности:** 2026-09-03
 - **Репозиторий:** https://github.com/DeN07-ai/AI-Script-MyWay-Moswar
 
-### Контакты и поддержка
+### Контакты
 
-- 💬 GitHub: [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar) (Issues)
-- 📧 Email: (укажите ваш email)
-- 💬 Telegram: (укажите ваш Telegram)
+- GitHub: [DeN07-ai/AI-Script-MyWay-Moswar](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar) (Issues)
 
 ---
 
 ## 📝 Changelog
+
+### v2.5.2 (2026-09-03)
+- Убраны токен служебного бота и отчёты автору; гостевые ID только в `whitelist.txt`
 
 ### v2.5.1 (2026-09-03)
 - ✅ Фулл Доп **2.12**: бизнес жмёт игровую кнопку в хате (`Home.business.activate`), иконка «Империя доставки»
@@ -544,9 +543,8 @@ AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
 - ✅ В шапке `@author MyWay DeN` — Tampermonkey больше не пишет «автор неизвестен»
 
 ### v2.4.8 (2026-08-28)
-- ✅ Отчёты автору выключены по умолчанию; IP больше не запрашивается
-- ✅ WhiteList гостей: `whitelist.txt` на GitHub (не Pastebin); кнопка «Обновить WhiteList» работает
-- ✅ `@grant GM_addStyle`; версии в инструкции: Крысы 1.9.5, Фулл Доп 2.11
+- WhiteList гостей: `whitelist.txt` на GitHub; кнопка «Обновить WhiteList» работает
+- ✅ `@grant GM_addStyle`; версии в инструкции: Крысы 1.9.5, Фулл Доп 2.12
 - ✅ Патч jQuery / `initHelpersAlert` только на `/travel2/`; сторож рейдов не тащит на рейды, если бот выключен
 - ✅ Рабочие циклы модулей через реестр сессий: крестик в хабе гасит таймеры, «Старт» поднимает снова
 - ✅ Токен Telegram пользователя — в хранилище Tampermonkey, не в `localStorage` страницы
@@ -556,20 +554,18 @@ AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
 - ✅ Мост автообновления: файл `MoswarBot by MY WAY DEN .user.js` для старых установок клана
 
 ### v2.4.6 (2026-08-28)
-- ✅ МиниБот убран из хаба (черновик «бота на всё»)
-- ✅ Эталон сохранён для MoswarBot Desktop: `docs/reference/MiniBot-Zakouloknik.user.js`
+- МиниБот убран из хаба
 
 ### v1.8.1 / Крысопровод 1.9.2 (2026-08)
 - ✅ Режим **Тёмный тоннель**: выбор награды — коллекции / гигантский ларец / оба
 - ✅ Цель ларца только `box_metro5` (`8217`); автооткрытие после боя
 - ✅ Правило спусков **36–40**: атака только за ключи `box_metro_key` (`3347`)
-- ✅ Документация и проект `Скрипт moswar` с эталоном `AI MyWay DeN.js`
+- ✅ Документация репозитория AI-Script-MyWay-Moswar
 - ✅ Модуль **Око Провидения** (v1.0) в списке модулей
 
-### Ранее (v1.7.2 Smart Core)
-- ✅ Улучшения дуэлей / FSM / `setDuelCooldown()`
-- ✅ Бейджи «Демо» для МиниБота
-- ✅ Умное ожидание таймеров, автовыход из боёв
+### Ранее (v1.7.2)
+- Дуэли / FSM / `setDuelCooldown()`
+- Ожидание таймеров, автовыход из боёв
 
 ---
 
@@ -584,7 +580,7 @@ AI MyWay DeN (AI MyWay DeN.js / v2.5.1)
 
 ---
 
-**Версия документа:** 1.2  
-**Дата обновления:** 2026-08-21  
+**Версия документа:** 2.5.2  
+**Дата обновления:** 2026-09-03  
 **Автор:** MyWay DeN  
-**Эталон:** `Актуальный эталон /Скрипт moswar/AI MyWay DeN.js`
+**Исходник:** `AI MyWay DeN.js`
