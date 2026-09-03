@@ -3,7 +3,7 @@
 // @namespace    MyWay.Moswar
 // @version      2.5.0
 // @author       MyWay DeN
-// @description  ИИ скрипт MyWay Moswar: Рейды, Крысы (тёмный тоннель), Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
+// @description  Модульный скрипт: Рейды, Крысы , Нефть, Подземка, Автофлаг, Спутники, ИИ, Фулл Доп, Закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
