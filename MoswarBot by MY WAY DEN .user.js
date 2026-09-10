@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      2.5.3
+// @version      2.5.4
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -686,7 +686,10 @@
           panel.appendChild(body);
           document.body.appendChild(panel);
 
-          if (moduleId) Utils.attachPanelChrome(header, moduleId, opts);
+          if (moduleId) {
+              Utils.attachPanelChrome(header, moduleId, opts);
+              applyPanelMinimizedState(moduleId, panel);
+          }
           return { panel, header, body, moduleId };
       },
       /** − = свернуть в хаб; × = abort + свернуть */
@@ -831,6 +834,43 @@
   let LS_COLLAPSED = 'MYWAY_PANEL_COLLAPSED';
   let LS_LAYOUT = 'MYWAY_PANEL_LAYOUT';
   let LS_ORDER = 'MYWAY_MODULE_ORDER';
+  let LS_PANEL_MIN = 'MYWAY_PANEL_MINIMIZED';
+
+  function loadPanelMinMap() {
+      try { return JSON.parse(localStorage.getItem(LS_PANEL_MIN) || '{}') || {}; } catch (_) { return {}; }
+  }
+  function isPanelMinimized(moduleId) {
+      if (!moduleId) return false;
+      const map = loadPanelMinMap();
+      if (Object.prototype.hasOwnProperty.call(map, moduleId)) return !!map[moduleId];
+      // legacy: Закупка ТЦ хранила minimized в своём cfg
+      if (moduleId === 'tcshop') {
+          try {
+              const cfg = JSON.parse(localStorage.getItem('mw_tcshop_cfg_v1') || '{}');
+              if (cfg && cfg.minimized) {
+                  setPanelMinimized(moduleId, true);
+                  return true;
+              }
+          } catch (_) {}
+      }
+      return false;
+  }
+  function setPanelMinimized(moduleId, minimized) {
+      if (!moduleId) return;
+      const map = loadPanelMinMap();
+      map[moduleId] = !!minimized;
+      try { localStorage.setItem(LS_PANEL_MIN, JSON.stringify(map)); } catch (_) {}
+  }
+  /** Применить сохранённое свёрнутое состояние к DOM-панели (без анимации). */
+  function applyPanelMinimizedState(moduleId, panelEl) {
+      const el = panelEl || getPanelEl(moduleId);
+      if (!el || !moduleId) return;
+      if (isPanelMinimized(moduleId)) {
+          el.classList.add('mw-panel-animated', 'mw-panel-hidden');
+      } else {
+          el.classList.remove('mw-panel-hidden');
+      }
+  }
 
   GM_addStyle(`
   /* ===== B+ Modern (Warm Sand glass) — v2: читаемее + прозрачнее ===== */
@@ -1920,6 +1960,8 @@
       const row = document.querySelector(`.mw-mod-row[data-id="${id}"]`);
       const iconEl = row ? row.querySelector('.mw-mod-icon') : null;
 
+      setPanelMinimized(id, false);
+
       if (panelEl) {
           // Ensure display is block for measurement (if it was none)
           if (getComputedStyle(panelEl).display === 'none') {
@@ -1963,6 +2005,8 @@
       const panelEl = getPanelEl(id);
       const row = document.querySelector(`.mw-mod-row[data-id="${id}"]`);
       const iconEl = row ? row.querySelector('.mw-mod-icon') : null;
+
+      setPanelMinimized(id, true);
 
       if (panelEl) {
           // Panel is currently visible, so we can measure directly
@@ -7324,6 +7368,7 @@
     }
     if (panel) {
       ensureSoloBlock(panel);
+      applyPanelMinimizedState('dungeon', panel);
       return;
     }
 
@@ -7331,6 +7376,7 @@
     if (existing) {
       panel = existing;
       ensureSoloBlock(panel);
+      applyPanelMinimizedState('dungeon', panel);
       return;
     }
 
@@ -11007,6 +11053,7 @@ ${ticketsBlockHtml()}
           </div>
       `;
       document.body.appendChild(modal);
+      applyPanelMinimizedState('fulldope', modal);
 
       // 3. Logic & Data Loading
       const closeBtn = document.getElementById('fulldope-close');
@@ -16099,7 +16146,7 @@ body.mw-helper-tip-on .simple-tooltip {
       const ui = Utils.createPanel('tcshop-panel', '🛒 Закупка ТЦ', { moduleId: 'tcshop' });
       if (!ui) return;
       ui.panel.style.width = '430px';
-      if (cfg.minimized) ui.panel.classList.add('mw-panel-hidden');
+      // свёрнутость — общая MYWAY_PANEL_MINIMIZED (createPanel уже применил)
       try {
           new MutationObserver(() => {
               const hidden = ui.panel.classList.contains('mw-panel-hidden');
@@ -17851,6 +17898,7 @@ body.mw-helper-tip-on .simple-tooltip {
               `;
 
               document.body.appendChild(panel);
+              applyPanelMinimizedState('omon', panel);
               makeDraggable(panel, '#omon-header', null);
 
               Utils.attachPanelChrome(document.getElementById('omon-header'), 'omon');
@@ -18726,6 +18774,7 @@ body.mw-helper-tip-on .simple-tooltip {
           `;
 
           document.body.appendChild(panel);
+          applyPanelMinimizedState('omniscience', panel);
           Utils.attachPanelChrome(panel.firstElementChild, 'omniscience');
           ModuleSessionRegistry.register('omniscience', {
               onAbort: () => {
