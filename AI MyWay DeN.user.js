@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.5.7
+// @version      2.5.8
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -18256,7 +18256,7 @@ body.mw-helper-tip-on .simple-tooltip {
           if (!m) return;
 
           const remoteVer = m[1];
-          const currentVer = (typeof GM_info !== 'undefined' ? GM_info.script.version : '2.5.2');
+          const currentVer = (typeof GM_info !== 'undefined' ? GM_info.script.version : '2.5.8');
 
           if (remoteVer !== currentVer) {
               // Сравнение версий
