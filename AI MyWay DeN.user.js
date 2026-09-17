@@ -14718,6 +14718,124 @@ THE USE OF THIS SCRIPT IS MONITORED CLIENT SIDE - LAW ENFORCEMENT WILL BE NOTIFI
 
 window.utils_ = utils_;
 utils_.init();
+  function multiOpenEscape(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[char]));
+  }
+
+    function multiOpenStatus(text) {
+      let box = document.getElementById('mw-multi-open-status');
+      if (!box) {
+          box = document.createElement('div');
+          box.id = 'mw-multi-open-status';
+          box.style.cssText = 'position:fixed;z-index:2147483646;left:50%;top:86px;transform:translate(-50%,-12px);width:300px;max-width:calc(100vw - 32px);padding:12px 14px;background:linear-gradient(135deg,rgba(255,255,255,.68),rgba(255,249,239,.42) 48%,rgba(209,148,92,.16));border:1px solid rgba(209,148,92,.58);border-radius:18px;color:#5c4a36;font:600 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 14px 34px rgba(90,55,25,.2),inset 0 1px 0 rgba(255,255,255,.86),inset 0 -1px 0 rgba(196,134,69,.16);backdrop-filter:blur(20px) saturate(1.12);-webkit-backdrop-filter:blur(20px) saturate(1.12);opacity:0;transition:opacity .22s ease,transform .22s ease;pointer-events:none;';
+          document.body.appendChild(box);
+      }
+            box.innerHTML = `<div style="font-weight:700">${multiOpenEscape(text)}</div>`;
+      box.style.display = 'block';
+      requestAnimationFrame(() => {
+          box.style.opacity = '1';
+          box.style.transform = 'translate(-50%,0)';
+      });
+  }
+
+  function multiOpenReport(title, text) {
+      const message = [title, text].filter(Boolean).join(': ');
+      console.info('[AI MyWay DeN][Открытие предметов]', message);
+  }
+
+  window.enhanceAllMultiOpenActions = function() {
+      $('.object-thumbs[htab="inventory"] .object-thumb').each(function() {
+          const thumb = $(this);
+          const action = thumb.find('.action[data-action="use"], .action[data-action="opengift"]').first();
+          let image = thumb.find('img[data-id]').first();
+          if (!action.length || !image.length || image.attr('multi-open')) return;
+          const cleanImage = image.clone(false);
+          image.replaceWith(cleanImage);
+          image = cleanImage;
+          image.attr('multi-open', '1').css({cursor: 'pointer', background: 'rgba(0,0,0,0.1)', transition: 'background 0.3s'});
+          image.on('mouseenter.multiOpen', function() { $(this).css('background', 'rgba(0,0,0,0.6)'); });
+          image.on('mouseleave.multiOpen', function() { $(this).css('background', 'rgba(0,0,0,0.1)'); });
+          image.on('click.multiOpen', function() {
+              const count = parseInt(thumb.find('.count').text().replace(/\D/g, ''), 10) || 1;
+              const id = image.attr('data-id');
+              const src = image.attr('src');
+              const operation = action.attr('data-action');
+              const actionId = action.attr('id');
+              const standardItem = image.attr('data-st');
+              const title = image.attr('title') || 'Предмет';
+              const buttons = [{title: 'Открыть', callback: async function(alert) {
+                  const amount = Math.max(1, parseInt($('#multi-use-count').val(), 10) || 1);
+                  closeAlert(alert);
+                  let currentId = id;
+                  let opened = 0;
+                  multiOpenStatus(`${title}: открыто 0 из ${amount}.`);
+                  multiOpenReport('Открытие предметов', `${title}: начало, всего ${amount}`);
+                  for (let index = 0; index < amount; index += 1) {
+                      try {
+                          const response = await fetch(`/player/json/${operation}/${currentId}/`);
+                          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                          const data = await response.json();
+                          let nextItem = Object.values(data.inventory || {}).find(item =>
+                              actionId && `inventory-${item.code}-btn` === actionId
+                          );
+                          const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+                          alerts.forEach((item) => {
+                              const pageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+                              if (typeof pageWindow.showAlert === 'function') {
+                                  pageWindow.showAlert(item.title || 'Награда', item.text || '');
+                              }
+                          });
+                          if (nextItem) currentId = nextItem.id;
+                          opened += 1;
+                          const remaining = Math.max(0, amount - opened);
+                          multiOpenStatus(`${title}: открыто ${opened} из ${amount}.`);
+                          console.info('[AI MyWay DeN][Открытие предметов] Прогресс', { title, opened, total: amount, remaining });
+                          if (!nextItem && index + 1 < amount) {
+                              const inventoryResponse = await fetch('/player/json/');
+                              const inventoryData = await inventoryResponse.json();
+                              nextItem = Object.values(inventoryData.inventory || {}).find(item =>
+                                  (standardItem && String(item.standard_item) === String(standardItem)) ||
+                                  (actionId && `inventory-${item.code}-btn` === actionId)
+                              );
+                              if (nextItem) currentId = nextItem.id;
+                              else break;
+                          }
+                      } catch (error) {
+                          console.error('[AI MyWay DeN][Открытие предметов] Ошибка', { title, index: index + 1, error });
+                          multiOpenReport('Открытие предметов', `${title}: ошибка на предмете ${index + 1} из ${amount}`);
+                          break;
+                      }
+                  }
+                  const remaining = Math.max(0, amount - opened);
+                  multiOpenStatus(`${title}: завершено. Открыто ${opened} из ${amount}.`);
+                  multiOpenReport('Открытие предметов', `${title}: завершено, открыто ${opened} из ${amount}, осталось ${remaining}`);
+                  if (typeof AngryAjax !== 'undefined' && typeof AngryAjax.reload === 'function') AngryAjax.reload();
+                  setTimeout(() => window.enhanceAllMultiOpenActions(), 250);
+                  setTimeout(() => {
+                      const box = document.getElementById('mw-multi-open-status');
+                      if (!box) return;
+                      box.style.opacity = '0';
+                      box.style.transform = 'translate(-50%,-12px)';
+                      setTimeout(() => { box.style.display = 'none'; }, 240);
+                  }, 1800);
+              }}, {title: 'Отмена', callback: null}];
+              showConfirm('<p align="center">Количество: <input id="multi-use-count" value="' + count + '"></p>', buttons, {__title: 'Открыть много'});
+          });
+      });
+  };
+  if (location.pathname.endsWith('/player/')) {
+      let multiOpenRefreshTimer = 0;
+      const refreshMultiOpenActions = () => {
+          clearTimeout(multiOpenRefreshTimer);
+          multiOpenRefreshTimer = setTimeout(() => window.enhanceAllMultiOpenActions(), 120);
+      };
+      setTimeout(refreshMultiOpenActions, 200);
+      if (typeof $ === 'function' && $.fn && typeof $(document).ajaxStop === 'function') $(document).ajaxStop(refreshMultiOpenActions);
+      new MutationObserver(refreshMultiOpenActions).observe(document.body, { childList: true, subtree: true });
+  }
+
 })();
 
       // [MOD] Meetings Bulk Buy
