@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.5.8
+// @version      2.5.9
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -14037,7 +14037,8 @@ ${ticketsBlockHtml()}
   },
   uluchshator: function() {
       if (typeof window.__mwAiJobsMount === 'function') window.__mwAiJobsMount();
-      if (window.utils_) return;
+      const aiPageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+      if (typeof window.$ !== 'function' && typeof aiPageWindow.$ === 'function') window.$ = aiPageWindow.$;
        // ИИ v4.27 — помощник (меню в стиле хаба)
       // Группирует логи, авто-атаки, настройки и прочее
     (async function () {
@@ -14547,9 +14548,7 @@ style="
     $(".travel2-country-select-block").css({display:"none"});
     $(".worldtour-stats").css({display:"none"});
     $(".worldtour-banner").appendTo($(".worldtour-banner").parent());
-    if(!$(".worldtour-ratings-content-tabs").length){
-        $(".worldtour.worldtour--2").replaceWith(bo);
-    }
+    $(".worldtour.worldtour--2").replaceWith(bo);
     $("table.buttons").replaceWith($('<a href="/travel/" onclick="return AngryAjax.goToUrl(this, event);" style="text-decoration: none;"><< \u041a\u0440\u0443\u0433\u043e\u0441\u0432\u0435\u0442\u043a\u0430</a>'));
     Alpine.nextTick(()=>{
         let t=$("#country-switcher"),e=t.find(".worldtour-rating-line.special").first();
