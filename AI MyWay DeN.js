@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.0
+// @version      3.1
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -16,6 +16,7 @@
 // @connect      api.telegram.org
 // @connect      raw.githubusercontent.com
 // @connect      github.com
+// @connect      moskwar.ru
 // @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // ==/UserScript==
@@ -552,7 +553,7 @@
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
-  
+
 
   function loadState() {
       try { return JSON.parse(localStorage.getItem(CORE_KEY) || '{}'); } catch (e) { return {}; }
@@ -870,6 +871,17 @@
           el.classList.remove('mw-panel-hidden');
       }
   }
+
+  GM_addStyle(`
+        #mw-cocktail-recipe-toolbar { display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto; }
+        #mw-cocktail-nav, .mw-cocktail-nav { display:none !important; }
+        .mw-cocktail-glass-button { border:1px solid rgba(196,134,69,.8); border-radius:10px; padding:5px 12px; cursor:pointer; background:linear-gradient(180deg,rgba(232,184,122,.98),rgba(209,148,92,.98)); color:#fffaf3; font-weight:800; box-shadow:0 4px 10px rgba(90,60,30,.14); }
+        .mw-cocktail-glass-button:hover { filter:brightness(1.05); }
+        .mw-cocktail-glass-button:disabled { opacity:.55; cursor:wait; }
+  #mw-cocktail-recipe-toolbar .mw-recipe-check {
+    cursor:pointer;
+  }
+  `);
 
   GM_addStyle(`
   /* ===== B+ Modern (Warm Sand glass) — v2: читаемее + прозрачнее ===== */
@@ -4722,7 +4734,7 @@
               btnLabubu.setAttribute("aria-pressed", labubuLetuchik ? "true" : "false");
               btnLabubu.title = labubuLetuchik ? "Летучик: вкл" : "Летучик: выкл";
           };
-          
+
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
           const rbDarkBoth = document.getElementById("rat-dark-reward-both");
@@ -7569,9 +7581,9 @@ ${ticketsBlockHtml()}
     };
 
     // 🔥 НОВЫЕ: обработчики быстрого режима
-    q('#dg-speed-enabled', panel).onchange = (e) => { 
-      CFG.fights.speedMode.enabled = e.target.checked; 
-      save(LS.cfg, CFG); 
+    q('#dg-speed-enabled', panel).onchange = (e) => {
+      CFG.fights.speedMode.enabled = e.target.checked;
+      save(LS.cfg, CFG);
     };
 
     loadCFGToUI();
@@ -7596,12 +7608,12 @@ ${ticketsBlockHtml()}
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
-    
+
     // 🔥 НОВЫЕ: быстрый режим
     if (q('#dg-speed-enabled', panel)) {
       q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
     }
-    
+
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -8202,7 +8214,7 @@ ${ticketsBlockHtml()}
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-    
+
     // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
     const allReady = inRoom >= total;
     if (!allReady) {
@@ -8344,7 +8356,7 @@ ${ticketsBlockHtml()}
     // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
     if (CFG.group.soloWithRelic) {
       log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
-      
+
       const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
       if (payBtn && isVisible(payBtn)) {
         payBtn.click();
@@ -8367,7 +8379,7 @@ ${ticketsBlockHtml()}
         log('спуск: Dungeon.enter (api)');
         return true;
       }
-      
+
       return false;
     }
 
@@ -11240,7 +11252,7 @@ ${ticketsBlockHtml()}
           if (moscowpolyCount && misc.moscowpolyCount) moscowpolyCount.value = misc.moscowpolyCount;
           const robotUltra = document.getElementById('fd-robot-ultra');
           if (robotUltra) robotUltra.checked = !!misc.robotUltra;
-          
+
           const natalBelieve = document.getElementById('fd-natal-believe');
           if (natalBelieve) natalBelieve.checked = !!misc.natalBelieve;
           const natalDoubt = document.getElementById('fd-natal-doubt');
@@ -12289,7 +12301,7 @@ ${ticketsBlockHtml()}
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
-                          
+
                           // Переходим на страницу москвополии если ещё не там
                           if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
                               if (isAborted()) return false;
@@ -12298,7 +12310,7 @@ ${ticketsBlockHtml()}
                               await sleep(3000);
                               if (isAborted()) return false;
                           }
-                          
+
                           // Ждём инициализации window.Moscowpoly
                           const mp = await new Promise(function(resolve) {
                               let tries = 0;
@@ -12322,7 +12334,7 @@ ${ticketsBlockHtml()}
                               }, 100);
                           });
                           if (isAborted()) return false;
-                          
+
                           for (let i = 0; i < count; i++) {
                               if (isAborted()) break;
                               await waitWhilePaused();
@@ -12463,13 +12475,13 @@ ${ticketsBlockHtml()}
                               const believe = believeCh ? believeCh.checked : false;
                               const doubt = doubtCh ? doubtCh.checked : false;
                               console.log('[FullDope] Natal: believe=' + believe + ', doubt=' + doubt);
-                              
+
                               if (!believe && !doubt) {
                                   logs.push('⚠️ Выберите опцию натальной карты');
                                   console.warn('[FullDope] Natal: No options selected');
                                   break;
                               }
-                              
+
                               // Если не на странице - переходим и ждём загрузки
                               if (location.pathname !== '/natal2026/') {
                                   if (isAborted()) return false;
@@ -12482,16 +12494,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: Page should be loaded now');
                                   // Продолжаем выполнение в том же цикле
                               }
-                              
+
                               // Ждём полной загрузки DOM
                               console.log('[FullDope] Natal: Waiting for DOM...');
                               await sleep(2000);
                               if (isAborted()) return false;
-                              
+
                               // Ищем кнопки
                               const actions = document.querySelector('.dog2017-actions');
                               console.log('[FullDope] Natal: actions found=' + !!actions);
-                              
+
                               // Если панель не найдена - пробуем ещё раз
                               if (!actions) {
                                   console.log('[FullDope] Natal: Panel not found, waiting more...');
@@ -12505,19 +12517,19 @@ ${ticketsBlockHtml()}
                                       break;
                                   }
                               }
-                              
+
                               // Кликаем по кнопкам
                               const finalActions = document.querySelector('.dog2017-actions');
-                              
+
                               if (believe) {
                                   const btnL = finalActions?.querySelector('.dog2017-button--l');
                                   console.log('[FullDope] Natal: btnL found=' + !!btnL);
                                   if (btnL) {
                                       console.log('[FullDope] Natal: clicking Верю карте');
-                                      if (btnL.onclick) { 
-                                          btnL.onclick(); 
-                                      } else { 
-                                          btnL.click(); 
+                                      if (btnL.onclick) {
+                                          btnL.onclick();
+                                      } else {
+                                          btnL.click();
                                       }
                                       await sleep(2000);
                                       logs.push('⭐ Верю карте');
@@ -12528,16 +12540,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: btnR found=' + !!btnR);
                                   if (btnR) {
                                       console.log('[FullDope] Natal: clicking Сомневаюсь но жму');
-                                      if (btnR.onclick) { 
-                                          btnR.onclick(); 
-                                      } else { 
-                                          btnR.click(); 
+                                      if (btnR.onclick) {
+                                          btnR.onclick();
+                                      } else {
+                                          btnR.click();
                                       }
                                       await sleep(2000);
                                       logs.push('🤔 Сомневаюсь но жму');
                                   }
                               }
-                          } catch(e) { 
+                          } catch(e) {
                               console.error('[FullDope] Natal error:', e);
                               logs.push('⚠️ Натальная: ' + e.message);
                           }
@@ -14039,6 +14051,296 @@ ${ticketsBlockHtml()}
       if (typeof window.__mwAiJobsMount === 'function') window.__mwAiJobsMount();
       const aiPageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
       if (typeof window.$ !== 'function' && typeof aiPageWindow.$ === 'function') window.$ = aiPageWindow.$;
+
+      let cocktailPath = '';
+      let cocktailLoading = false;
+      let cocktailQueueBusy = false; // защита от параллельных/повторных запусков очереди смешивания
+      function findCocktailPlayerId(pagePlayer) {
+          const directId = String(pagePlayer?.id || '').match(/^\d+$/)?.[0];
+          if (directId) return Promise.resolve(directId);
+          const nickname = String(pagePlayer?.nickname || '').trim();
+          const links = Array.from(document.querySelectorAll('a[href]'));
+          const ownLink = links.find((link) => {
+              const match = link.getAttribute('href')?.match(/^\/player\/(\d+)\/?$/);
+              return match && (!nickname || link.textContent.includes(nickname));
+          });
+          if (ownLink) return Promise.resolve(ownLink.getAttribute('href').match(/\d+/)[0]);
+          return fetch('/player/json/', { credentials: 'include' })
+              .then((response) => response.ok ? response.json() : null)
+              .then((data) => String(data?.id || data?.player?.id || '').match(/^\d+$/)?.[0] || '');
+      }
+      function loadCocktailBootstrap(pagePlayer, playerId) {
+          if (typeof GM_xmlhttpRequest !== 'function') return;
+          cocktailLoading = true;
+          GM_xmlhttpRequest({
+              method: 'GET',
+              url: 'https://moskwar.ru/acoc/?r=' + Math.random(),
+              timeout: 30000,
+              onload: (response) => {
+                  cocktailLoading = false;
+                  if (response.status < 200 || response.status >= 300) {
+                      console.warn('[AI MyWay DeN] Автобармен: HTTP ' + response.status);
+                      return;
+                  }
+                  const safeId = String(playerId).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                  const source = String(response.responseText || '')
+                      .replace(/http:\/\/moskwar\.ru\/acoc\//g, 'https://moskwar.ru/acoc/')
+                      .replace(/var q0uid\s*=\s*[\s\S]*?;\s*var q0_lvl\s*=/, "var q0uid='" + safeId + "'; var q0_lvl=");
+                  const runtime = document.createElement('script');
+                  runtime.dataset.mwCocktailRuntime = '1';
+                  runtime.textContent = source;
+                  (document.head || document.documentElement).appendChild(runtime);
+                  console.log('[AI MyWay DeN] Оригинальный bootstrap Автобармэна выполнен для ID ' + playerId);
+              },
+              onerror: () => { cocktailLoading = false; console.warn('[AI MyWay DeN] Не удалось получить bootstrap Автобармэна'); },
+              ontimeout: () => { cocktailLoading = false; console.warn('[AI MyWay DeN] Таймаут bootstrap Автобармэна'); }
+          });
+      }
+      function ensureCocktailRuntime() {
+          const path = location.pathname;
+          if (!/^\/nightclub\/shakes\/?$/.test(path)) {
+              cocktailPath = path;
+              return;
+          }
+          const hasOriginalAuto = Array.from(document.querySelectorAll('.button, button, a, span')).some((node) =>
+              node.textContent.trim() === 'Авто' && node.closest('#mw-hub') == null && node.id !== 'mw-cocktail-sanction-auto'
+          );
+          if (hasOriginalAuto) {
+              cocktailPath = path;
+              return;
+          }
+          if (cocktailLoading) return;
+          const oldRuntime = document.querySelector('script[data-mw-cocktail-runtime]');
+          if (oldRuntime) oldRuntime.remove();
+          const pagePlayer = aiPageWindow.player || window.player;
+          const playerMarker = document.querySelector("input[value*='moswar.ru'], input[name='player_id']");
+          if (!pagePlayer && !playerMarker) return;
+          cocktailPath = path;
+          findCocktailPlayerId(pagePlayer).then((playerId) => {
+              if (!playerId) {
+                  cocktailPath = '';
+                  console.warn('[AI MyWay DeN] Не найден ID игрока для Автобармэна');
+                  return;
+              }
+              loadCocktailBootstrap(pagePlayer, playerId);
+          }).catch(() => { cocktailPath = ''; });
+      }
+      ensureCocktailRuntime();
+      setInterval(ensureCocktailRuntime, 500);
+
+      function mountSanctionCocktailButton() {
+          if (!/^\/nightclub\/shakes\/?$/.test(location.pathname) || document.getElementById('mw-cocktail-sanction-auto')) return;
+          const autoButton = Array.from(document.querySelectorAll('.button, button, a, span')).find((node) =>
+              node.textContent.trim() === 'Авто' && node.closest('#mw-hub') == null
+          );
+          if (!autoButton) return;
+          const wrapper = autoButton.closest('.button') || autoButton.parentElement;
+          if (!wrapper?.parentElement) return;
+          const button = document.createElement('div');
+          button.id = 'mw-cocktail-sanction-auto';
+          button.className = 'button mw-cocktail-glass-button';
+          button.style.cssText = 'display:inline-block;margin-left:4px;';
+          button.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">Авто Санкционка</div></span>';
+          button.title = 'Подставить обычный рецепт и переключить заполненные фрукты на санкционные';
+          const switchToSanction = () => {
+              const slots = Array.from(document.querySelectorAll('.filled-slot'));
+              let changed = 0;
+              slots.forEach((slot) => {
+                  const fruit = slot.querySelector('.object-thumb.fruit');
+                  if (!fruit) return;
+                  const code = fruit.getAttribute('data-code') || '';
+                  if (!code || code.startsWith('s')) return;
+                  fruit.setAttribute('data-code', 's' + code);
+                  const image = fruit.querySelector('img');
+                  if (image?.src && !/_sanc\.png(?:[?#].*)?$/i.test(image.src)) {
+                      image.src = image.src.replace(/\.png([?#].*)?$/i, '_sanc.png$1');
+                  }
+                  const header = slot.querySelector('span.header');
+                  if (header && !/^Санкционный\s/i.test(header.textContent.trim())) {
+                      header.textContent = 'Санкционный ' + header.textContent.trim();
+                  }
+                  changed += 1;
+              });
+              if (changed) console.log('[AI MyWay DeN] Санкционные фрукты переключены:', changed);
+              return changed;
+          };
+          button.addEventListener('click', () => {
+              autoButton.click();
+              let attempts = 0;
+              const waitForRecipe = setInterval(() => {
+                  attempts += 1;
+                  if (switchToSanction() || attempts >= 20) clearInterval(waitForRecipe);
+              }, 250);
+          });
+          wrapper.parentElement.insertBefore(button, wrapper.nextSibling);
+      }
+      const cocktailButtonObserver = new MutationObserver(mountSanctionCocktailButton);
+      cocktailButtonObserver.observe(document.documentElement, { childList: true, subtree: true });
+      mountSanctionCocktailButton();
+
+      function mountCocktailRecipeQueue() {
+          if (!/^\/nightclub\/shakes\/?$/.test(location.pathname)) return;
+          if (cocktailQueueBusy) return; // пока смешивание уже идёт — не трогаем DOM и не запускаем очередь повторно
+          const cocktailLinks = Array.from(document.querySelectorAll('a[href*="/nightclub/"]'));
+          const navRoots = new Set();
+          cocktailLinks.forEach((link) => {
+              let root = link.closest('.buttons-div, .nav, .tabs, .navigation, ul, table');
+              if (!root && link.parentElement) root = link.parentElement;
+              if (root && !root.closest('.recepts')) navRoots.add(root);
+          });
+          navRoots.forEach((root) => {
+              if (root.querySelectorAll('a[href*="/nightclub/"]').length > 1) root.classList.add('mw-cocktail-nav');
+          });
+          const list = document.querySelector('.recepts .object-thumbs.fruits');
+          if (!list || list.querySelector('.mw-recipe-check')) return;
+          const recipes = Array.from(list.querySelectorAll('.object-thumb'));
+          if (!recipes.length) return;
+          const queueKey = 'mw_cocktail_recipe_queue_v1';
+          let savedQueue = [];
+          try { savedQueue = JSON.parse(sessionStorage.getItem(queueKey) || '[]'); } catch (_) { savedQueue = []; }
+          const toolbar = document.createElement('div');
+          toolbar.id = 'mw-cocktail-recipe-toolbar';
+          toolbar.innerHTML = '<div class="button mw-cocktail-glass-button" id="mw-cocktail-mix-selected"><span class="f"><div class="c">Смешать выбранные</div></span></div>' +
+              '<div class="button mw-cocktail-glass-button" id="mw-cocktail-select-all"><span class="f"><div class="c">Выбрать все</div></span></div>';
+          list.parentElement.insertBefore(toolbar, list);
+          recipes.forEach((recipe, index) => {
+              const padding = recipe.querySelector('.padding') || recipe;
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.className = 'mw-recipe-check';
+              checkbox.dataset.index = String(index);
+              checkbox.title = 'Выбрать рецепт';
+              checkbox.style.cssText = 'position:absolute;left:4px;top:4px;width:18px;height:18px;z-index:5;';
+              const recipeId = recipe.querySelector('img[data-id]')?.getAttribute('data-id');
+              checkbox.checked = recipeId ? savedQueue.includes(recipeId) : false;
+              checkbox.addEventListener('change', () => {
+                  const ids = Array.from(list.querySelectorAll('.mw-recipe-check:checked')).map((check) =>
+                      check.closest('.object-thumb')?.querySelector('img[data-id]')?.getAttribute('data-id')
+                  ).filter(Boolean);
+                  try { sessionStorage.setItem(queueKey, JSON.stringify(ids)); } catch (_) {}
+              });
+              if (getComputedStyle(padding).position === 'static') padding.style.position = 'relative';
+              padding.appendChild(checkbox);
+          });
+          const waitFor = (predicate, timeout = 10000) => new Promise((resolve) => {
+              const started = Date.now();
+              const tick = () => {
+                  if (predicate()) return resolve(true);
+                  if (Date.now() - started >= timeout) return resolve(false);
+                  setTimeout(tick, 150);
+              };
+              tick();
+          });
+          const findRecipe = (recipeId) => Array.from(document.querySelectorAll('.recepts .object-thumbs.fruits .object-thumb')).find((item) =>
+              item.querySelector('img[data-id="' + recipeId + '"]')
+          );
+          const isRecipeReady = (recipe) => {
+              if (!recipe) return false;
+              // Настоящий признак кулдауна в разметке игры — класс .cooldown на .object-thumb
+              // и/или таймер с ненулевым значением. У .action при этом класса .disabled НЕТ,
+              // поэтому раньше скрипт ошибочно считал такой рецепт доступным для клика.
+              if (recipe.classList.contains('cooldown')) return false;
+              const timeLeft = recipe.querySelector('.timer .timeleft');
+              if (timeLeft) {
+                  const seconds = parseInt(timeLeft.getAttribute('timer') || '0', 10);
+                  if (!Number.isNaN(seconds) && seconds > 0) return false;
+              }
+              const action = recipe.querySelector('.action');
+              if (!action || action.classList.contains('disabled')) return false;
+              if (!/смешать/i.test(action.textContent || '')) return false;
+              return true;
+          };
+          const mixOne = async (recipeId, index) => {
+              const recipe = findRecipe(recipeId);
+              if (!recipe) {
+                  console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': не найден в списке, пропускаем');
+                  return false;
+              }
+              if (!isRecipeReady(recipe)) {
+                  console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': ещё на перезарядке (таймер), пропускаем без клика');
+                  return false;
+              }
+              const action = recipe.querySelector('.action');
+              const beforeAlert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+              if (beforeAlert) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': уже открыто другое окно подтверждения, пропускаем');
+                  return false;
+              }
+              action.click();
+              const alertReady = await waitFor(() => {
+                  const alert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+                  return alert && alert.querySelector('.actions button');
+              });
+              if (!alertReady) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': окно подтверждения не появилось');
+                  return false;
+              }
+              const alert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+              const confirmButton = alert?.querySelector('.actions button');
+              if (!confirmButton) return false;
+              confirmButton.click();
+              const completed = await waitFor(() => {
+                  const currentAlert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+                  return !currentAlert || currentAlert !== alert || !recipe.isConnected || recipe.classList.contains('cooldown') || recipe.querySelector('.action.disabled');
+              }, 15000);
+              if (!completed) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': не дождались завершения');
+                  return false;
+              }
+              console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': успешно смешан');
+              return true;
+          };
+          toolbar.querySelector('#mw-cocktail-select-all').addEventListener('click', () => {
+              const checks = Array.from(list.querySelectorAll('.mw-recipe-check'));
+              const value = checks.some((check) => !check.checked);
+              checks.forEach((check) => { check.checked = value; });
+              const ids = value ? recipes.map((recipe) => recipe.querySelector('img[data-id]')?.getAttribute('data-id')).filter(Boolean) : [];
+              try { sessionStorage.setItem(queueKey, JSON.stringify(ids)); } catch (_) {}
+          });
+          const processSelected = async (button) => {
+              if (cocktailQueueBusy) return; // уже идёт цикл смешивания — новый не запускаем
+              const selected = recipes.map((recipe) => recipe.querySelector('img[data-id]')?.getAttribute('data-id'))
+                  .filter((recipeId) => recipeId && findRecipe(recipeId)?.querySelector('.mw-recipe-check')?.checked);
+              if (!selected.length) return;
+              cocktailQueueBusy = true;
+              try {
+                  try { sessionStorage.setItem(queueKey, JSON.stringify(selected)); } catch (_) {}
+                  button.disabled = true;
+                  for (let index = 0; index < selected.length; index += 1) {
+                      // Пропускаем/не смогли — идём дальше по списку, а не прерываем всю очередь целиком.
+                      // Это важно: иначе рецепт на кулдауне (или любая другая заминка) блокировал бы
+                      // обработку всех остальных выбранных рецептов и провоцировал бесконечные повторы после reload.
+                      await mixOne(selected[index], index);
+                      try {
+                          const left = selected.slice(index + 1).filter((recipeId) => findRecipe(recipeId));
+                          sessionStorage.setItem(queueKey, JSON.stringify(left));
+                      } catch (_) {}
+                  }
+                  button.disabled = false;
+                  // Очередь всегда полностью вычищается по завершении прохода — каждый id обрабатывается
+                  // ровно один раз за вызов, никаких автоматических повторных попыток после reload.
+                  try { sessionStorage.removeItem(queueKey); } catch (_) {}
+              } finally {
+                  cocktailQueueBusy = false; // снимаем блокировку в любом случае, даже при ошибке в цикле
+              }
+          };
+          toolbar.querySelector('#mw-cocktail-mix-selected').addEventListener('click', (event) => processSelected(event.currentTarget));
+          if (savedQueue.length && savedQueue.some((recipeId) => findRecipe(recipeId))) {
+              setTimeout(() => processSelected(toolbar.querySelector('#mw-cocktail-mix-selected')), 500);
+          }
+      }
+      let cocktailRecipeQueueDebounce = null;
+      const cocktailRecipeObserver = new MutationObserver(() => {
+          if (cocktailRecipeQueueDebounce) clearTimeout(cocktailRecipeQueueDebounce);
+          cocktailRecipeQueueDebounce = setTimeout(mountCocktailRecipeQueue, 120);
+      });
+      cocktailRecipeObserver.observe(document.documentElement, { childList: true, subtree: true });
+      mountCocktailRecipeQueue();
+      setInterval(() => {
+          ensureCocktailRuntime();
+          mountSanctionCocktailButton();
+          mountCocktailRecipeQueue();
+      }, 700);
        // ИИ v4.27 — помощник (меню в стиле хаба)
       // Группирует логи, авто-атаки, настройки и прочее
     (async function () {
@@ -17391,7 +17693,7 @@ body.mw-helper-tip-on .simple-tooltip {
   },
   omon: function() {
       // Субботний ОМОН v3.1 - Полная интеграция
-      if (window._omonRunning) { 
+      if (window._omonRunning) {
           console.log('[ОМОН] Уже запущен');
           return;
       }
@@ -18795,7 +19097,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
-      
+
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
           ModuleSessionRegistry.restartIntervals('omniscience');
@@ -19016,14 +19318,14 @@ body.mw-helper-tip-on .simple-tooltip {
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
               if (abilities[id]) return abilities[id];
-              
+
               // Попытка получить из DOM, если словарь не помог
               const input = document.querySelector(`input[type="radio"][value="${id}"]`);
               if (input) {
                   const rel = input.getAttribute('rel');
                   if (rel && rel !== 'Абилка' && !rel.includes('?')) return rel;
               }
-              
+
               return null;
           }
 
@@ -19046,20 +19348,20 @@ body.mw-helper-tip-on .simple-tooltip {
 
               // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
-              
+
               slots.forEach(img => {
                   const id = img.dataset.id;
                   const label = img.closest('label');
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-                  
+
                   // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
                   let name = input.getAttribute('rel') || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
                       name = getAbilityName(id) || `Абилка ${id}`;
                   }
-                  
+
                   const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
@@ -19108,7 +19410,7 @@ body.mw-helper-tip-on .simple-tooltip {
                       max-width: 100%;
                       color: ${isNameFallback ? '#ffca28' : '#fff'};
                   `;
-                  
+
                   if (name && name !== 'Абилка' && !name.includes('?')) {
                       // Если имя известно (из DOM или словаря) — показываем его
                       labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
