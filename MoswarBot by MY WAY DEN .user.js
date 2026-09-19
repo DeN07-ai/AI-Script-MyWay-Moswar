@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    МОЙ СПОСОБ
-// @version      3.1
+// @version      3.2
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -553,7 +553,7 @@
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
-
+  
 
   function loadState() {
       try { return JSON.parse(localStorage.getItem(CORE_KEY) || '{}'); } catch (e) { return {}; }
@@ -873,13 +873,75 @@
   }
 
   GM_addStyle(`
-        #mw-cocktail-recipe-toolbar { display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto; }
+        #mw-cocktail-recipe-toolbar {
+            display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto;
+            padding:8px 10px;
+            background: rgba(255,250,240,0.42);
+            border:1px solid rgba(209,148,92,0.22);
+            border-radius:16px;
+            backdrop-filter: blur(14px) saturate(1.15);
+            -webkit-backdrop-filter: blur(14px) saturate(1.15);
+            box-shadow: 0 6px 16px rgba(90,60,30,0.08), inset 0 1px 0 rgba(255,255,255,0.4);
+            max-width: fit-content;
+        }
         #mw-cocktail-nav, .mw-cocktail-nav { display:none !important; }
-        .mw-cocktail-glass-button { border:1px solid rgba(196,134,69,.8); border-radius:10px; padding:5px 12px; cursor:pointer; background:linear-gradient(180deg,rgba(232,184,122,.98),rgba(209,148,92,.98)); color:#fffaf3; font-weight:800; box-shadow:0 4px 10px rgba(90,60,30,.14); }
-        .mw-cocktail-glass-button:hover { filter:brightness(1.05); }
-        .mw-cocktail-glass-button:disabled { opacity:.55; cursor:wait; }
-  #mw-cocktail-recipe-toolbar .mw-recipe-check {
+        /* Единый стиль кнопок «Warm Sand glass» — те же токены, что и в #mw-hub / .mw-btn,
+           но компактнее — для использования прямо на странице игры, рядом с нативными кнопками. */
+        .mw-glass-btn-compact {
+            display:inline-flex; align-items:center; justify-content:center;
+            padding:6px 14px;
+            border:1px solid rgba(209,148,92,0.45);
+            border-radius:12px;
+            background: rgba(255,250,240,0.72);
+            color:#1a1410;
+            font:750 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            letter-spacing:0.1px;
+            cursor:pointer;
+            user-select:none;
+            transition: all .2s ease;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(90,60,30,0.1), inset 0 1px 0 rgba(255,255,255,0.55);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .mw-glass-btn-compact:hover {
+            background: rgba(255,244,225,0.9);
+            border-color: rgba(209,148,92,0.65);
+            box-shadow: 0 6px 16px rgba(90,60,30,0.14), inset 0 1px 0 rgba(255,255,255,0.65);
+            transform: translateY(-1px);
+        }
+        .mw-glass-btn-compact:active { transform: translateY(0); }
+        .mw-glass-btn-compact:disabled, .mw-glass-btn-compact[disabled] {
+            opacity:.55; cursor:wait; transform:none;
+        }
+  /* Кастомный чекбокс выбора рецепта — в тон общей палитре (тёплый песок), вместо системного */
+  #mw-cocktail-recipe-toolbar .mw-recipe-check,
+  .mw-recipe-check {
     cursor:pointer;
+    appearance:none; -webkit-appearance:none;
+    width:20px; height:20px;
+    margin:0;
+    border-radius:7px;
+    border:1.5px solid rgba(209,148,92,0.55);
+    background: rgba(255,250,240,0.88);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 2px 6px rgba(90,60,30,0.14), inset 0 1px 0 rgba(255,255,255,0.6);
+    transition: all .18s ease;
+    position:relative;
+  }
+  .mw-recipe-check:hover { border-color: rgba(209,148,92,0.85); }
+  .mw-recipe-check:checked {
+    background: linear-gradient(180deg, rgba(232,184,122,.98), rgba(209,148,92,.98));
+    border-color: rgba(196,134,69,0.9);
+  }
+  .mw-recipe-check:checked::after {
+    content:'';
+    position:absolute; left:6px; top:2px;
+    width:5px; height:10px;
+    border: solid #fffaf3;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
   }
   `);
 
@@ -4734,7 +4796,7 @@
               btnLabubu.setAttribute("aria-pressed", labubuLetuchik ? "true" : "false");
               btnLabubu.title = labubuLetuchik ? "Летучик: вкл" : "Летучик: выкл";
           };
-
+          
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
           const rbDarkBoth = document.getElementById("rat-dark-reward-both");
@@ -7581,9 +7643,9 @@ ${ticketsBlockHtml()}
     };
 
     // 🔥 НОВЫЕ: обработчики быстрого режима
-    q('#dg-speed-enabled', panel).onchange = (e) => {
-      CFG.fights.speedMode.enabled = e.target.checked;
-      save(LS.cfg, CFG);
+    q('#dg-speed-enabled', panel).onchange = (e) => { 
+      CFG.fights.speedMode.enabled = e.target.checked; 
+      save(LS.cfg, CFG); 
     };
 
     loadCFGToUI();
@@ -7608,12 +7670,12 @@ ${ticketsBlockHtml()}
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
-
+    
     // 🔥 НОВЫЕ: быстрый режим
     if (q('#dg-speed-enabled', panel)) {
       q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
     }
-
+    
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -8214,7 +8276,7 @@ ${ticketsBlockHtml()}
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-
+    
     // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
     const allReady = inRoom >= total;
     if (!allReady) {
@@ -8356,7 +8418,7 @@ ${ticketsBlockHtml()}
     // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
     if (CFG.group.soloWithRelic) {
       log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
-
+      
       const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
       if (payBtn && isVisible(payBtn)) {
         payBtn.click();
@@ -8379,7 +8441,7 @@ ${ticketsBlockHtml()}
         log('спуск: Dungeon.enter (api)');
         return true;
       }
-
+      
       return false;
     }
 
@@ -11252,7 +11314,7 @@ ${ticketsBlockHtml()}
           if (moscowpolyCount && misc.moscowpolyCount) moscowpolyCount.value = misc.moscowpolyCount;
           const robotUltra = document.getElementById('fd-robot-ultra');
           if (robotUltra) robotUltra.checked = !!misc.robotUltra;
-
+          
           const natalBelieve = document.getElementById('fd-natal-believe');
           if (natalBelieve) natalBelieve.checked = !!misc.natalBelieve;
           const natalDoubt = document.getElementById('fd-natal-doubt');
@@ -12301,7 +12363,7 @@ ${ticketsBlockHtml()}
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
-
+                          
                           // Переходим на страницу москвополии если ещё не там
                           if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
                               if (isAborted()) return false;
@@ -12310,7 +12372,7 @@ ${ticketsBlockHtml()}
                               await sleep(3000);
                               if (isAborted()) return false;
                           }
-
+                          
                           // Ждём инициализации window.Moscowpoly
                           const mp = await new Promise(function(resolve) {
                               let tries = 0;
@@ -12334,7 +12396,7 @@ ${ticketsBlockHtml()}
                               }, 100);
                           });
                           if (isAborted()) return false;
-
+                          
                           for (let i = 0; i < count; i++) {
                               if (isAborted()) break;
                               await waitWhilePaused();
@@ -12475,13 +12537,13 @@ ${ticketsBlockHtml()}
                               const believe = believeCh ? believeCh.checked : false;
                               const doubt = doubtCh ? doubtCh.checked : false;
                               console.log('[FullDope] Natal: believe=' + believe + ', doubt=' + doubt);
-
+                              
                               if (!believe && !doubt) {
                                   logs.push('⚠️ Выберите опцию натальной карты');
                                   console.warn('[FullDope] Natal: No options selected');
                                   break;
                               }
-
+                              
                               // Если не на странице - переходим и ждём загрузки
                               if (location.pathname !== '/natal2026/') {
                                   if (isAborted()) return false;
@@ -12494,16 +12556,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: Page should be loaded now');
                                   // Продолжаем выполнение в том же цикле
                               }
-
+                              
                               // Ждём полной загрузки DOM
                               console.log('[FullDope] Natal: Waiting for DOM...');
                               await sleep(2000);
                               if (isAborted()) return false;
-
+                              
                               // Ищем кнопки
                               const actions = document.querySelector('.dog2017-actions');
                               console.log('[FullDope] Natal: actions found=' + !!actions);
-
+                              
                               // Если панель не найдена - пробуем ещё раз
                               if (!actions) {
                                   console.log('[FullDope] Natal: Panel not found, waiting more...');
@@ -12517,19 +12579,19 @@ ${ticketsBlockHtml()}
                                       break;
                                   }
                               }
-
+                              
                               // Кликаем по кнопкам
                               const finalActions = document.querySelector('.dog2017-actions');
-
+                              
                               if (believe) {
                                   const btnL = finalActions?.querySelector('.dog2017-button--l');
                                   console.log('[FullDope] Natal: btnL found=' + !!btnL);
                                   if (btnL) {
                                       console.log('[FullDope] Natal: clicking Верю карте');
-                                      if (btnL.onclick) {
-                                          btnL.onclick();
-                                      } else {
-                                          btnL.click();
+                                      if (btnL.onclick) { 
+                                          btnL.onclick(); 
+                                      } else { 
+                                          btnL.click(); 
                                       }
                                       await sleep(2000);
                                       logs.push('⭐ Верю карте');
@@ -12540,16 +12602,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: btnR found=' + !!btnR);
                                   if (btnR) {
                                       console.log('[FullDope] Natal: clicking Сомневаюсь но жму');
-                                      if (btnR.onclick) {
-                                          btnR.onclick();
-                                      } else {
-                                          btnR.click();
+                                      if (btnR.onclick) { 
+                                          btnR.onclick(); 
+                                      } else { 
+                                          btnR.click(); 
                                       }
                                       await sleep(2000);
                                       logs.push('🤔 Сомневаюсь но жму');
                                   }
                               }
-                          } catch(e) {
+                          } catch(e) { 
                               console.error('[FullDope] Natal error:', e);
                               logs.push('⚠️ Натальная: ' + e.message);
                           }
@@ -14055,6 +14117,8 @@ ${ticketsBlockHtml()}
       let cocktailPath = '';
       let cocktailLoading = false;
       let cocktailQueueBusy = false; // защита от параллельных/повторных запусков очереди смешивания
+      let cocktailBootstrapAttempts = 0; // счётчик попыток бутстрапа Автобармена на текущем пути
+      const COCKTAIL_BOOTSTRAP_MAX_ATTEMPTS = 5; // после этого перестаём долбить, если сторонний скрипт стабильно падает
       function findCocktailPlayerId(pagePlayer) {
           const directId = String(pagePlayer?.id || '').match(/^\d+$/)?.[0];
           if (directId) return Promise.resolve(directId);
@@ -14100,22 +14164,35 @@ ${ticketsBlockHtml()}
           const path = location.pathname;
           if (!/^\/nightclub\/shakes\/?$/.test(path)) {
               cocktailPath = path;
+              cocktailBootstrapAttempts = 0; // ушли со страницы — на следующий заход пробуем заново
               return;
+          }
+          if (cocktailPath !== path) {
+              cocktailBootstrapAttempts = 0; // новый заход на страницу шейков — сбрасываем счётчик попыток
           }
           const hasOriginalAuto = Array.from(document.querySelectorAll('.button, button, a, span')).some((node) =>
               node.textContent.trim() === 'Авто' && node.closest('#mw-hub') == null && node.id !== 'mw-cocktail-sanction-auto'
           );
           if (hasOriginalAuto) {
               cocktailPath = path;
+              cocktailBootstrapAttempts = 0; // успех — сбрасываем счётчик
               return;
           }
           if (cocktailLoading) return;
+          if (cocktailBootstrapAttempts >= COCKTAIL_BOOTSTRAP_MAX_ATTEMPTS) {
+              // Сторонний скрипт Автобармена стабильно падает — прекращаем бесконечные повторные попытки,
+              // чтобы не спамить запросами и консолью. Кнопки "Смешать выбранные"/"Выбрать все" при этом
+              // продолжают работать независимо от этого стороннего бутстрапа.
+              cocktailPath = path;
+              return;
+          }
           const oldRuntime = document.querySelector('script[data-mw-cocktail-runtime]');
           if (oldRuntime) oldRuntime.remove();
           const pagePlayer = aiPageWindow.player || window.player;
           const playerMarker = document.querySelector("input[value*='moswar.ru'], input[name='player_id']");
           if (!pagePlayer && !playerMarker) return;
           cocktailPath = path;
+          cocktailBootstrapAttempts += 1;
           findCocktailPlayerId(pagePlayer).then((playerId) => {
               if (!playerId) {
                   cocktailPath = '';
@@ -14126,7 +14203,7 @@ ${ticketsBlockHtml()}
           }).catch(() => { cocktailPath = ''; });
       }
       ensureCocktailRuntime();
-      setInterval(ensureCocktailRuntime, 500);
+      setInterval(ensureCocktailRuntime, 2000);
 
       function mountSanctionCocktailButton() {
           if (!/^\/nightclub\/shakes\/?$/.test(location.pathname) || document.getElementById('mw-cocktail-sanction-auto')) return;
@@ -14138,9 +14215,9 @@ ${ticketsBlockHtml()}
           if (!wrapper?.parentElement) return;
           const button = document.createElement('div');
           button.id = 'mw-cocktail-sanction-auto';
-          button.className = 'button mw-cocktail-glass-button';
-          button.style.cssText = 'display:inline-block;margin-left:4px;';
-          button.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">Авто Санкционка</div></span>';
+          button.className = 'mw-glass-btn-compact';
+          button.style.cssText = 'display:inline-flex;margin-left:4px;';
+          button.textContent = 'Авто Санкционка';
           button.title = 'Подставить обычный рецепт и переключить заполненные фрукты на санкционные';
           const switchToSanction = () => {
               const slots = Array.from(document.querySelectorAll('.filled-slot'));
@@ -14200,8 +14277,8 @@ ${ticketsBlockHtml()}
           try { savedQueue = JSON.parse(sessionStorage.getItem(queueKey) || '[]'); } catch (_) { savedQueue = []; }
           const toolbar = document.createElement('div');
           toolbar.id = 'mw-cocktail-recipe-toolbar';
-          toolbar.innerHTML = '<div class="button mw-cocktail-glass-button" id="mw-cocktail-mix-selected"><span class="f"><div class="c">Смешать выбранные</div></span></div>' +
-              '<div class="button mw-cocktail-glass-button" id="mw-cocktail-select-all"><span class="f"><div class="c">Выбрать все</div></span></div>';
+          toolbar.innerHTML = '<button type="button" class="mw-glass-btn-compact" id="mw-cocktail-mix-selected">Смешать выбранные</button>' +
+              '<button type="button" class="mw-glass-btn-compact" id="mw-cocktail-select-all">Выбрать все</button>';
           list.parentElement.insertBefore(toolbar, list);
           recipes.forEach((recipe, index) => {
               const padding = recipe.querySelector('.padding') || recipe;
@@ -17693,7 +17770,7 @@ body.mw-helper-tip-on .simple-tooltip {
   },
   omon: function() {
       // Субботний ОМОН v3.1 - Полная интеграция
-      if (window._omonRunning) {
+      if (window._omonRunning) { 
           console.log('[ОМОН] Уже запущен');
           return;
       }
@@ -19097,7 +19174,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
-
+      
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
           ModuleSessionRegistry.restartIntervals('omniscience');
@@ -19318,14 +19395,14 @@ body.mw-helper-tip-on .simple-tooltip {
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
               if (abilities[id]) return abilities[id];
-
+              
               // Попытка получить из DOM, если словарь не помог
               const input = document.querySelector(`input[type="radio"][value="${id}"]`);
               if (input) {
                   const rel = input.getAttribute('rel');
                   if (rel && rel !== 'Абилка' && !rel.includes('?')) return rel;
               }
-
+              
               return null;
           }
 
@@ -19348,20 +19425,20 @@ body.mw-helper-tip-on .simple-tooltip {
 
               // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
-
+              
               slots.forEach(img => {
                   const id = img.dataset.id;
                   const label = img.closest('label');
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-
+                  
                   // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
                   let name = input.getAttribute('rel') || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
                       name = getAbilityName(id) || `Абилка ${id}`;
                   }
-
+                  
                   const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
@@ -19410,7 +19487,7 @@ body.mw-helper-tip-on .simple-tooltip {
                       max-width: 100%;
                       color: ${isNameFallback ? '#ffca28' : '#fff'};
                   `;
-
+                  
                   if (name && name !== 'Абилка' && !name.includes('?')) {
                       // Если имя известно (из DOM или словаря) — показываем его
                       labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
