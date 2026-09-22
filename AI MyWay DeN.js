@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.2
+// @version      3.3
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -547,13 +547,13 @@
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Помощник: задания и мелочи на любой странице', version: '4.28' },
-      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.12' },
+      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.13' },
       { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
-  
+
 
   function loadState() {
       try { return JSON.parse(localStorage.getItem(CORE_KEY) || '{}'); } catch (e) { return {}; }
@@ -4796,7 +4796,7 @@
               btnLabubu.setAttribute("aria-pressed", labubuLetuchik ? "true" : "false");
               btnLabubu.title = labubuLetuchik ? "Летучик: вкл" : "Летучик: выкл";
           };
-          
+
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
           const rbDarkBoth = document.getElementById("rat-dark-reward-both");
@@ -7643,9 +7643,9 @@ ${ticketsBlockHtml()}
     };
 
     // 🔥 НОВЫЕ: обработчики быстрого режима
-    q('#dg-speed-enabled', panel).onchange = (e) => { 
-      CFG.fights.speedMode.enabled = e.target.checked; 
-      save(LS.cfg, CFG); 
+    q('#dg-speed-enabled', panel).onchange = (e) => {
+      CFG.fights.speedMode.enabled = e.target.checked;
+      save(LS.cfg, CFG);
     };
 
     loadCFGToUI();
@@ -7670,12 +7670,12 @@ ${ticketsBlockHtml()}
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
-    
+
     // 🔥 НОВЫЕ: быстрый режим
     if (q('#dg-speed-enabled', panel)) {
       q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
     }
-    
+
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -8276,7 +8276,7 @@ ${ticketsBlockHtml()}
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-    
+
     // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
     const allReady = inRoom >= total;
     if (!allReady) {
@@ -8418,7 +8418,7 @@ ${ticketsBlockHtml()}
     // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
     if (CFG.group.soloWithRelic) {
       log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
-      
+
       const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
       if (payBtn && isVisible(payBtn)) {
         payBtn.click();
@@ -8441,7 +8441,7 @@ ${ticketsBlockHtml()}
         log('спуск: Dungeon.enter (api)');
         return true;
       }
-      
+
       return false;
     }
 
@@ -10683,7 +10683,7 @@ ${ticketsBlockHtml()}
       }
 
       if (document.getElementById('fulldope-modal')) return;
-      console.log('[MODULE_fulldope] v2.12');
+      console.log('[MODULE_fulldope] v2.13');
 
       // IDs from AI module for smart classification
       const RIDE_GROUPS = {
@@ -10970,7 +10970,7 @@ ${ticketsBlockHtml()}
       modal.id = 'fulldope-modal';
       modal.innerHTML = `
           <div id="fulldope-header">
-              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.12</span></div>
+              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.13</span></div>
               <div id="fulldope-header-actions">
                   <button class="fd-header-btn" id="fd-run" title="Запустить / продолжить">Активировать</button>
                   <button class="fd-header-btn" id="fd-pause" title="Пауза">Пауза</button>
@@ -11023,6 +11023,11 @@ ${ticketsBlockHtml()}
                   <div class="fd-item" id="fd-fake" data-type="misc">
                       <div class="fd-icon-wrapper" title="Мистер Фейк"><img src="/@/images/loc/fake/pers.png"></div>
                       <div style="font-size:10px;margin-top:2px;">Мистер Фейк</div>
+                  </div>
+
+                  <div class="fd-item" id="fd-expert" data-type="misc">
+                      <div class="fd-icon-wrapper" title="Диванный Эксперт"><img src="/@/images/obj/gifts2026/sept/blogger.png"></div>
+                      <div style="font-size:10px;margin-top:2px;">Диванный Эксперт</div>
                   </div>
 
                   <div class="fd-item" id="fd-carlson" data-type="misc">
@@ -11314,7 +11319,7 @@ ${ticketsBlockHtml()}
           if (moscowpolyCount && misc.moscowpolyCount) moscowpolyCount.value = misc.moscowpolyCount;
           const robotUltra = document.getElementById('fd-robot-ultra');
           if (robotUltra) robotUltra.checked = !!misc.robotUltra;
-          
+
           const natalBelieve = document.getElementById('fd-natal-believe');
           if (natalBelieve) natalBelieve.checked = !!misc.natalBelieve;
           const natalDoubt = document.getElementById('fd-natal-doubt');
@@ -11348,7 +11353,7 @@ ${ticketsBlockHtml()}
       ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(bindGridToggle);
 
       // Misc items click handler
-      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown', 'fd-natal'].forEach(id => {
+      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown', 'fd-natal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.onclick = () => { el.classList.toggle('selected'); saveSelections(); };
       });
@@ -11459,7 +11464,9 @@ ${ticketsBlockHtml()}
               const cRes = await fetch('/petarena/');
               if (cRes.ok) findIdsFromDoc(parser.parseFromString(await cRes.text(), 'text/html'));
 
-              const uniquePetLinks = [...petIds].slice(0, 30);
+              // [FIX] Раньше здесь был .slice(0, 30), из-за чего у игроков с 31+ питомцами
+              // последние в списке (и их абилки) молча пропадали из сканирования.
+              const uniquePetLinks = [...petIds];
               container.innerHTML = '';
               const addedPetAbiKeys = new Set();
               const registerPetAbiKey = (type, petId, abilityIdOrType) => {
@@ -11783,6 +11790,7 @@ ${ticketsBlockHtml()}
               { id: 'fd-tariffs', url: '/tariffs/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-shaman', url: '/grinch/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-fake', url: '/fake/', check: d => d.querySelector('[onclick*="activate-talant"]') },
+              { id: 'fd-expert', url: '/expert/', check: d => d.querySelector('[onclick*="activate-talant"]') || (d.querySelector('.boss-common-activate-button') && !d.querySelector('.boss-common-activate-button.disabled')) },
               { id: 'fd-carlson', url: '/karlsson/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-kosmodromx', url: '/kosmodromx/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-robot', url: '/mech/', check: d => d.querySelector('.robot2017-activate-button-inner') || (d.querySelector('.mech-b-overcharge') && !d.querySelector('.mech-b-overcharge.disabled')) },
@@ -12088,6 +12096,7 @@ ${ticketsBlockHtml()}
               'fd-tariffs': { url: '/tariffs/', name: '📉 Тарифы' },
               'fd-shaman': { url: '/shaman/', name: '🧟 Гринч' },
               'fd-fake': { url: '/fake/', name: '🎭 Фейк' },
+              'fd-expert': { url: '/expert/', name: '🛋️ Диванный эксперт' },
               'fd-carlson': { url: '/karlsson/', name: '🚁 Карлсон' },
               'fd-kosmodromx': { url: '/kosmodromx/', name: '🚀 Космо X' },
               'fd-natal': { url: '/natal2026/', name: '⭐ Натальная карта' }
@@ -12363,7 +12372,7 @@ ${ticketsBlockHtml()}
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
-                          
+
                           // Переходим на страницу москвополии если ещё не там
                           if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
                               if (isAborted()) return false;
@@ -12372,7 +12381,7 @@ ${ticketsBlockHtml()}
                               await sleep(3000);
                               if (isAborted()) return false;
                           }
-                          
+
                           // Ждём инициализации window.Moscowpoly
                           const mp = await new Promise(function(resolve) {
                               let tries = 0;
@@ -12396,7 +12405,7 @@ ${ticketsBlockHtml()}
                               }, 100);
                           });
                           if (isAborted()) return false;
-                          
+
                           for (let i = 0; i < count; i++) {
                               if (isAborted()) break;
                               await waitWhilePaused();
@@ -12537,13 +12546,13 @@ ${ticketsBlockHtml()}
                               const believe = believeCh ? believeCh.checked : false;
                               const doubt = doubtCh ? doubtCh.checked : false;
                               console.log('[FullDope] Natal: believe=' + believe + ', doubt=' + doubt);
-                              
+
                               if (!believe && !doubt) {
                                   logs.push('⚠️ Выберите опцию натальной карты');
                                   console.warn('[FullDope] Natal: No options selected');
                                   break;
                               }
-                              
+
                               // Если не на странице - переходим и ждём загрузки
                               if (location.pathname !== '/natal2026/') {
                                   if (isAborted()) return false;
@@ -12556,16 +12565,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: Page should be loaded now');
                                   // Продолжаем выполнение в том же цикле
                               }
-                              
+
                               // Ждём полной загрузки DOM
                               console.log('[FullDope] Natal: Waiting for DOM...');
                               await sleep(2000);
                               if (isAborted()) return false;
-                              
+
                               // Ищем кнопки
                               const actions = document.querySelector('.dog2017-actions');
                               console.log('[FullDope] Natal: actions found=' + !!actions);
-                              
+
                               // Если панель не найдена - пробуем ещё раз
                               if (!actions) {
                                   console.log('[FullDope] Natal: Panel not found, waiting more...');
@@ -12579,19 +12588,19 @@ ${ticketsBlockHtml()}
                                       break;
                                   }
                               }
-                              
+
                               // Кликаем по кнопкам
                               const finalActions = document.querySelector('.dog2017-actions');
-                              
+
                               if (believe) {
                                   const btnL = finalActions?.querySelector('.dog2017-button--l');
                                   console.log('[FullDope] Natal: btnL found=' + !!btnL);
                                   if (btnL) {
                                       console.log('[FullDope] Natal: clicking Верю карте');
-                                      if (btnL.onclick) { 
-                                          btnL.onclick(); 
-                                      } else { 
-                                          btnL.click(); 
+                                      if (btnL.onclick) {
+                                          btnL.onclick();
+                                      } else {
+                                          btnL.click();
                                       }
                                       await sleep(2000);
                                       logs.push('⭐ Верю карте');
@@ -12602,16 +12611,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: btnR found=' + !!btnR);
                                   if (btnR) {
                                       console.log('[FullDope] Natal: clicking Сомневаюсь но жму');
-                                      if (btnR.onclick) { 
-                                          btnR.onclick(); 
-                                      } else { 
-                                          btnR.click(); 
+                                      if (btnR.onclick) {
+                                          btnR.onclick();
+                                      } else {
+                                          btnR.click();
                                       }
                                       await sleep(2000);
                                       logs.push('🤔 Сомневаюсь но жму');
                                   }
                               }
-                          } catch(e) { 
+                          } catch(e) {
                               console.error('[FullDope] Natal error:', e);
                               logs.push('⚠️ Натальная: ' + e.message);
                           }
@@ -15050,7 +15059,7 @@ THE USE OF THIS SCRIPT IS MONITORED CLIENT SIDE - LAW ENFORCEMENT WILL BE NOTIFI
       <br>\u0427\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C, \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.<br>
       <i>(id \u0442\u0430\u0447\u043A\u0438: ${n})</i>.
       `})}}),e=$(".auto-bombila .actions");e.find("form").css({display:"inline-block"}),e.append(t)}function ul(){$(".plus-icon").eq(1).css("display","inline-block"),window.jobShowTonusAlert=function(){$.get("/job/tonus-buy-alert/",function(t){t.error?showAlert(moswar.lang.LANG_MAIN_105,t.error,!0):$.get("/player/json/use/"+t.restore_tonus+"/",function(e){console.log(e.restore_tonus),e.fullenergyin&&(player.fullenergyin=0,$("div.tonus-overtip-increase").html()),e.stats.energy&&setEnergy(e.stats.energy)},"json")},"json")}}function Bt(){let t=location.pathname;if($(".side-invite").remove(),Wt(),cl(),ul(),Eo(),t.match(/\/alley\/fight\//))fightForward();else if(t.match(/^(?!.*\/alley\/).*\/fight\//))rl(),ol();else if(t==="/player/")zt(),$("#stats-accordion .selected.active").css("cursor","pointer").on("click",Mn);else if(t==="/automobile/ride/")Qn();else if(t==="/tattoo/")nl();else if(t.includes("neftlenin"))Do();else if(t==="/square/tvtower/")il();else if(t==="/metrowar/clan/")ao();else if(t==="/home/relic/")jo();else if(t==="/travel2/")vo();else if(t==="/metro/")Lo();else if(t==="/petarena/")lo();else if(t==="/home/")Ao();else if(t==="/camp/gypsy/"){let e=$(".game-types td:first"),n=$(".game-types td").eq(1);if((!$(".multi-play-gypsy-250").length||!$(".multi-play-gypsy-750").length)&&(e.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(0),className:"multi-play-gypsy-250"})),n.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(1),className:"multi-play-gypsy-250"}))),$(".multi-play-gypsy-flowers").length)return;let r=$(".game-types-col").first();console.log(r),r.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(),className:"multi-play-gypsy-flowers"}))}else if(t==="/casino/blackjack/"){if($(".blackjack-multi").length)return;let e=ce({label:"\u0418\u0433\u0440\u0430\u0442\u044C \u0437\u0430 10",action:async()=>await ui(),className:"blackjack-multi"});$(".actions.bets").append(e)}else if(t==="/arbat/")ll();else if(t==="/pyramid/")$("#pyramid-buy-form input").css({width:"70px"});else if(t.includes("clan")){if($("#reorder-clan").length)return;let e=$('<span id="reorder-clan" class="cool-1"><i></i></span>').css({cursor:"pointer"});e.on("click",ro);let n=N({text:"+\u0412\u0440\u0430\u0433\u0438",title:"\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0441\u043F\u0438\u0441\u043E\u043A \u0432\u0440\u0430\u0433\u043E\u0432 (\u0434\u043B\u044F \u043A\u043B\u0430\u043D\u0432\u0430\u0440\u0430)",onClick:()=>oo(),className:"add-to-enemies",disableAfterClick:!0});$(n).css({display:"block",marginLeft:"auto"}),$('td.label:contains("\u041A\u043B\u0430\u043D\u0435\u0440\u044B")').append(n),e.insertAfter(`a[onclick="$('#players').toggle();"]`)}else if(t.includes("zodiac")){let e=$("#zodiak-action-button");if(!e||e.length===0)return;let n=e.text().trim();if(!n.includes("\u0423\u0437\u043D\u0430\u0442\u044C \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F"))return;let r=parseInt(n.match(/\d+/)[0],10);e.text(`\u0423\u0437\u043D\u0430\u0442\u044C \u0412\u0421\u0415 \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F\u044B (\u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C ${r})`),e.removeAttr("onclick").on("click",async()=>{e.addClass("disabled");for(let o=0;o<r;o++)await fetch("/zodiac/",{headers:{accept:"*/*","accept-language":"en-GB,en-US;q=0.9,en;q=0.8,ru;q=0.7,ro;q=0.6","content-type":"application/x-www-form-urlencoded; charset=UTF-8","sec-ch-ua":'"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',"sec-ch-ua-mobile":"?0","sec-ch-ua-platform":'"macOS"',"sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-origin","x-requested-with":"XMLHttpRequest"},body:"action=horoscope&__referrer=%2Fzodiac%2F&return_url=%2Fzodiac%2F",method:"POST",mode:"cors",credentials:"include"});AngryAjax.reload()})}else["/squid/","/meetings/","/sovet/career/"].includes(t)||(/^\/player\/[^/]+\/?$/.test(location.pathname)?$("#pers-player-info > div.relict-block > a > h3").text(`\u0420\u0415\u041B\u0418\u041A\u0422\u042B (${Relict.$list.children().length})`):t==="/settings/"?di():t==="/alley/"?Pn():t==="/lifting/"&&el())}var te=window.Moscowpoly,Ro=window.SteppedEase,lt=window.TweenLite;function Po(){try{if(!te){let checkMoscowpoly=0;let waitInterval=setInterval(function(){checkMoscowpoly++;if(window.Moscowpoly){clearInterval(waitInterval);te=window.Moscowpoly;Po()}if(checkMoscowpoly>500){clearInterval(waitInterval)}},100);return}te.animateDices=function(t){var e=this,n=this.$dice1,r=this.$dice2;n.unbind("click"),r.unbind("click"),n.removeAttr("style"),n.css({"background-position":"0 0"}).show(0);var o=mt_rand(10,20),s=mt_rand(1,2)*o/1e3,c=lt.to(n,s,{backgroundPosition:-1*65*o+"px 0",ease:Ro.config(o),paused:!0,onComplete:function(){n.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[0]),s>=l&&e.onAnimateDicesComplete()}});r.removeAttr("style"),r.css("background-position","0 -65px").show(0);var a=mt_rand(10,20),l=mt_rand(1,2)*a/1e3,u=lt.to(r,l,{backgroundPosition:-1*65*a+"px -65px",ease:Ro.config(a),paused:!0,onComplete:function(){r.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[1]),s<l&&e.onAnimateDicesComplete()}}),d=te.dicePositions[mt_rand(0,te.dicePositions.length-1)];n.css(d);var p={ease:Power1.easeOut,paused:!0};for(var g in d)p[g]=mt_rand(90,350);var f=lt.to(n,s,p);r.css(d);var w={ease:Power1.easeOut,paused:!0};for(var T in d)w[T]=mt_rand(90,350),Math.abs(p[T]-w[T])<35&&(p[T]+=p[T]>w[T]?50:-50);var C=lt.to(r,l,w);c.play(),u.play(),f.play(),C.play()},te.animateFigureRoute=function(t){if(t.length==0){this.setInAction(!1),this.setCellActive(this.data.current),this.updateInfoHTML(),this.initState();return}var e=this,n=te.getFigurePositionByCell(t[0]);lt.to(this.$figure,.1,{top:n.top,left:n.left,ease:Linear.easeNone,paused:!1,onComplete:function(){t=t.splice(1,t.length-1),e.animateFigureRoute(t)}})},te.dropDices=function(){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_roll/",{action:"moscowpoly_roll",ajax:1},"post",function(e){if(t.lastMove=e,t.state=e.state,t.animateDices(e.rollResult),e.text_m){if(e.text_m?.text?.includes("\u0417\u0430 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u043A\u043B\u0435\u0442\u043A\u0438 \u0441\u0442\u0430\u0440\u0442 \u0432\u044B \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u0442\u0435:"))return;t.addAlert(e.text_m)}[2,12].includes(e.move_to[0].step)||(!e?.state?.disable_button||e?.data?.state?.type==="closed")&&(te.setInAction(!1),te.doActivate())})},te.doActivate=function(){if(!this.inAction){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_activate/",{action:"moscowpoly_activate",ajax:1},"post",function(e){t.state=e.state,t.setInAction(!1),e.text_m&&!e.text_m?.text?.includes("\u0411\u043E\u043D\u0443\u0441 \u0443\u0436\u0435 \u0430\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u043D")&&t.addAlert(e.text_m),t.updateInfoHTML(),t.initState()})}},te.show=function(){var t=this;postUrl("/home/moscowpoly_state/",{action:"moscowpoly_state",ajax:1},"post",function(e){if(t.open(e),e.text_m&&t.addAlert(e.text_m),$(".moscowpoly-multi-btn").length)return;let n=ce({label:"\u0411\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u0443\u0431\u0438\u043A\u0438",action:async()=>(te.dropDices(),new Promise(r=>setTimeout(r,1e3))),className:"moscowpoly-multi",disableAfterClick:!1});$(".moscowpoly-panel__td-center").append(n)})}}catch(t){console.log(`Moscowpoly speed up:
-`,t)}}var dl=[{selector:"#content > div > div.boss-common-block > div.boss-common-bottom-panel > div > div > span.boss-common-active-from-value",url:new URL(window.location.href).origin+"/shaman/",imgSrc:"/@/images/loc/shaman/abil_6.png",targetHref:"/shaman/"},{selector:".buba-button-timer",url:new URL(window.location.href).origin+"/labubu/",imgSrc:"/@/images/loc/buba/bubas/14.png",targetHref:"/labubu/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/fake/",imgSrc:"/@/images/obj/gifts2025/sept/fake.png",targetHref:"/fake/"},{selector:"#content > div > div > div.grumpy2019-bottom-panel > div.grumpy2019-available-block > span.grumpy2019-available-value",url:new URL(window.location.href).origin+"/grumpy/",imgSrc:"/@/images/loc/grumpy/abils/abil_1.png",targetHref:"/grumpy/"},{selector:"#spanMatrixTimer",url:new URL(window.location.href).origin+"/matrix/",imgSrc:"/@/images/obj/beast_ability/ability54.png",targetHref:"/matrix/"},{selector:".worldwar2025-available-value",url:new URL(window.location.href).origin+"/tariffs/",imgSrc:"/@/images/obj/gifts2025/may/box_worldwar.png",targetHref:"/tariffs/"},{selector:".carlson2025-available-value",url:new URL(window.location.href).origin+"/karlsson/",imgSrc:"/@/images/obj/gifts2025/may/box_carlson.png",targetHref:"/karlsson/"},{selector:"#content > div > div.rocket2023-block > div.rocket2023-available-block > span.rocket2023-available-value",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/obj/gifts2023/may/abil_kosm_smoke.png",targetHref:"/kosmodromx/"},{selector:"TODO dyi selector",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/loc/rocket/rocket.png",targetHref:"/kosmodromx/"},{selector:"#hawthorn-popup > div > div.hawthorn-popup__actions > div > span",url:new URL(window.location.href).origin+"/trainer/vip/",imgSrc:"/@/images/loc/vip/hawthorn_icon.png",targetHref:"/trainer/vip/hawthorn/"},{selector:"#content > table > tbody > tr > td:nth-child(2) > div.block-bordered-tattoo > p:nth-child(3) > span",url:new URL(window.location.href).origin+"/nightclub/",imgSrc:"/@/images/obj/8march6/tattoo_mach.png",targetHref:"/nightclub/"},{selector:"#dino-tab-content-2 > div.dinopark-dino-stats > div:last-child > div.dinopark-dino-stat__value > span",url:new URL(window.location.href).origin+"/dinopark/",imgSrc:"/@/images/loc/dinopark/dinoegg.png",targetHref:"/dinopark/"},{selector:"#content > div > div.pilaf-actions .pilaf-activate-button-inner2",url:new URL(window.location.href).origin+"/teahouse/",imgSrc:"/@/images/loc/pilaf/objs/obj_3.png",targetHref:"/teahouse/"},{selector:"#content > div > div.bender-content > div.bender-use > div > div > button",url:new URL(window.location.href).origin+"/badasrobot/",imgSrc:"/@/images/obj/gifts2017/futurama/bender/head.png",targetHref:"/badasrobot/"}];async function pl({selector:t,url:e,imgSrc:n,targetHref:r,onclick:o}){if(!t||!e||!n){console.log("Could not fetch timer. Data missing.");return}let s=await _(t,new URL(e).pathname);r==="/dinopark/"&&(n=(await _(".dinopark-dino-pic__img","/dinopark/")).getAttribute("src"));let c=ee(`<img style="width: 56px; height: 56px; cursor: pointer; ${r==="/shaman/"&&"transform: scale(1.4);transform-origin: center;"}" src=${n} />`);!s||s===null?s=ee("<span>\u0413\u043E\u0442\u043E\u0432\u043E</span>"):s?.innerText==="\u0417\u0430\u0431\u0440\u0430\u0442\u044C \u043F\u043E\u0439\u043B\u043E!"?s.innerText="\u0413\u043E\u0442\u043E\u0432\u043E":countdown(s),s.style.cssText=Uo.hawthorn,s?.getAttribute("class")?.includes("button")&&$(s).css({lineHeight:"24px",padding:"3px 12px"}),r==="/badasrobot/"&&s.styles;let a=ee("<div></div>");return a.style.cssText="display: flex; align-items: center; flex-direction: column;",a.appendChild(c),a.appendChild(s),r&&c.addEventListener("click",()=>AngryAjax.goToUrl(r)),o&&c.addEventListener("click",o),a}async function li(){let t=async()=>{let r=(await Promise.all(dl.map(async c=>{try{return await pl(c)}catch(a){return console.log("Error processing timer:",c,a),null}}))).filter(Boolean),o=ee(`<div class="timers-container" style="${Uo.timersContainer}"></div>`);function s(){window.innerWidth<1330?o.style.display="none":o.style.display="grid"}window.addEventListener("resize",s),s(),o.replaceChildren(...r),document.querySelector(".main-block").appendChild(o)},e=ee(`
+`,t)}}var dl=[{selector:"#content > div > div.boss-common-block > div.boss-common-bottom-panel > div > div > span.boss-common-active-from-value",url:new URL(window.location.href).origin+"/shaman/",imgSrc:"/@/images/loc/shaman/abil_6.png",targetHref:"/shaman/"},{selector:".buba-button-timer",url:new URL(window.location.href).origin+"/labubu/",imgSrc:"/@/images/loc/buba/bubas/14.png",targetHref:"/labubu/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/fake/",imgSrc:"/@/images/obj/gifts2025/sept/fake.png",targetHref:"/fake/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/expert/",imgSrc:"/@/images/obj/gifts2026/sept/blogger.png",targetHref:"/expert/"},{selector:"#content > div > div > div.grumpy2019-bottom-panel > div.grumpy2019-available-block > span.grumpy2019-available-value",url:new URL(window.location.href).origin+"/grumpy/",imgSrc:"/@/images/loc/grumpy/abils/abil_1.png",targetHref:"/grumpy/"},{selector:"#spanMatrixTimer",url:new URL(window.location.href).origin+"/matrix/",imgSrc:"/@/images/obj/beast_ability/ability54.png",targetHref:"/matrix/"},{selector:".worldwar2025-available-value",url:new URL(window.location.href).origin+"/tariffs/",imgSrc:"/@/images/obj/gifts2025/may/box_worldwar.png",targetHref:"/tariffs/"},{selector:".carlson2025-available-value",url:new URL(window.location.href).origin+"/karlsson/",imgSrc:"/@/images/obj/gifts2025/may/box_carlson.png",targetHref:"/karlsson/"},{selector:"#content > div > div.rocket2023-block > div.rocket2023-available-block > span.rocket2023-available-value",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/obj/gifts2023/may/abil_kosm_smoke.png",targetHref:"/kosmodromx/"},{selector:"TODO dyi selector",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/loc/rocket/rocket.png",targetHref:"/kosmodromx/"},{selector:"#hawthorn-popup > div > div.hawthorn-popup__actions > div > span",url:new URL(window.location.href).origin+"/trainer/vip/",imgSrc:"/@/images/loc/vip/hawthorn_icon.png",targetHref:"/trainer/vip/hawthorn/"},{selector:"#content > table > tbody > tr > td:nth-child(2) > div.block-bordered-tattoo > p:nth-child(3) > span",url:new URL(window.location.href).origin+"/nightclub/",imgSrc:"/@/images/obj/8march6/tattoo_mach.png",targetHref:"/nightclub/"},{selector:"#dino-tab-content-2 > div.dinopark-dino-stats > div:last-child > div.dinopark-dino-stat__value > span",url:new URL(window.location.href).origin+"/dinopark/",imgSrc:"/@/images/loc/dinopark/dinoegg.png",targetHref:"/dinopark/"},{selector:"#content > div > div.pilaf-actions .pilaf-activate-button-inner2",url:new URL(window.location.href).origin+"/teahouse/",imgSrc:"/@/images/loc/pilaf/objs/obj_3.png",targetHref:"/teahouse/"},{selector:"#content > div > div.bender-content > div.bender-use > div > div > button",url:new URL(window.location.href).origin+"/badasrobot/",imgSrc:"/@/images/obj/gifts2017/futurama/bender/head.png",targetHref:"/badasrobot/"}];async function pl({selector:t,url:e,imgSrc:n,targetHref:r,onclick:o}){if(!t||!e||!n){console.log("Could not fetch timer. Data missing.");return}let s=await _(t,new URL(e).pathname);r==="/dinopark/"&&(n=(await _(".dinopark-dino-pic__img","/dinopark/")).getAttribute("src"));let c=ee(`<img style="width: 56px; height: 56px; cursor: pointer; ${r==="/shaman/"&&"transform: scale(1.4);transform-origin: center;"}" src=${n} />`);!s||s===null?s=ee("<span>\u0413\u043E\u0442\u043E\u0432\u043E</span>"):s?.innerText==="\u0417\u0430\u0431\u0440\u0430\u0442\u044C \u043F\u043E\u0439\u043B\u043E!"?s.innerText="\u0413\u043E\u0442\u043E\u0432\u043E":countdown(s),s.style.cssText=Uo.hawthorn,s?.getAttribute("class")?.includes("button")&&$(s).css({lineHeight:"24px",padding:"3px 12px"}),r==="/badasrobot/"&&s.styles;let a=ee("<div></div>");return a.style.cssText="display: flex; align-items: center; flex-direction: column;",a.appendChild(c),a.appendChild(s),r&&c.addEventListener("click",()=>AngryAjax.goToUrl(r)),o&&c.addEventListener("click",o),a}async function li(){let t=async()=>{let r=(await Promise.all(dl.map(async c=>{try{return await pl(c)}catch(a){return console.log("Error processing timer:",c,a),null}}))).filter(Boolean),o=ee(`<div class="timers-container" style="${Uo.timersContainer}"></div>`);function s(){window.innerWidth<1330?o.style.display="none":o.style.display="grid"}window.addEventListener("resize",s),s(),o.replaceChildren(...r),document.querySelector(".main-block").appendChild(o)},e=ee(`
     <div class="button" style="position: fixed; top: 32px; right: 8px;" id="timers-trigger"><span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c" style="padding: 1px 3px;">
     \u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0422\u0430\u0439\u043C\u0435\u0440\u044B
     </div></span></div>
@@ -17770,7 +17779,7 @@ body.mw-helper-tip-on .simple-tooltip {
   },
   omon: function() {
       // Субботний ОМОН v3.1 - Полная интеграция
-      if (window._omonRunning) { 
+      if (window._omonRunning) {
           console.log('[ОМОН] Уже запущен');
           return;
       }
@@ -18961,6 +18970,7 @@ body.mw-helper-tip-on .simple-tooltip {
               '/fd garage_air - Гараж (воздух)\n' +
               '/fd cosmo - Космодром\n' +
               '/fd labubu - Лабубу\n' +
+              '/fd expert - Диванный Эксперт\n' +
               '/fd misc - Разное (Бизнес, Акции)\n' +
               '/fd natal - Натальная карта\n' +
               '/fd robot - Робот\n' +
@@ -18998,7 +19008,7 @@ body.mw-helper-tip-on .simple-tooltip {
               // 4. Логика выбора
               if (target === 'all') {
                   ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(selectAllIn);
-                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot', 'fd-natal'].forEach(selectMisc);
+                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot', 'fd-natal'].forEach(selectMisc);
               } else if (target === 'dope') {
                   const dopeNames = payload.split(',').map(name => name.trim().toLowerCase()).filter(Boolean);
                   const container = document.getElementById('fd-list-dopes');
@@ -19039,7 +19049,7 @@ body.mw-helper-tip-on .simple-tooltip {
                   }
 
                   if (target === 'misc') {
-                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-natal'].forEach(selectMisc);
+                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-natal'].forEach(selectMisc);
                   }
               }
 
@@ -19174,7 +19184,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
-      
+
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
           ModuleSessionRegistry.restartIntervals('omniscience');
@@ -19395,14 +19405,14 @@ body.mw-helper-tip-on .simple-tooltip {
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
               if (abilities[id]) return abilities[id];
-              
+
               // Попытка получить из DOM, если словарь не помог
               const input = document.querySelector(`input[type="radio"][value="${id}"]`);
               if (input) {
                   const rel = input.getAttribute('rel');
                   if (rel && rel !== 'Абилка' && !rel.includes('?')) return rel;
               }
-              
+
               return null;
           }
 
@@ -19425,20 +19435,20 @@ body.mw-helper-tip-on .simple-tooltip {
 
               // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
-              
+
               slots.forEach(img => {
                   const id = img.dataset.id;
                   const label = img.closest('label');
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-                  
+
                   // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
                   let name = input.getAttribute('rel') || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
                       name = getAbilityName(id) || `Абилка ${id}`;
                   }
-                  
+
                   const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
@@ -19487,7 +19497,7 @@ body.mw-helper-tip-on .simple-tooltip {
                       max-width: 100%;
                       color: ${isNameFallback ? '#ffca28' : '#fff'};
                   `;
-                  
+
                   if (name && name !== 'Абилка' && !name.includes('?')) {
                       // Если имя известно (из DOM или словаря) — показываем его
                       labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
