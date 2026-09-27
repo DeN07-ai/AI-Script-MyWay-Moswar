@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      2.5.9
+// @version      3.4
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -16,6 +16,7 @@
 // @connect      api.telegram.org
 // @connect      raw.githubusercontent.com
 // @connect      github.com
+// @connect      moskwar.ru
 // @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
 // ==/UserScript==
@@ -546,13 +547,13 @@
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="https://www.moswar.ru/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
       { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Помощник: задания и мелочи на любой странице', version: '4.28' },
-      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.12' },
+      { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.13' },
       { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
     ];
-  
+
 
   function loadState() {
       try { return JSON.parse(localStorage.getItem(CORE_KEY) || '{}'); } catch (e) { return {}; }
@@ -870,6 +871,79 @@
           el.classList.remove('mw-panel-hidden');
       }
   }
+
+  GM_addStyle(`
+        #mw-cocktail-recipe-toolbar {
+            display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto;
+            padding:8px 10px;
+            background: rgba(255,250,240,0.42);
+            border:1px solid rgba(209,148,92,0.22);
+            border-radius:16px;
+            backdrop-filter: blur(14px) saturate(1.15);
+            -webkit-backdrop-filter: blur(14px) saturate(1.15);
+            box-shadow: 0 6px 16px rgba(90,60,30,0.08), inset 0 1px 0 rgba(255,255,255,0.4);
+            max-width: fit-content;
+        }
+        #mw-cocktail-nav, .mw-cocktail-nav { display:none !important; }
+        /* Единый стиль кнопок «Warm Sand glass» — те же токены, что и в #mw-hub / .mw-btn,
+           но компактнее — для использования прямо на странице игры, рядом с нативными кнопками. */
+        .mw-glass-btn-compact {
+            display:inline-flex; align-items:center; justify-content:center;
+            padding:6px 14px;
+            border:1px solid rgba(209,148,92,0.45);
+            border-radius:12px;
+            background: rgba(255,250,240,0.72);
+            color:#1a1410;
+            font:750 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            letter-spacing:0.1px;
+            cursor:pointer;
+            user-select:none;
+            transition: all .2s ease;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(90,60,30,0.1), inset 0 1px 0 rgba(255,255,255,0.55);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .mw-glass-btn-compact:hover {
+            background: rgba(255,244,225,0.9);
+            border-color: rgba(209,148,92,0.65);
+            box-shadow: 0 6px 16px rgba(90,60,30,0.14), inset 0 1px 0 rgba(255,255,255,0.65);
+            transform: translateY(-1px);
+        }
+        .mw-glass-btn-compact:active { transform: translateY(0); }
+        .mw-glass-btn-compact:disabled, .mw-glass-btn-compact[disabled] {
+            opacity:.55; cursor:wait; transform:none;
+        }
+  /* Кастомный чекбокс выбора рецепта — в тон общей палитре (тёплый песок), вместо системного */
+  #mw-cocktail-recipe-toolbar .mw-recipe-check,
+  .mw-recipe-check {
+    cursor:pointer;
+    appearance:none; -webkit-appearance:none;
+    width:20px; height:20px;
+    margin:0;
+    border-radius:7px;
+    border:1.5px solid rgba(209,148,92,0.55);
+    background: rgba(255,250,240,0.88);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 2px 6px rgba(90,60,30,0.14), inset 0 1px 0 rgba(255,255,255,0.6);
+    transition: all .18s ease;
+    position:relative;
+  }
+  .mw-recipe-check:hover { border-color: rgba(209,148,92,0.85); }
+  .mw-recipe-check:checked {
+    background: linear-gradient(180deg, rgba(232,184,122,.98), rgba(209,148,92,.98));
+    border-color: rgba(196,134,69,0.9);
+  }
+  .mw-recipe-check:checked::after {
+    content:'';
+    position:absolute; left:6px; top:2px;
+    width:5px; height:10px;
+    border: solid #fffaf3;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  `);
 
   GM_addStyle(`
   /* ===== B+ Modern (Warm Sand glass) — v2: читаемее + прозрачнее ===== */
@@ -4722,7 +4796,7 @@
               btnLabubu.setAttribute("aria-pressed", labubuLetuchik ? "true" : "false");
               btnLabubu.title = labubuLetuchik ? "Летучик: вкл" : "Летучик: выкл";
           };
-          
+
           const rbDarkCol = document.getElementById("rat-dark-reward-col");
           const rbDarkChest = document.getElementById("rat-dark-reward-chest");
           const rbDarkBoth = document.getElementById("rat-dark-reward-both");
@@ -7569,9 +7643,9 @@ ${ticketsBlockHtml()}
     };
 
     // 🔥 НОВЫЕ: обработчики быстрого режима
-    q('#dg-speed-enabled', panel).onchange = (e) => { 
-      CFG.fights.speedMode.enabled = e.target.checked; 
-      save(LS.cfg, CFG); 
+    q('#dg-speed-enabled', panel).onchange = (e) => {
+      CFG.fights.speedMode.enabled = e.target.checked;
+      save(LS.cfg, CFG);
     };
 
     loadCFGToUI();
@@ -7596,12 +7670,12 @@ ${ticketsBlockHtml()}
     if (q('#dg-heal-hp', panel)) {
       q('#dg-heal-hp', panel).value = String(CFG.heal.hpBelow || 35);
     }
-    
+
     // 🔥 НОВЫЕ: быстрый режим
     if (q('#dg-speed-enabled', panel)) {
       q('#dg-speed-enabled', panel).checked = !!(CFG.fights?.speedMode?.enabled);
     }
-    
+
     if (q('#dg-cycles-enabled', panel)) {
       q('#dg-cycles-enabled', panel).checked = !!(CFG.cycles && CFG.cycles.enabled);
       q('#dg-autoexit', panel).checked = !!(CFG.cycles && CFG.cycles.autoExitOnFinish);
@@ -8202,7 +8276,7 @@ ${ticketsBlockHtml()}
 
     const inRoom = currentRoomPlayersCount(rnum);
     if (inRoom == null) return false; // can't be sure -> do not start boss
-    
+
     // 🔥 Ждём пока ВСЕ игроки не будут в комнате с боссом
     const allReady = inRoom >= total;
     if (!allReady) {
@@ -8344,7 +8418,7 @@ ${ticketsBlockHtml()}
     // 🔥 РЕЛИКТ: Если включен режим "Соло с реликтом" - спускаемся сразу без ожидания
     if (CFG.group.soloWithRelic) {
       log('спуск: СОЛО С РЕЛИКТОМ - спускаюсь без ожидания игроков');
-      
+
       const payBtn = q('.dungeon-banner-winter__button[onclick*="Dungeon.resetCooldown"], .dungeon-banner__button[onclick*="Dungeon.resetCooldown"]');
       if (payBtn && isVisible(payBtn)) {
         payBtn.click();
@@ -8367,7 +8441,7 @@ ${ticketsBlockHtml()}
         log('спуск: Dungeon.enter (api)');
         return true;
       }
-      
+
       return false;
     }
 
@@ -10609,7 +10683,7 @@ ${ticketsBlockHtml()}
       }
 
       if (document.getElementById('fulldope-modal')) return;
-      console.log('[MODULE_fulldope] v2.12');
+      console.log('[MODULE_fulldope] v2.13');
 
       // IDs from AI module for smart classification
       const RIDE_GROUPS = {
@@ -10896,7 +10970,7 @@ ${ticketsBlockHtml()}
       modal.id = 'fulldope-modal';
       modal.innerHTML = `
           <div id="fulldope-header">
-              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.12</span></div>
+              <div id="fulldope-title">💉 Фулл Доп <span style="font-size:12px;opacity:0.5;font-weight:400;">v2.13</span></div>
               <div id="fulldope-header-actions">
                   <button class="fd-header-btn" id="fd-run" title="Запустить / продолжить">Активировать</button>
                   <button class="fd-header-btn" id="fd-pause" title="Пауза">Пауза</button>
@@ -10949,6 +11023,11 @@ ${ticketsBlockHtml()}
                   <div class="fd-item" id="fd-fake" data-type="misc">
                       <div class="fd-icon-wrapper" title="Мистер Фейк"><img src="/@/images/loc/fake/pers.png"></div>
                       <div style="font-size:10px;margin-top:2px;">Мистер Фейк</div>
+                  </div>
+
+                  <div class="fd-item" id="fd-expert" data-type="misc">
+                      <div class="fd-icon-wrapper" title="Диванный Эксперт"><img src="/@/images/obj/gifts2026/sept/blogger.png"></div>
+                      <div style="font-size:10px;margin-top:2px;">Диванный Эксперт</div>
                   </div>
 
                   <div class="fd-item" id="fd-carlson" data-type="misc">
@@ -11240,7 +11319,7 @@ ${ticketsBlockHtml()}
           if (moscowpolyCount && misc.moscowpolyCount) moscowpolyCount.value = misc.moscowpolyCount;
           const robotUltra = document.getElementById('fd-robot-ultra');
           if (robotUltra) robotUltra.checked = !!misc.robotUltra;
-          
+
           const natalBelieve = document.getElementById('fd-natal-believe');
           if (natalBelieve) natalBelieve.checked = !!misc.natalBelieve;
           const natalDoubt = document.getElementById('fd-natal-doubt');
@@ -11274,7 +11353,7 @@ ${ticketsBlockHtml()}
       ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(bindGridToggle);
 
       // Misc items click handler
-      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown', 'fd-natal'].forEach(id => {
+      ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-robot', 'fd-crown', 'fd-natal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.onclick = () => { el.classList.toggle('selected'); saveSelections(); };
       });
@@ -11385,7 +11464,9 @@ ${ticketsBlockHtml()}
               const cRes = await fetch('/petarena/');
               if (cRes.ok) findIdsFromDoc(parser.parseFromString(await cRes.text(), 'text/html'));
 
-              const uniquePetLinks = [...petIds].slice(0, 30);
+              // [FIX] Раньше здесь был .slice(0, 30), из-за чего у игроков с 31+ питомцами
+              // последние в списке (и их абилки) молча пропадали из сканирования.
+              const uniquePetLinks = [...petIds];
               container.innerHTML = '';
               const addedPetAbiKeys = new Set();
               const registerPetAbiKey = (type, petId, abilityIdOrType) => {
@@ -11709,6 +11790,7 @@ ${ticketsBlockHtml()}
               { id: 'fd-tariffs', url: '/tariffs/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-shaman', url: '/grinch/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-fake', url: '/fake/', check: d => d.querySelector('[onclick*="activate-talant"]') },
+              { id: 'fd-expert', url: '/expert/', check: d => d.querySelector('[onclick*="activate-talant"]') || (d.querySelector('.boss-common-activate-button') && !d.querySelector('.boss-common-activate-button.disabled')) },
               { id: 'fd-carlson', url: '/karlsson/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-kosmodromx', url: '/kosmodromx/', check: d => d.querySelector('[onclick*="activate-talant"]') },
               { id: 'fd-robot', url: '/mech/', check: d => d.querySelector('.robot2017-activate-button-inner') || (d.querySelector('.mech-b-overcharge') && !d.querySelector('.mech-b-overcharge.disabled')) },
@@ -12014,6 +12096,7 @@ ${ticketsBlockHtml()}
               'fd-tariffs': { url: '/tariffs/', name: '📉 Тарифы' },
               'fd-shaman': { url: '/shaman/', name: '🧟 Гринч' },
               'fd-fake': { url: '/fake/', name: '🎭 Фейк' },
+              'fd-expert': { url: '/expert/', name: '🛋️ Диванный эксперт' },
               'fd-carlson': { url: '/karlsson/', name: '🚁 Карлсон' },
               'fd-kosmodromx': { url: '/kosmodromx/', name: '🚀 Космо X' },
               'fd-natal': { url: '/natal2026/', name: '⭐ Натальная карта' }
@@ -12289,7 +12372,7 @@ ${ticketsBlockHtml()}
                           const countInp = document.getElementById('fd-moscowpoly-count');
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
-                          
+
                           // Переходим на страницу москвополии если ещё не там
                           if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
                               if (isAborted()) return false;
@@ -12298,7 +12381,7 @@ ${ticketsBlockHtml()}
                               await sleep(3000);
                               if (isAborted()) return false;
                           }
-                          
+
                           // Ждём инициализации window.Moscowpoly
                           const mp = await new Promise(function(resolve) {
                               let tries = 0;
@@ -12322,7 +12405,7 @@ ${ticketsBlockHtml()}
                               }, 100);
                           });
                           if (isAborted()) return false;
-                          
+
                           for (let i = 0; i < count; i++) {
                               if (isAborted()) break;
                               await waitWhilePaused();
@@ -12463,13 +12546,13 @@ ${ticketsBlockHtml()}
                               const believe = believeCh ? believeCh.checked : false;
                               const doubt = doubtCh ? doubtCh.checked : false;
                               console.log('[FullDope] Natal: believe=' + believe + ', doubt=' + doubt);
-                              
+
                               if (!believe && !doubt) {
                                   logs.push('⚠️ Выберите опцию натальной карты');
                                   console.warn('[FullDope] Natal: No options selected');
                                   break;
                               }
-                              
+
                               // Если не на странице - переходим и ждём загрузки
                               if (location.pathname !== '/natal2026/') {
                                   if (isAborted()) return false;
@@ -12482,16 +12565,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: Page should be loaded now');
                                   // Продолжаем выполнение в том же цикле
                               }
-                              
+
                               // Ждём полной загрузки DOM
                               console.log('[FullDope] Natal: Waiting for DOM...');
                               await sleep(2000);
                               if (isAborted()) return false;
-                              
+
                               // Ищем кнопки
                               const actions = document.querySelector('.dog2017-actions');
                               console.log('[FullDope] Natal: actions found=' + !!actions);
-                              
+
                               // Если панель не найдена - пробуем ещё раз
                               if (!actions) {
                                   console.log('[FullDope] Natal: Panel not found, waiting more...');
@@ -12505,19 +12588,19 @@ ${ticketsBlockHtml()}
                                       break;
                                   }
                               }
-                              
+
                               // Кликаем по кнопкам
                               const finalActions = document.querySelector('.dog2017-actions');
-                              
+
                               if (believe) {
                                   const btnL = finalActions?.querySelector('.dog2017-button--l');
                                   console.log('[FullDope] Natal: btnL found=' + !!btnL);
                                   if (btnL) {
                                       console.log('[FullDope] Natal: clicking Верю карте');
-                                      if (btnL.onclick) { 
-                                          btnL.onclick(); 
-                                      } else { 
-                                          btnL.click(); 
+                                      if (btnL.onclick) {
+                                          btnL.onclick();
+                                      } else {
+                                          btnL.click();
                                       }
                                       await sleep(2000);
                                       logs.push('⭐ Верю карте');
@@ -12528,16 +12611,16 @@ ${ticketsBlockHtml()}
                                   console.log('[FullDope] Natal: btnR found=' + !!btnR);
                                   if (btnR) {
                                       console.log('[FullDope] Natal: clicking Сомневаюсь но жму');
-                                      if (btnR.onclick) { 
-                                          btnR.onclick(); 
-                                      } else { 
-                                          btnR.click(); 
+                                      if (btnR.onclick) {
+                                          btnR.onclick();
+                                      } else {
+                                          btnR.click();
                                       }
                                       await sleep(2000);
                                       logs.push('🤔 Сомневаюсь но жму');
                                   }
                               }
-                          } catch(e) { 
+                          } catch(e) {
                               console.error('[FullDope] Natal error:', e);
                               logs.push('⚠️ Натальная: ' + e.message);
                           }
@@ -14039,6 +14122,311 @@ ${ticketsBlockHtml()}
       if (typeof window.__mwAiJobsMount === 'function') window.__mwAiJobsMount();
       const aiPageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
       if (typeof window.$ !== 'function' && typeof aiPageWindow.$ === 'function') window.$ = aiPageWindow.$;
+
+      let cocktailPath = '';
+      let cocktailLoading = false;
+      let cocktailQueueBusy = false; // защита от параллельных/повторных запусков очереди смешивания
+      let cocktailBootstrapAttempts = 0; // счётчик попыток бутстрапа Автобармена на текущем пути
+      const COCKTAIL_BOOTSTRAP_MAX_ATTEMPTS = 5; // после этого перестаём долбить, если сторонний скрипт стабильно падает
+      function findCocktailPlayerId(pagePlayer) {
+          const directId = String(pagePlayer?.id || '').match(/^\d+$/)?.[0];
+          if (directId) return Promise.resolve(directId);
+          const nickname = String(pagePlayer?.nickname || '').trim();
+          const links = Array.from(document.querySelectorAll('a[href]'));
+          const ownLink = links.find((link) => {
+              const match = link.getAttribute('href')?.match(/^\/player\/(\d+)\/?$/);
+              return match && (!nickname || link.textContent.includes(nickname));
+          });
+          if (ownLink) return Promise.resolve(ownLink.getAttribute('href').match(/\d+/)[0]);
+          return fetch('/player/json/', { credentials: 'include' })
+              .then((response) => response.ok ? response.json() : null)
+              .then((data) => String(data?.id || data?.player?.id || '').match(/^\d+$/)?.[0] || '');
+      }
+      function loadCocktailBootstrap(pagePlayer, playerId) {
+          if (typeof GM_xmlhttpRequest !== 'function') return;
+          cocktailLoading = true;
+          GM_xmlhttpRequest({
+              method: 'GET',
+              url: 'https://moskwar.ru/acoc/?r=' + Math.random(),
+              timeout: 30000,
+              onload: (response) => {
+                  cocktailLoading = false;
+                  if (response.status < 200 || response.status >= 300) {
+                      console.warn('[AI MyWay DeN] Автобармен: HTTP ' + response.status);
+                      return;
+                  }
+                  const safeId = String(playerId).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                  const source = String(response.responseText || '')
+                      .replace(/http:\/\/moskwar\.ru\/acoc\//g, 'https://moskwar.ru/acoc/')
+                      .replace(/var q0uid\s*=\s*[\s\S]*?;\s*var q0_lvl\s*=/, "var q0uid='" + safeId + "'; var q0_lvl=");
+                  const runtime = document.createElement('script');
+                  runtime.dataset.mwCocktailRuntime = '1';
+                  runtime.textContent = source;
+                  (document.head || document.documentElement).appendChild(runtime);
+                  console.log('[AI MyWay DeN] Оригинальный bootstrap Автобармэна выполнен для ID ' + playerId);
+              },
+              onerror: () => { cocktailLoading = false; console.warn('[AI MyWay DeN] Не удалось получить bootstrap Автобармэна'); },
+              ontimeout: () => { cocktailLoading = false; console.warn('[AI MyWay DeN] Таймаут bootstrap Автобармэна'); }
+          });
+      }
+      function ensureCocktailRuntime() {
+          const path = location.pathname;
+          if (!/^\/nightclub\/shakes\/?$/.test(path)) {
+              cocktailPath = path;
+              cocktailBootstrapAttempts = 0; // ушли со страницы — на следующий заход пробуем заново
+              return;
+          }
+          if (cocktailPath !== path) {
+              cocktailBootstrapAttempts = 0; // новый заход на страницу шейков — сбрасываем счётчик попыток
+          }
+          const hasOriginalAuto = Array.from(document.querySelectorAll('.button, button, a, span')).some((node) =>
+              node.textContent.trim() === 'Авто' && node.closest('#mw-hub') == null && node.id !== 'mw-cocktail-sanction-auto'
+          );
+          if (hasOriginalAuto) {
+              cocktailPath = path;
+              cocktailBootstrapAttempts = 0; // успех — сбрасываем счётчик
+              return;
+          }
+          if (cocktailLoading) return;
+          if (cocktailBootstrapAttempts >= COCKTAIL_BOOTSTRAP_MAX_ATTEMPTS) {
+              // Сторонний скрипт Автобармена стабильно падает — прекращаем бесконечные повторные попытки,
+              // чтобы не спамить запросами и консолью. Кнопки "Смешать выбранные"/"Выбрать все" при этом
+              // продолжают работать независимо от этого стороннего бутстрапа.
+              cocktailPath = path;
+              return;
+          }
+          const oldRuntime = document.querySelector('script[data-mw-cocktail-runtime]');
+          if (oldRuntime) oldRuntime.remove();
+          const pagePlayer = aiPageWindow.player || window.player;
+          const playerMarker = document.querySelector("input[value*='moswar.ru'], input[name='player_id']");
+          if (!pagePlayer && !playerMarker) return;
+          cocktailPath = path;
+          cocktailBootstrapAttempts += 1;
+          findCocktailPlayerId(pagePlayer).then((playerId) => {
+              if (!playerId) {
+                  cocktailPath = '';
+                  console.warn('[AI MyWay DeN] Не найден ID игрока для Автобармэна');
+                  return;
+              }
+              loadCocktailBootstrap(pagePlayer, playerId);
+          }).catch(() => { cocktailPath = ''; });
+      }
+      ensureCocktailRuntime();
+      setInterval(ensureCocktailRuntime, 2000);
+
+      function mountSanctionCocktailButton() {
+          if (!/^\/nightclub\/shakes\/?$/.test(location.pathname) || document.getElementById('mw-cocktail-sanction-auto')) return;
+          const autoButton = Array.from(document.querySelectorAll('.button, button, a, span')).find((node) =>
+              node.textContent.trim() === 'Авто' && node.closest('#mw-hub') == null
+          );
+          if (!autoButton) return;
+          const wrapper = autoButton.closest('.button') || autoButton.parentElement;
+          if (!wrapper?.parentElement) return;
+          const button = document.createElement('div');
+          button.id = 'mw-cocktail-sanction-auto';
+          button.className = 'mw-glass-btn-compact';
+          button.style.cssText = 'display:inline-flex;margin-left:4px;';
+          button.textContent = 'Авто Санкционка';
+          button.title = 'Подставить обычный рецепт и переключить заполненные фрукты на санкционные';
+          const switchToSanction = () => {
+              const slots = Array.from(document.querySelectorAll('.filled-slot'));
+              let changed = 0;
+              slots.forEach((slot) => {
+                  const fruit = slot.querySelector('.object-thumb.fruit');
+                  if (!fruit) return;
+                  const code = fruit.getAttribute('data-code') || '';
+                  if (!code || code.startsWith('s')) return;
+                  fruit.setAttribute('data-code', 's' + code);
+                  const image = fruit.querySelector('img');
+                  if (image?.src && !/_sanc\.png(?:[?#].*)?$/i.test(image.src)) {
+                      image.src = image.src.replace(/\.png([?#].*)?$/i, '_sanc.png$1');
+                  }
+                  const header = slot.querySelector('span.header');
+                  if (header && !/^Санкционный\s/i.test(header.textContent.trim())) {
+                      header.textContent = 'Санкционный ' + header.textContent.trim();
+                  }
+                  changed += 1;
+              });
+              if (changed) console.log('[AI MyWay DeN] Санкционные фрукты переключены:', changed);
+              return changed;
+          };
+          button.addEventListener('click', () => {
+              autoButton.click();
+              let attempts = 0;
+              const waitForRecipe = setInterval(() => {
+                  attempts += 1;
+                  if (switchToSanction() || attempts >= 20) clearInterval(waitForRecipe);
+              }, 250);
+          });
+          wrapper.parentElement.insertBefore(button, wrapper.nextSibling);
+      }
+      const cocktailButtonObserver = new MutationObserver(mountSanctionCocktailButton);
+      cocktailButtonObserver.observe(document.documentElement, { childList: true, subtree: true });
+      mountSanctionCocktailButton();
+
+      function mountCocktailRecipeQueue() {
+          if (!/^\/nightclub\/shakes\/?$/.test(location.pathname)) return;
+          if (cocktailQueueBusy) return; // пока смешивание уже идёт — не трогаем DOM и не запускаем очередь повторно
+          const cocktailLinks = Array.from(document.querySelectorAll('a[href*="/nightclub/"]'));
+          const navRoots = new Set();
+          cocktailLinks.forEach((link) => {
+              let root = link.closest('.buttons-div, .nav, .tabs, .navigation, ul, table');
+              if (!root && link.parentElement) root = link.parentElement;
+              if (root && !root.closest('.recepts')) navRoots.add(root);
+          });
+          navRoots.forEach((root) => {
+              if (root.querySelectorAll('a[href*="/nightclub/"]').length > 1) root.classList.add('mw-cocktail-nav');
+          });
+          const list = document.querySelector('.recepts .object-thumbs.fruits');
+          if (!list || list.querySelector('.mw-recipe-check')) return;
+          const recipes = Array.from(list.querySelectorAll('.object-thumb'));
+          if (!recipes.length) return;
+          const queueKey = 'mw_cocktail_recipe_queue_v1';
+          let savedQueue = [];
+          try { savedQueue = JSON.parse(sessionStorage.getItem(queueKey) || '[]'); } catch (_) { savedQueue = []; }
+          const toolbar = document.createElement('div');
+          toolbar.id = 'mw-cocktail-recipe-toolbar';
+          toolbar.innerHTML = '<button type="button" class="mw-glass-btn-compact" id="mw-cocktail-mix-selected">Смешать выбранные</button>' +
+              '<button type="button" class="mw-glass-btn-compact" id="mw-cocktail-select-all">Выбрать все</button>';
+          list.parentElement.insertBefore(toolbar, list);
+          recipes.forEach((recipe, index) => {
+              const padding = recipe.querySelector('.padding') || recipe;
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.className = 'mw-recipe-check';
+              checkbox.dataset.index = String(index);
+              checkbox.title = 'Выбрать рецепт';
+              checkbox.style.cssText = 'position:absolute;left:4px;top:4px;width:18px;height:18px;z-index:5;';
+              const recipeId = recipe.querySelector('img[data-id]')?.getAttribute('data-id');
+              checkbox.checked = recipeId ? savedQueue.includes(recipeId) : false;
+              checkbox.addEventListener('change', () => {
+                  const ids = Array.from(list.querySelectorAll('.mw-recipe-check:checked')).map((check) =>
+                      check.closest('.object-thumb')?.querySelector('img[data-id]')?.getAttribute('data-id')
+                  ).filter(Boolean);
+                  try { sessionStorage.setItem(queueKey, JSON.stringify(ids)); } catch (_) {}
+              });
+              if (getComputedStyle(padding).position === 'static') padding.style.position = 'relative';
+              padding.appendChild(checkbox);
+          });
+          const waitFor = (predicate, timeout = 10000) => new Promise((resolve) => {
+              const started = Date.now();
+              const tick = () => {
+                  if (predicate()) return resolve(true);
+                  if (Date.now() - started >= timeout) return resolve(false);
+                  setTimeout(tick, 150);
+              };
+              tick();
+          });
+          const findRecipe = (recipeId) => Array.from(document.querySelectorAll('.recepts .object-thumbs.fruits .object-thumb')).find((item) =>
+              item.querySelector('img[data-id="' + recipeId + '"]')
+          );
+          const isRecipeReady = (recipe) => {
+              if (!recipe) return false;
+              // Настоящий признак кулдауна в разметке игры — класс .cooldown на .object-thumb
+              // и/или таймер с ненулевым значением. У .action при этом класса .disabled НЕТ,
+              // поэтому раньше скрипт ошибочно считал такой рецепт доступным для клика.
+              if (recipe.classList.contains('cooldown')) return false;
+              const timeLeft = recipe.querySelector('.timer .timeleft');
+              if (timeLeft) {
+                  const seconds = parseInt(timeLeft.getAttribute('timer') || '0', 10);
+                  if (!Number.isNaN(seconds) && seconds > 0) return false;
+              }
+              const action = recipe.querySelector('.action');
+              if (!action || action.classList.contains('disabled')) return false;
+              if (!/смешать/i.test(action.textContent || '')) return false;
+              return true;
+          };
+          const mixOne = async (recipeId, index) => {
+              const recipe = findRecipe(recipeId);
+              if (!recipe) {
+                  console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': не найден в списке, пропускаем');
+                  return false;
+              }
+              if (!isRecipeReady(recipe)) {
+                  console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': ещё на перезарядке (таймер), пропускаем без клика');
+                  return false;
+              }
+              const action = recipe.querySelector('.action');
+              const beforeAlert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+              if (beforeAlert) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': уже открыто другое окно подтверждения, пропускаем');
+                  return false;
+              }
+              action.click();
+              const alertReady = await waitFor(() => {
+                  const alert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+                  return alert && alert.querySelector('.actions button');
+              });
+              if (!alertReady) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': окно подтверждения не появилось');
+                  return false;
+              }
+              const alert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+              const confirmButton = alert?.querySelector('.actions button');
+              if (!confirmButton) return false;
+              confirmButton.click();
+              const completed = await waitFor(() => {
+                  const currentAlert = document.querySelector('.alert.alert1[style*="display: block"], .alert.alert1:not([style*="display: none"])');
+                  return !currentAlert || currentAlert !== alert || !recipe.isConnected || recipe.classList.contains('cooldown') || recipe.querySelector('.action.disabled');
+              }, 15000);
+              if (!completed) {
+                  console.warn('[AI MyWay DeN] Рецепт ' + (index + 1) + ': не дождались завершения');
+                  return false;
+              }
+              console.log('[AI MyWay DeN] Рецепт ' + (index + 1) + ': успешно смешан');
+              return true;
+          };
+          toolbar.querySelector('#mw-cocktail-select-all').addEventListener('click', () => {
+              const checks = Array.from(list.querySelectorAll('.mw-recipe-check'));
+              const value = checks.some((check) => !check.checked);
+              checks.forEach((check) => { check.checked = value; });
+              const ids = value ? recipes.map((recipe) => recipe.querySelector('img[data-id]')?.getAttribute('data-id')).filter(Boolean) : [];
+              try { sessionStorage.setItem(queueKey, JSON.stringify(ids)); } catch (_) {}
+          });
+          const processSelected = async (button) => {
+              if (cocktailQueueBusy) return; // уже идёт цикл смешивания — новый не запускаем
+              const selected = recipes.map((recipe) => recipe.querySelector('img[data-id]')?.getAttribute('data-id'))
+                  .filter((recipeId) => recipeId && findRecipe(recipeId)?.querySelector('.mw-recipe-check')?.checked);
+              if (!selected.length) return;
+              cocktailQueueBusy = true;
+              try {
+                  try { sessionStorage.setItem(queueKey, JSON.stringify(selected)); } catch (_) {}
+                  button.disabled = true;
+                  for (let index = 0; index < selected.length; index += 1) {
+                      // Пропускаем/не смогли — идём дальше по списку, а не прерываем всю очередь целиком.
+                      // Это важно: иначе рецепт на кулдауне (или любая другая заминка) блокировал бы
+                      // обработку всех остальных выбранных рецептов и провоцировал бесконечные повторы после reload.
+                      await mixOne(selected[index], index);
+                      try {
+                          const left = selected.slice(index + 1).filter((recipeId) => findRecipe(recipeId));
+                          sessionStorage.setItem(queueKey, JSON.stringify(left));
+                      } catch (_) {}
+                  }
+                  button.disabled = false;
+                  // Очередь всегда полностью вычищается по завершении прохода — каждый id обрабатывается
+                  // ровно один раз за вызов, никаких автоматических повторных попыток после reload.
+                  try { sessionStorage.removeItem(queueKey); } catch (_) {}
+              } finally {
+                  cocktailQueueBusy = false; // снимаем блокировку в любом случае, даже при ошибке в цикле
+              }
+          };
+          toolbar.querySelector('#mw-cocktail-mix-selected').addEventListener('click', (event) => processSelected(event.currentTarget));
+          if (savedQueue.length && savedQueue.some((recipeId) => findRecipe(recipeId))) {
+              setTimeout(() => processSelected(toolbar.querySelector('#mw-cocktail-mix-selected')), 500);
+          }
+      }
+      let cocktailRecipeQueueDebounce = null;
+      const cocktailRecipeObserver = new MutationObserver(() => {
+          if (cocktailRecipeQueueDebounce) clearTimeout(cocktailRecipeQueueDebounce);
+          cocktailRecipeQueueDebounce = setTimeout(mountCocktailRecipeQueue, 120);
+      });
+      cocktailRecipeObserver.observe(document.documentElement, { childList: true, subtree: true });
+      mountCocktailRecipeQueue();
+      setInterval(() => {
+          ensureCocktailRuntime();
+          mountSanctionCocktailButton();
+          mountCocktailRecipeQueue();
+      }, 700);
        // ИИ v4.27 — помощник (меню в стиле хаба)
       // Группирует логи, авто-атаки, настройки и прочее
     (async function () {
@@ -14671,7 +15059,7 @@ THE USE OF THIS SCRIPT IS MONITORED CLIENT SIDE - LAW ENFORCEMENT WILL BE NOTIFI
       <br>\u0427\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C, \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.<br>
       <i>(id \u0442\u0430\u0447\u043A\u0438: ${n})</i>.
       `})}}),e=$(".auto-bombila .actions");e.find("form").css({display:"inline-block"}),e.append(t)}function ul(){$(".plus-icon").eq(1).css("display","inline-block"),window.jobShowTonusAlert=function(){$.get("/job/tonus-buy-alert/",function(t){t.error?showAlert(moswar.lang.LANG_MAIN_105,t.error,!0):$.get("/player/json/use/"+t.restore_tonus+"/",function(e){console.log(e.restore_tonus),e.fullenergyin&&(player.fullenergyin=0,$("div.tonus-overtip-increase").html()),e.stats.energy&&setEnergy(e.stats.energy)},"json")},"json")}}function Bt(){let t=location.pathname;if($(".side-invite").remove(),Wt(),cl(),ul(),Eo(),t.match(/\/alley\/fight\//))fightForward();else if(t.match(/^(?!.*\/alley\/).*\/fight\//))rl(),ol();else if(t==="/player/")zt(),$("#stats-accordion .selected.active").css("cursor","pointer").on("click",Mn);else if(t==="/automobile/ride/")Qn();else if(t==="/tattoo/")nl();else if(t.includes("neftlenin"))Do();else if(t==="/square/tvtower/")il();else if(t==="/metrowar/clan/")ao();else if(t==="/home/relic/")jo();else if(t==="/travel2/")vo();else if(t==="/metro/")Lo();else if(t==="/petarena/")lo();else if(t==="/home/")Ao();else if(t==="/camp/gypsy/"){let e=$(".game-types td:first"),n=$(".game-types td").eq(1);if((!$(".multi-play-gypsy-250").length||!$(".multi-play-gypsy-750").length)&&(e.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(0),className:"multi-play-gypsy-250"})),n.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(1),className:"multi-play-gypsy-250"}))),$(".multi-play-gypsy-flowers").length)return;let r=$(".game-types-col").first();console.log(r),r.append(ce({label:"\u041C\u043D\u0435 \u043F\u043E\u0432\u0435\u0437\u0435\u0442",action:async()=>await it(),className:"multi-play-gypsy-flowers"}))}else if(t==="/casino/blackjack/"){if($(".blackjack-multi").length)return;let e=ce({label:"\u0418\u0433\u0440\u0430\u0442\u044C \u0437\u0430 10",action:async()=>await ui(),className:"blackjack-multi"});$(".actions.bets").append(e)}else if(t==="/arbat/")ll();else if(t==="/pyramid/")$("#pyramid-buy-form input").css({width:"70px"});else if(t.includes("clan")){if($("#reorder-clan").length)return;let e=$('<span id="reorder-clan" class="cool-1"><i></i></span>').css({cursor:"pointer"});e.on("click",ro);let n=N({text:"+\u0412\u0440\u0430\u0433\u0438",title:"\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0441\u043F\u0438\u0441\u043E\u043A \u0432\u0440\u0430\u0433\u043E\u0432 (\u0434\u043B\u044F \u043A\u043B\u0430\u043D\u0432\u0430\u0440\u0430)",onClick:()=>oo(),className:"add-to-enemies",disableAfterClick:!0});$(n).css({display:"block",marginLeft:"auto"}),$('td.label:contains("\u041A\u043B\u0430\u043D\u0435\u0440\u044B")').append(n),e.insertAfter(`a[onclick="$('#players').toggle();"]`)}else if(t.includes("zodiac")){let e=$("#zodiak-action-button");if(!e||e.length===0)return;let n=e.text().trim();if(!n.includes("\u0423\u0437\u043D\u0430\u0442\u044C \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F"))return;let r=parseInt(n.match(/\d+/)[0],10);e.text(`\u0423\u0437\u043D\u0430\u0442\u044C \u0412\u0421\u0415 \u0433\u043E\u0440\u043E\u0441\u043A\u043E\u043F\u044B (\u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C ${r})`),e.removeAttr("onclick").on("click",async()=>{e.addClass("disabled");for(let o=0;o<r;o++)await fetch("/zodiac/",{headers:{accept:"*/*","accept-language":"en-GB,en-US;q=0.9,en;q=0.8,ru;q=0.7,ro;q=0.6","content-type":"application/x-www-form-urlencoded; charset=UTF-8","sec-ch-ua":'"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',"sec-ch-ua-mobile":"?0","sec-ch-ua-platform":'"macOS"',"sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-origin","x-requested-with":"XMLHttpRequest"},body:"action=horoscope&__referrer=%2Fzodiac%2F&return_url=%2Fzodiac%2F",method:"POST",mode:"cors",credentials:"include"});AngryAjax.reload()})}else["/squid/","/meetings/","/sovet/career/"].includes(t)||(/^\/player\/[^/]+\/?$/.test(location.pathname)?$("#pers-player-info > div.relict-block > a > h3").text(`\u0420\u0415\u041B\u0418\u041A\u0422\u042B (${Relict.$list.children().length})`):t==="/settings/"?di():t==="/alley/"?Pn():t==="/lifting/"&&el())}var te=window.Moscowpoly,Ro=window.SteppedEase,lt=window.TweenLite;function Po(){try{if(!te){let checkMoscowpoly=0;let waitInterval=setInterval(function(){checkMoscowpoly++;if(window.Moscowpoly){clearInterval(waitInterval);te=window.Moscowpoly;Po()}if(checkMoscowpoly>500){clearInterval(waitInterval)}},100);return}te.animateDices=function(t){var e=this,n=this.$dice1,r=this.$dice2;n.unbind("click"),r.unbind("click"),n.removeAttr("style"),n.css({"background-position":"0 0"}).show(0);var o=mt_rand(10,20),s=mt_rand(1,2)*o/1e3,c=lt.to(n,s,{backgroundPosition:-1*65*o+"px 0",ease:Ro.config(o),paused:!0,onComplete:function(){n.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[0]),s>=l&&e.onAnimateDicesComplete()}});r.removeAttr("style"),r.css("background-position","0 -65px").show(0);var a=mt_rand(10,20),l=mt_rand(1,2)*a/1e3,u=lt.to(r,l,{backgroundPosition:-1*65*a+"px -65px",ease:Ro.config(a),paused:!0,onComplete:function(){r.css("background-position","").removeClass("i-1 i-2 i-3 i-4 i-5 i-6").addClass("i-"+t[1]),s<l&&e.onAnimateDicesComplete()}}),d=te.dicePositions[mt_rand(0,te.dicePositions.length-1)];n.css(d);var p={ease:Power1.easeOut,paused:!0};for(var g in d)p[g]=mt_rand(90,350);var f=lt.to(n,s,p);r.css(d);var w={ease:Power1.easeOut,paused:!0};for(var T in d)w[T]=mt_rand(90,350),Math.abs(p[T]-w[T])<35&&(p[T]+=p[T]>w[T]?50:-50);var C=lt.to(r,l,w);c.play(),u.play(),f.play(),C.play()},te.animateFigureRoute=function(t){if(t.length==0){this.setInAction(!1),this.setCellActive(this.data.current),this.updateInfoHTML(),this.initState();return}var e=this,n=te.getFigurePositionByCell(t[0]);lt.to(this.$figure,.1,{top:n.top,left:n.left,ease:Linear.easeNone,paused:!1,onComplete:function(){t=t.splice(1,t.length-1),e.animateFigureRoute(t)}})},te.dropDices=function(){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_roll/",{action:"moscowpoly_roll",ajax:1},"post",function(e){if(t.lastMove=e,t.state=e.state,t.animateDices(e.rollResult),e.text_m){if(e.text_m?.text?.includes("\u0417\u0430 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u043A\u043B\u0435\u0442\u043A\u0438 \u0441\u0442\u0430\u0440\u0442 \u0432\u044B \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u0442\u0435:"))return;t.addAlert(e.text_m)}[2,12].includes(e.move_to[0].step)||(!e?.state?.disable_button||e?.data?.state?.type==="closed")&&(te.setInAction(!1),te.doActivate())})},te.doActivate=function(){if(!this.inAction){this.setInAction(!0);var t=this;postUrl("/home/moscowpoly_activate/",{action:"moscowpoly_activate",ajax:1},"post",function(e){t.state=e.state,t.setInAction(!1),e.text_m&&!e.text_m?.text?.includes("\u0411\u043E\u043D\u0443\u0441 \u0443\u0436\u0435 \u0430\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u043D")&&t.addAlert(e.text_m),t.updateInfoHTML(),t.initState()})}},te.show=function(){var t=this;postUrl("/home/moscowpoly_state/",{action:"moscowpoly_state",ajax:1},"post",function(e){if(t.open(e),e.text_m&&t.addAlert(e.text_m),$(".moscowpoly-multi-btn").length)return;let n=ce({label:"\u0411\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u0443\u0431\u0438\u043A\u0438",action:async()=>(te.dropDices(),new Promise(r=>setTimeout(r,1e3))),className:"moscowpoly-multi",disableAfterClick:!1});$(".moscowpoly-panel__td-center").append(n)})}}catch(t){console.log(`Moscowpoly speed up:
-`,t)}}var dl=[{selector:"#content > div > div.boss-common-block > div.boss-common-bottom-panel > div > div > span.boss-common-active-from-value",url:new URL(window.location.href).origin+"/shaman/",imgSrc:"/@/images/loc/shaman/abil_6.png",targetHref:"/shaman/"},{selector:".buba-button-timer",url:new URL(window.location.href).origin+"/labubu/",imgSrc:"/@/images/loc/buba/bubas/14.png",targetHref:"/labubu/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/fake/",imgSrc:"/@/images/obj/gifts2025/sept/fake.png",targetHref:"/fake/"},{selector:"#content > div > div > div.grumpy2019-bottom-panel > div.grumpy2019-available-block > span.grumpy2019-available-value",url:new URL(window.location.href).origin+"/grumpy/",imgSrc:"/@/images/loc/grumpy/abils/abil_1.png",targetHref:"/grumpy/"},{selector:"#spanMatrixTimer",url:new URL(window.location.href).origin+"/matrix/",imgSrc:"/@/images/obj/beast_ability/ability54.png",targetHref:"/matrix/"},{selector:".worldwar2025-available-value",url:new URL(window.location.href).origin+"/tariffs/",imgSrc:"/@/images/obj/gifts2025/may/box_worldwar.png",targetHref:"/tariffs/"},{selector:".carlson2025-available-value",url:new URL(window.location.href).origin+"/karlsson/",imgSrc:"/@/images/obj/gifts2025/may/box_carlson.png",targetHref:"/karlsson/"},{selector:"#content > div > div.rocket2023-block > div.rocket2023-available-block > span.rocket2023-available-value",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/obj/gifts2023/may/abil_kosm_smoke.png",targetHref:"/kosmodromx/"},{selector:"TODO dyi selector",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/loc/rocket/rocket.png",targetHref:"/kosmodromx/"},{selector:"#hawthorn-popup > div > div.hawthorn-popup__actions > div > span",url:new URL(window.location.href).origin+"/trainer/vip/",imgSrc:"/@/images/loc/vip/hawthorn_icon.png",targetHref:"/trainer/vip/hawthorn/"},{selector:"#content > table > tbody > tr > td:nth-child(2) > div.block-bordered-tattoo > p:nth-child(3) > span",url:new URL(window.location.href).origin+"/nightclub/",imgSrc:"/@/images/obj/8march6/tattoo_mach.png",targetHref:"/nightclub/"},{selector:"#dino-tab-content-2 > div.dinopark-dino-stats > div:last-child > div.dinopark-dino-stat__value > span",url:new URL(window.location.href).origin+"/dinopark/",imgSrc:"/@/images/loc/dinopark/dinoegg.png",targetHref:"/dinopark/"},{selector:"#content > div > div.pilaf-actions .pilaf-activate-button-inner2",url:new URL(window.location.href).origin+"/teahouse/",imgSrc:"/@/images/loc/pilaf/objs/obj_3.png",targetHref:"/teahouse/"},{selector:"#content > div > div.bender-content > div.bender-use > div > div > button",url:new URL(window.location.href).origin+"/badasrobot/",imgSrc:"/@/images/obj/gifts2017/futurama/bender/head.png",targetHref:"/badasrobot/"}];async function pl({selector:t,url:e,imgSrc:n,targetHref:r,onclick:o}){if(!t||!e||!n){console.log("Could not fetch timer. Data missing.");return}let s=await _(t,new URL(e).pathname);r==="/dinopark/"&&(n=(await _(".dinopark-dino-pic__img","/dinopark/")).getAttribute("src"));let c=ee(`<img style="width: 56px; height: 56px; cursor: pointer; ${r==="/shaman/"&&"transform: scale(1.4);transform-origin: center;"}" src=${n} />`);!s||s===null?s=ee("<span>\u0413\u043E\u0442\u043E\u0432\u043E</span>"):s?.innerText==="\u0417\u0430\u0431\u0440\u0430\u0442\u044C \u043F\u043E\u0439\u043B\u043E!"?s.innerText="\u0413\u043E\u0442\u043E\u0432\u043E":countdown(s),s.style.cssText=Uo.hawthorn,s?.getAttribute("class")?.includes("button")&&$(s).css({lineHeight:"24px",padding:"3px 12px"}),r==="/badasrobot/"&&s.styles;let a=ee("<div></div>");return a.style.cssText="display: flex; align-items: center; flex-direction: column;",a.appendChild(c),a.appendChild(s),r&&c.addEventListener("click",()=>AngryAjax.goToUrl(r)),o&&c.addEventListener("click",o),a}async function li(){let t=async()=>{let r=(await Promise.all(dl.map(async c=>{try{return await pl(c)}catch(a){return console.log("Error processing timer:",c,a),null}}))).filter(Boolean),o=ee(`<div class="timers-container" style="${Uo.timersContainer}"></div>`);function s(){window.innerWidth<1330?o.style.display="none":o.style.display="grid"}window.addEventListener("resize",s),s(),o.replaceChildren(...r),document.querySelector(".main-block").appendChild(o)},e=ee(`
+`,t)}}var dl=[{selector:"#content > div > div.boss-common-block > div.boss-common-bottom-panel > div > div > span.boss-common-active-from-value",url:new URL(window.location.href).origin+"/shaman/",imgSrc:"/@/images/loc/shaman/abil_6.png",targetHref:"/shaman/"},{selector:".buba-button-timer",url:new URL(window.location.href).origin+"/labubu/",imgSrc:"/@/images/loc/buba/bubas/14.png",targetHref:"/labubu/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/fake/",imgSrc:"/@/images/obj/gifts2025/sept/fake.png",targetHref:"/fake/"},{selector:".boss-common-available-value",url:new URL(window.location.href).origin+"/expert/",imgSrc:"/@/images/obj/gifts2026/sept/blogger.png",targetHref:"/expert/"},{selector:"#content > div > div > div.grumpy2019-bottom-panel > div.grumpy2019-available-block > span.grumpy2019-available-value",url:new URL(window.location.href).origin+"/grumpy/",imgSrc:"/@/images/loc/grumpy/abils/abil_1.png",targetHref:"/grumpy/"},{selector:"#spanMatrixTimer",url:new URL(window.location.href).origin+"/matrix/",imgSrc:"/@/images/obj/beast_ability/ability54.png",targetHref:"/matrix/"},{selector:".worldwar2025-available-value",url:new URL(window.location.href).origin+"/tariffs/",imgSrc:"/@/images/obj/gifts2025/may/box_worldwar.png",targetHref:"/tariffs/"},{selector:".carlson2025-available-value",url:new URL(window.location.href).origin+"/karlsson/",imgSrc:"/@/images/obj/gifts2025/may/box_carlson.png",targetHref:"/karlsson/"},{selector:"#content > div > div.rocket2023-block > div.rocket2023-available-block > span.rocket2023-available-value",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/obj/gifts2023/may/abil_kosm_smoke.png",targetHref:"/kosmodromx/"},{selector:"TODO dyi selector",url:new URL(window.location.href).origin+"/kosmodromx/",imgSrc:"/@/images/loc/rocket/rocket.png",targetHref:"/kosmodromx/"},{selector:"#hawthorn-popup > div > div.hawthorn-popup__actions > div > span",url:new URL(window.location.href).origin+"/trainer/vip/",imgSrc:"/@/images/loc/vip/hawthorn_icon.png",targetHref:"/trainer/vip/hawthorn/"},{selector:"#content > table > tbody > tr > td:nth-child(2) > div.block-bordered-tattoo > p:nth-child(3) > span",url:new URL(window.location.href).origin+"/nightclub/",imgSrc:"/@/images/obj/8march6/tattoo_mach.png",targetHref:"/nightclub/"},{selector:"#dino-tab-content-2 > div.dinopark-dino-stats > div:last-child > div.dinopark-dino-stat__value > span",url:new URL(window.location.href).origin+"/dinopark/",imgSrc:"/@/images/loc/dinopark/dinoegg.png",targetHref:"/dinopark/"},{selector:"#content > div > div.pilaf-actions .pilaf-activate-button-inner2",url:new URL(window.location.href).origin+"/teahouse/",imgSrc:"/@/images/loc/pilaf/objs/obj_3.png",targetHref:"/teahouse/"},{selector:"#content > div > div.bender-content > div.bender-use > div > div > button",url:new URL(window.location.href).origin+"/badasrobot/",imgSrc:"/@/images/obj/gifts2017/futurama/bender/head.png",targetHref:"/badasrobot/"}];async function pl({selector:t,url:e,imgSrc:n,targetHref:r,onclick:o}){if(!t||!e||!n){console.log("Could not fetch timer. Data missing.");return}let s=await _(t,new URL(e).pathname);r==="/dinopark/"&&(n=(await _(".dinopark-dino-pic__img","/dinopark/")).getAttribute("src"));let c=ee(`<img style="width: 56px; height: 56px; cursor: pointer; ${r==="/shaman/"&&"transform: scale(1.4);transform-origin: center;"}" src=${n} />`);!s||s===null?s=ee("<span>\u0413\u043E\u0442\u043E\u0432\u043E</span>"):s?.innerText==="\u0417\u0430\u0431\u0440\u0430\u0442\u044C \u043F\u043E\u0439\u043B\u043E!"?s.innerText="\u0413\u043E\u0442\u043E\u0432\u043E":countdown(s),s.style.cssText=Uo.hawthorn,s?.getAttribute("class")?.includes("button")&&$(s).css({lineHeight:"24px",padding:"3px 12px"}),r==="/badasrobot/"&&s.styles;let a=ee("<div></div>");return a.style.cssText="display: flex; align-items: center; flex-direction: column;",a.appendChild(c),a.appendChild(s),r&&c.addEventListener("click",()=>AngryAjax.goToUrl(r)),o&&c.addEventListener("click",o),a}async function li(){let t=async()=>{let r=(await Promise.all(dl.map(async c=>{try{return await pl(c)}catch(a){return console.log("Error processing timer:",c,a),null}}))).filter(Boolean),o=ee(`<div class="timers-container" style="${Uo.timersContainer}"></div>`);function s(){window.innerWidth<1330?o.style.display="none":o.style.display="grid"}window.addEventListener("resize",s),s(),o.replaceChildren(...r),document.querySelector(".main-block").appendChild(o)},e=ee(`
     <div class="button" style="position: fixed; top: 32px; right: 8px;" id="timers-trigger"><span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c" style="padding: 1px 3px;">
     \u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0422\u0430\u0439\u043C\u0435\u0440\u044B
     </div></span></div>
@@ -17391,7 +17779,7 @@ body.mw-helper-tip-on .simple-tooltip {
   },
   omon: function() {
       // Субботний ОМОН v3.1 - Полная интеграция
-      if (window._omonRunning) { 
+      if (window._omonRunning) {
           console.log('[ОМОН] Уже запущен');
           return;
       }
@@ -18582,6 +18970,7 @@ body.mw-helper-tip-on .simple-tooltip {
               '/fd garage_air - Гараж (воздух)\n' +
               '/fd cosmo - Космодром\n' +
               '/fd labubu - Лабубу\n' +
+              '/fd expert - Диванный Эксперт\n' +
               '/fd misc - Разное (Бизнес, Акции)\n' +
               '/fd natal - Натальная карта\n' +
               '/fd robot - Робот\n' +
@@ -18619,7 +19008,7 @@ body.mw-helper-tip-on .simple-tooltip {
               // 4. Логика выбора
               if (target === 'all') {
                   ['fd-list-dopes', 'fd-list-pets', 'fd-list-garage', 'fd-list-cosmo', 'fd-list-labubu'].forEach(selectAllIn);
-                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot', 'fd-natal'].forEach(selectMisc);
+                  ['fd-moscowpoly', 'fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-robot', 'fd-natal'].forEach(selectMisc);
               } else if (target === 'dope') {
                   const dopeNames = payload.split(',').map(name => name.trim().toLowerCase()).filter(Boolean);
                   const container = document.getElementById('fd-list-dopes');
@@ -18660,7 +19049,7 @@ body.mw-helper-tip-on .simple-tooltip {
                   }
 
                   if (target === 'misc') {
-                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-natal'].forEach(selectMisc);
+                      ['fd-stash', 'fd-autopilot', 'fd-grumpy', 'fd-matrix', 'fd-tariffs', 'fd-shaman', 'fd-fake', 'fd-expert', 'fd-carlson', 'fd-kosmodromx', 'fd-crown', 'fd-natal'].forEach(selectMisc);
                   }
               }
 
@@ -18795,7 +19184,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
-      
+
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
           ModuleSessionRegistry.restartIntervals('omniscience');
@@ -19016,14 +19405,14 @@ body.mw-helper-tip-on .simple-tooltip {
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
               if (abilities[id]) return abilities[id];
-              
+
               // Попытка получить из DOM, если словарь не помог
               const input = document.querySelector(`input[type="radio"][value="${id}"]`);
               if (input) {
                   const rel = input.getAttribute('rel');
                   if (rel && rel !== 'Абилка' && !rel.includes('?')) return rel;
               }
-              
+
               return null;
           }
 
@@ -19046,20 +19435,20 @@ body.mw-helper-tip-on .simple-tooltip {
 
               // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
-              
+
               slots.forEach(img => {
                   const id = img.dataset.id;
                   const label = img.closest('label');
                   if (!label) return;
                   const input = label.querySelector('input[type="radio"]');
                   if (!input) return;
-                  
+
                   // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
                   let name = input.getAttribute('rel') || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
                       name = getAbilityName(id) || `Абилка ${id}`;
                   }
-                  
+
                   const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
@@ -19108,7 +19497,7 @@ body.mw-helper-tip-on .simple-tooltip {
                       max-width: 100%;
                       color: ${isNameFallback ? '#ffca28' : '#fff'};
                   `;
-                  
+
                   if (name && name !== 'Абилка' && !name.includes('?')) {
                       // Если имя известно (из DOM или словаря) — показываем его
                       labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
