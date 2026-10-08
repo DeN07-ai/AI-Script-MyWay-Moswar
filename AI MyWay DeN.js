@@ -144,6 +144,7 @@
           state: { hp: 100, energy: 100, location: '', nickname: '', clanId: null, clanName: '' },
           _intervalId: null,
           _updateInterval: 5000, // Обновлять каждые 5 секунд
+          _errAt: 0,
 
           init: function() {
               if (this._intervalId) clearInterval(this._intervalId);
@@ -153,7 +154,14 @@
 
           update: async function() {
               try {
-                  const playerJson = await fetch('/player/json/').then(res => res.json());
+                  // On non-player pages (e.g. /squid/game/) the endpoint answers HTML,
+                  // so res.json() threw every 5s and flooded the console. Read text,
+                  // parse only if it really is JSON, and stay quiet otherwise.
+                  const txt = await fetch('/player/json/').then(res => res.text());
+                  let playerJson;
+                  try { playerJson = JSON.parse(txt); }
+                  catch (e) { return; } // not JSON here — nothing to scan, no error
+                  if (!playerJson || !playerJson.stats) return;
                   this.state.hp = playerJson.stats.hp_percent;
                   this.state.energy = playerJson.stats.energy_percent;
                   this.state.location = window.location.pathname;
@@ -162,7 +170,12 @@
                   this.state.clanName = playerJson.clan?.name || '';
                   MoswarLib.events.emit('state:updated', this.state);
               } catch (e) {
-                  console.error('[StateScanner] Ошибка обновления состояния:', e);
+                  // Network/auth failure: log at most once a minute, not every tick
+                  var now = Date.now();
+                  if (now - this._errAt > 60000) {
+                      this._errAt = now;
+                      console.warn('[StateScanner] состояние недоступно:', e && e.message);
+                  }
               }
           }
       },
@@ -2023,7 +2036,8 @@
       'fulldope': 'fulldope-modal',
       'tcshop': 'tcshop-panel',
       'omon': 'omon-panel',
-      'omniscience': 'mw-omniscience-panel'
+      'omniscience': 'mw-omniscience-panel',
+      'squid': 'mw-squid-panel'
   };
 
   function getPanelEl(id) {
@@ -2602,7 +2616,8 @@
               'flag': 'flag-stop',
               'tcshop': 'tcshop-stop',
               'omon': 'omon-stop',
-              'omniscience': 'omniscience-stop-btn'
+              'omniscience': 'omniscience-stop-btn',
+              'squid': 'squid-stop-btn'
           };
           const btnId = stopMap[id];
           if (btnId) {
@@ -15830,6 +15845,63 @@ utils_.init();
           }, 600);
       })();
 
+      // [MOD] Кнопка «Игра на вылет» (Кальмар 2.0) в меню Помощник
+      (function () {
+          const SQUID_BTN_ID = 'mw-squid-btn';
+
+          function paintBtn() {
+              const btn = document.getElementById(SQUID_BTN_ID);
+              if (!btn) return;
+              const running = typeof window.__mwSquidIsRunning === 'function' && window.__mwSquidIsRunning();
+              btn.classList.toggle('is-on', !!running);
+              btn.removeAttribute('title');
+              const tip = btn.querySelector('.mw-helper-tip');
+              if (tip) tip.textContent = running ? 'Стоп' : 'Кальмар';
+              const label = btn.querySelector('.c');
+              if (label) label.style.filter = running ? 'drop-shadow(0 0 4px #2ecc71)' : '';
+          }
+
+          function makeBtn() {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.id = SQUID_BTN_ID;
+              btn.className = 'button mw-helper-ico';
+              const svgIcon = '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI4MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZiN2EiLz48c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2UwMjQzYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhmMGYyMiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjIiIGZpbGw9InVybCgjZykiIHN0cm9rZT0iIzVlMDcxNiIgc3Ryb2tlLXdpZHRoPSIxIi8+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTAuNiIgZmlsbD0iIzE3MTgxYyIvPjxwYXRoIGQ9Ik0xNiA4LjZsNy4yIDEyLjlIOC44eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==" style="width:18px;height:18px;vertical-align:middle;display:inline-block;" alt="Кальмар">';
+              btn.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">' + svgIcon + '</div></span><span class="mw-helper-tip">Кальмар</span>';
+              btn.setAttribute('data-name', 'Игра на вылет');
+              btn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (typeof window.__mwSquidToggle === 'function') {
+                      window.__mwSquidToggle();
+                  }
+                  paintBtn();
+              });
+              paintBtn();
+              return btn;
+          }
+
+          function mount() {
+              const box = document.getElementById('assistant-autopilot');
+              if (!box || document.getElementById(SQUID_BTN_ID)) return false;
+              box.appendChild(makeBtn());
+              paintBtn();
+              return true;
+          }
+
+          window.__mwSquidMount = mount;
+          window.__mwSquidPaintBtn = paintBtn;
+
+          const obs = new MutationObserver(() => {
+              mount();
+          });
+          obs.observe(document.documentElement, { childList: true, subtree: true });
+          mount();
+          setTimeout(() => {
+              mount();
+          }, 800);
+      })();
+
       // [MOD] Меню помощника — стиль хаба (стекло, круглые иконки)
       (function () {
           const CSS = `
@@ -16032,6 +16104,7 @@ body.mw-helper-tip-on .simple-tooltip {
               { re: /пахан|man102/i, html: '<img src="/@/images/pers/man102_thumb.png" alt="">' },
               { re: /телефон|батаре/i, html: '🔋' },
               { re: /омон/i, html: '<img src="/@/images/pers/man119.png" alt="">' },
+              { re: /вылет|кальмар|squid/i, html: '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI4MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZiN2EiLz48c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2UwMjQzYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhmMGYyMiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjIiIGZpbGw9InVybCgjZykiIHN0cm9rZT0iIzVlMDcxNiIgc3Ryb2tlLXdpZHRoPSIxIi8+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTAuNiIgZmlsbD0iIzE3MTgxYyIvPjxwYXRoIGQ9Ik0xNiA4LjZsNy4yIDEyLjlIOC44eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==" alt="">' },
               { re: /задан/i, html: '<img src="/@/images/obj/jobs/sun.png" alt="">' }
           ];
 
@@ -16052,6 +16125,7 @@ body.mw-helper-tip-on .simple-tooltip {
               { re: /пахан|man102/i, name: 'Пахан' },
               { re: /телефон|батаре|заряд|\uD83D\uDD0B/i, name: 'Телефон' },
               { re: /омон|man119|\uD83E\uDE96/i, name: 'Омон' },
+              { re: /вылет|кальмар|squid/i, name: 'Игра на вылет' },
               { re: /задан|sun\.png|квест/i, name: 'Квест' }
           ];
 
@@ -16100,6 +16174,9 @@ body.mw-helper-tip-on .simple-tooltip {
           function shortName(btn, title, html) {
               if (btn && btn.id === 'mw-ai-jobs-btn') {
                   return btn.classList.contains('is-on') ? 'Стоп' : 'Квест';
+              }
+              if (btn && btn.id === 'mw-squid-btn') {
+                  return btn.classList.contains('is-on') ? 'Стоп' : 'Кальмар';
               }
               const stored = btn && btn.getAttribute('data-name');
               if (stored && stored !== '•') return stored;
@@ -16353,6 +16430,31 @@ body.mw-helper-tip-on .simple-tooltip {
           setTimeout(ensureHubVisible, 800);
           setTimeout(restorePanel, 200);
           setTimeout(restorePanel, 900);
+
+          /* Кнопки меню пересоздаются (SPA-навигация, поздняя инициализация утилит) —
+             restyle() уже остановился, поэтому следим за рядом и дообрабатываем новые кнопки,
+             иначе у них пропадают иконка-подпись (data-name + .mw-helper-tip). */
+          let restyleTimer = null;
+          function scheduleRestyle() {
+              if (restyleTimer) return;
+              restyleTimer = setTimeout(() => {
+                  restyleTimer = null;
+                  try { restyle(); } catch (_) {}
+              }, 250);
+          }
+          function watchRow() {
+              const row = document.getElementById('assistant-autopilot');
+              if (!row || row.dataset.mwRowWatch === '1') return !!row;
+              row.dataset.mwRowWatch = '1';
+              new MutationObserver(scheduleRestyle).observe(row, { childList: true });
+              scheduleRestyle();
+              return true;
+          }
+          let watchTimer = setInterval(() => {
+              if (watchRow()) clearInterval(watchTimer);
+          }, 500);
+          setTimeout(() => clearInterval(watchTimer), 60000);
+          document.addEventListener('contextmenu', scheduleRestyle, true);
       })();
 //# sourceMappingURL=bundle.js.map
 },
@@ -19166,7 +19268,762 @@ body.mw-helper-tip-on .simple-tooltip {
       }
   }
 
-  // === МОДУЛЬ: ОКО ПРОВИДЕНИЯ (OMNISCIENCE) ===
+  // === МОДУЛЬ: ИГРА НА ВЫЛЕТ (SQUID GAME 2026) ===
+
+  BotModules.squid = function () {
+      if (document.getElementById('mw-squid-panel')) {
+          ModuleSessionRegistry.restartIntervals('squid');
+          squidStart();
+          return;
+      }
+      initSquidPanel();
+      squidStart();
+  };
+
+  MoswarLib.modules['squid'] = {
+      init: function () {
+          try { BotModules.squid(); } catch (e) { console.error('[🦑 Squid]', e); }
+      }
+  };
+
+  /* ─── squid state & engine ─── */
+
+  var SQUID_AUTO_KEY = 'mw_squid_auto_v1';
+
+  var _squid = {
+      running: false,
+      timer: null,
+      lastTick: 0,
+      pagePhase: 'none',
+      signupLoggedAt: 0,
+      cds: {},
+      pausedOthers: [],
+      scope: null,
+      scopeEl: null,
+      scopeAt: 0,
+      actionPending: false,
+      lastActionAt: 0,
+      lastNavAt: 0,
+      gamesPlayed: 0,
+      maxGamesDay: 5,       // До 5 игр за долги в день
+      allowHoney: false     // Не тратить мед после 5-й игры по умолчанию
+  };
+
+  function sqLog(msg) {
+      var time = new Date().toLocaleTimeString();
+      var full = '[' + time + '] ' + msg;
+      console.log('[🦑 Squid] ' + full);
+      var logBox = document.getElementById('mw-squid-log');
+      if (logBox) {
+          logBox.textContent = (logBox.textContent + String.fromCharCode(10) + full).split(String.fromCharCode(10)).slice(-100).join(String.fromCharCode(10));
+          logBox.scrollTop = logBox.scrollHeight;
+      }
+      var statusEl = document.getElementById('mw-squid-status-text');
+      if (statusEl) {
+          statusEl.textContent = msg;
+      }
+  }
+
+  // Safe native click dispatching full pointer & mouse events
+  function sqNativeClick(el) {
+      if (!el) return false;
+      try {
+          if (typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+          }
+      } catch (e) { }
+      try {
+          var evtTypes = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+          for (var i = 0; i < evtTypes.length; i++) {
+              var t = evtTypes[i];
+              var evt = t.indexOf('pointer') === 0
+                  ? new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, view: window })
+                  : new MouseEvent(t, { bubbles: true, cancelable: true, composed: true, view: window });
+              el.dispatchEvent(evt);
+          }
+          if (typeof el.click === 'function') el.click();
+          return true;
+      } catch (e) {
+          try {
+              if (typeof el.click === 'function') { el.click(); return true; }
+          } catch (e2) { }
+          return false;
+      }
+  }
+
+  // Find live Alpine scope safely across sandbox
+  function findSquidScope() {
+      var now = Date.now();
+      if (_squid.scope && (now - _squid.scopeAt < 800)) return _squid.scope;
+
+      // Selectors that target the Alpine root of the squid minigame component
+      var SEL = '.squid-minigame[x-data], [x-data*="squidGamePage"], .squid[x-data], .squid-minigame, .squid';
+
+      // In userscript context, unsafeWindow's document has the REAL Alpine data.
+      // The sandbox document may have cloned elements without _x_dataStack.
+      var docs = [];
+      try {
+          if (typeof unsafeWindow !== 'undefined' && unsafeWindow.document) {
+              docs.push(unsafeWindow.document);
+          }
+      } catch (e) { }
+      docs.push(document);
+
+      for (var d = 0; d < docs.length; d++) {
+          var doc = docs[d];
+          try {
+              var els = doc.querySelectorAll(SEL);
+              for (var e = 0; e < els.length; e++) {
+                  var el = els[e];
+                  // Walk up the DOM tree too — Alpine root might be a parent
+                  var candidates = [el];
+                  try {
+                      var parent = el.closest('[x-data]');
+                      if (parent && parent !== el) candidates.unshift(parent);
+                  } catch (ex) { }
+
+                  for (var c = 0; c < candidates.length; c++) {
+                      var root = candidates[c];
+                      var stack = null;
+                      try { stack = root._x_dataStack; } catch (ex) { }
+                      if (!stack || !stack.length) continue;
+
+                      for (var i = 0; i < stack.length; i++) {
+                          var obj = stack[i];
+                          if (!obj || typeof obj !== 'object') continue;
+                          // Match by key signatures of the squidGamePage() component
+                          var hits = 0;
+                          var markers = ['openCell', 'canOpen', 'join', 'canJoin', 'cells',
+                                         'game', 'resultOpen', 'entry', 'closeResult',
+                                         'chooseAction', 'isChooser', 'actionChoices'];
+                          for (var m = 0; m < markers.length; m++) {
+                              try { if (markers[m] in obj) hits++; } catch (ex) { }
+                          }
+                          if (hits >= 2) {
+                              _squid.scope = obj;
+                              _squid.scopeEl = root;
+                              _squid.scopeAt = now;
+                              return obj;
+                          }
+                      }
+                  }
+              }
+          } catch (ex) { }
+      }
+      _squid.scope = null;
+      return null;
+  }
+
+  // Are we currently eligible to open a cell?
+  function isMyCellTurn(s) {
+      // 1. DOM is the supreme ground truth:
+      // In game template: :disabled="!canOpen(cell)"
+      // When it's not our turn, every single cell button has disabled="disabled"
+      // When it IS our turn, openable cells have no disabled attribute!
+      var enabledCellBtns = document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)');
+      if (enabledCellBtns.length > 0) return true;
+
+      // 2. Alpine check
+      if (s) {
+          try {
+              if (typeof s.isChooser === 'function' && s.isChooser()) {
+                  if (s.game && s.game.phase === 'choose_cell') return true;
+              }
+          } catch (e) { }
+          try {
+              if (s.game && s.game.phase === 'choose_cell') {
+                  var pid = s.playerId || (s.entry && s.entry.playerId);
+                  if (pid && s.game.turnPlayerId && String(pid) === String(s.game.turnPlayerId)) return true;
+              }
+          } catch (e) { }
+      }
+      return false;
+  }
+
+  // Are we currently required to pick an action?
+  function isMyActionTurn(s) {
+      // 1. DOM check: action choices
+      var actionBtns = document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)');
+      if (actionBtns.length > 0) return true;
+
+      // 2. Alpine check:
+      if (s && s.game && s.game.phase === 'choose_action') {
+          try {
+              if (typeof s.isChooser === 'function' && s.isChooser()) return true;
+          } catch (e) { }
+      }
+      return false;
+  }
+
+  // Decision logic for cells (incorporates Moswar 2026 rules)
+  function pickAndOpenCell(s) {
+      if (_squid.actionPending) return false;
+
+      var btns = Array.from(document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)'));
+      if (!btns.length) return false;
+
+      var allCellBtns = Array.from(document.querySelectorAll('button.squid-field-cell'));
+      var candidates = [];
+
+      for (var i = 0; i < btns.length; i++) {
+          var btn = btns[i];
+          var numEl = btn.querySelector('.squid-minigame__cell-number');
+          var idx = -1;
+          if (numEl) {
+              var n = parseInt(numEl.textContent.trim(), 10);
+              if (!isNaN(n)) idx = n - 1;
+          }
+          if (idx === -1) {
+              idx = allCellBtns.indexOf(btn);
+          }
+          if (idx === -1) idx = i;
+
+          var hintEl = btn.querySelector('.squid-minigame__hint-img, img, .squid-field-cell__figure');
+          var hintSrc = hintEl ? (hintEl.getAttribute('src') || hintEl.className || '') : '';
+          var isGlass = /glass|стекло/i.test(hintSrc);
+          var isMine = /mine|мина/i.test(hintSrc);
+          var isPiggy = /piggy|bank|gold|копилка/i.test(hintSrc);
+          var isPrize = /prize|gift|приз/i.test(hintSrc);
+          var isAmbulance = /ambulance|скорая/i.test(hintSrc);
+          var isRecruiter = /recruiter|вербов/i.test(hintSrc);
+
+          if (s && s.game && s.game.privateHints && s.game.privateHints[idx]) {
+              var ph = String(s.game.privateHints[idx]).toLowerCase();
+              if (/piggy|bank|gold/.test(ph)) isPiggy = true;
+              if (/prize|gift/.test(ph)) isPrize = true;
+              if (/ambulance/.test(ph)) isAmbulance = true;
+              if (/recruiter/.test(ph)) isRecruiter = true;
+              if (/glass/.test(ph)) isGlass = true;
+              if (/mine/.test(ph)) isMine = true;
+          }
+
+          candidates.push({
+              btn: btn,
+              index: idx,
+              isGlass: isGlass,
+              isMine: isMine,
+              isPiggy: isPiggy,
+              isPrize: isPrize,
+              isAmbulance: isAmbulance,
+              isRecruiter: isRecruiter
+          });
+      }
+
+      // Filter dangerous cells
+      var safeCandidates = candidates.filter(function (c) { return !c.isGlass && !c.isMine; });
+      if (!safeCandidates.length) safeCandidates = candidates;
+
+      // Priority 1: Piggy Bank (wins the bank!)
+      var target = safeCandidates.find(function (c) { return c.isPiggy; });
+
+      // Priority 2: Valued items (prizes, extra life ambulance, recruiter)
+      if (!target) {
+          target = safeCandidates.find(function (c) { return c.isPrize || c.isAmbulance || c.isRecruiter; });
+      }
+
+      // Priority 3: Unknown safe cells. Avoid the last 10 cells (idx >= 54) per 2026 rules
+      if (!target) {
+          var earlyCells = safeCandidates.filter(function (c) { return c.index < 54; });
+          if (earlyCells.length > 0 && safeCandidates.length > 12) {
+              target = earlyCells[Math.floor(Math.random() * earlyCells.length)];
+          } else {
+              target = safeCandidates[Math.floor(Math.random() * safeCandidates.length)];
+          }
+      }
+
+      if (!target) return false;
+
+      _squid.actionPending = true;
+      var cellNum = target.index + 1;
+      sqLog('🎯 Ход игрока! Выбираем ячейку #' + cellNum + (target.isPiggy ? ' (🏆 Золотая Копилка!)' : target.isPrize ? ' (🎁 Приз)' : ''));
+
+      // Natural human reaction 1200-2200ms within 20s limit
+      var delay = 1200 + Math.floor(Math.random() * 800);
+      setTimeout(function () {
+          try {
+              sqNativeClick(target.btn);
+              if (s && typeof s.openCell === 'function') {
+                  var cellObj = null;
+                  if (s.game && s.game.cells && s.game.cells[target.index]) {
+                      cellObj = s.game.cells[target.index];
+                  } else if (s.cells && s.cells[target.index]) {
+                      cellObj = s.cells[target.index];
+                  }
+                  if (cellObj) {
+                      try { s.openCell(cellObj); } catch (e) { }
+                  }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 800);
+          }
+      }, delay);
+
+      return true;
+  }
+
+  // Decision logic for actions (Frontman, Dalgona, Ambulance)
+  function pickAndExecuteAction(s) {
+      if (_squid.actionPending) return false;
+
+      var actionBtns = Array.from(document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)'));
+      if (!actionBtns.length) return false;
+
+      var chosenBtn = null;
+      var chosenVal = null;
+
+      var actionKind = (s && s.game && s.game.actionKind) || '';
+      var promptText = (document.querySelector('.squid-minigame__action-prompt') || {}).textContent || '';
+
+      for (var i = 0; i < actionBtns.length; i++) {
+          var b = actionBtns[i];
+          var text = (b.textContent || '').trim().toLowerCase();
+          var val = b.getAttribute('data-value') || b.value || text;
+
+          // 1. Ambulance (Скорая помощь) - always use to save life
+          if (/скорая|помощь|ambulance|спасти|revive/i.test(text) || /ambulance/i.test(val)) {
+              chosenBtn = b; chosenVal = val; break;
+          }
+
+          // 2. Frontman: cash out or stay
+          if (/frontman/i.test(actionKind) || /забрать|остать|куш|банк/i.test(promptText)) {
+              var aliveCount = 10;
+              if (s && typeof s.aliveCount === 'function') {
+                  try { aliveCount = s.aliveCount(); } catch (e) { }
+              }
+              var shouldTake = aliveCount <= 3;
+              if (shouldTake && /забрать|take/i.test(text)) {
+                  chosenBtn = b; chosenVal = val; break;
+              } else if (!shouldTake && /остать|stay/i.test(text)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+          }
+
+          // 3. Dalgona (sugar shapes): prefer circle or triangle
+          if (/dalgona/i.test(actionKind) || b.classList.contains('squid-minigame__action-choice--shape')) {
+              if (/круг|circle/i.test(text) || /circle/i.test(val)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+              if (/треуголь|triangle/i.test(text) || /triangle/i.test(val)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+          }
+      }
+
+      if (!chosenBtn && actionBtns.length > 0) {
+          chosenBtn = actionBtns[0];
+          chosenVal = chosenBtn.getAttribute('data-value') || chosenBtn.value || chosenBtn.textContent.trim();
+      }
+
+      if (!chosenBtn) return false;
+
+      _squid.actionPending = true;
+      sqLog('⚡ Выбор действия: ' + (chosenBtn.textContent.trim() || chosenVal));
+
+      var delay = 1200 + Math.floor(Math.random() * 600);
+      setTimeout(function () {
+          try {
+              sqNativeClick(chosenBtn);
+              if (s && typeof s.chooseAction === 'function' && chosenVal) {
+                  try { s.chooseAction(chosenVal); } catch (e) { }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 800);
+          }
+      }, delay);
+
+      return true;
+  }
+
+  // Result modal closer
+  function checkAndCloseResult(s) {
+      if (_squid.actionPending) return false;
+
+      var resultPanel = document.querySelector('.squid-minigame__reward-panel, .squid-minigame__phase-result, .squid-minigame__header-finale');
+      var closeBtn = document.querySelector('button.squid-minigame__reward-close, .squid-modal__close, [aria-label*="Закрыть результат"], button[title="Закрыть"]');
+
+      var isResultOpen = !!resultPanel || (s && (s.resultOpen || (s.result && s.resultFresh)));
+      if (!isResultOpen) return false;
+
+      _squid.actionPending = true;
+      _squid.gamesPlayed++;
+      sqLog('🏆 Результаты матча зафиксированы (всего игр: ' + _squid.gamesPlayed + '). Закрываем окно...');
+
+      setTimeout(function () {
+          try {
+              if (closeBtn) sqNativeClick(closeBtn);
+              if (s && typeof s.closeResult === 'function') {
+                  try { s.closeResult(); } catch (e) { }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 1500);
+          }
+      }, 2000);
+
+      return true;
+  }
+
+  // Lobby registration
+  function checkAndJoinLobby(s) {
+      if (_squid.actionPending) return false;
+
+      // === Strategy 1: Alpine scope knows best ===
+      // The game component exposes canJoin/joining/join() — these are reactive
+      // and authoritative. The DOM button state lags behind Alpine.
+      if (s) {
+          try {
+              // Already joined/joining — just wait
+              if (s.joining || s.joined) {
+                  if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+                      _squid.signupLoggedAt = Date.now();
+                      sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b \u043d\u0430 \u0438\u0433\u0440\u0443. \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
+                  }
+                  return false;
+              }
+              // Registration open via Alpine
+              if (s.canJoin && typeof s.join === 'function') {
+                  // Daily limit check
+                  if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
+                      if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
+                          _squid.signupLoggedAt = Date.now();
+                          sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
+                      }
+                      return false;
+                  }
+                  _squid.actionPending = true;
+                  sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (Alpine)...');
+                  var delay = 400 + Math.floor(Math.random() * 400);
+                  setTimeout(function () {
+                      try {
+                          // Click the DOM button first (triggers @click="join()")
+                          var domBtn = document.querySelector('button.squid-minigame__join-button:not(.disabled):not([disabled])');
+                          if (domBtn) sqNativeClick(domBtn);
+                          // Also call Alpine join() directly as backup
+                          try { s.join(); } catch (e) { }
+                      } finally {
+                          setTimeout(function () { _squid.actionPending = false; }, 2500);
+                      }
+                  }, delay);
+                  return true;
+              }
+          } catch (e) { }
+      }
+
+      // === Strategy 2: Pure DOM fallback ===
+      // Find join button that is NOT disabled and IS visible
+      var joinBtns = document.querySelectorAll('button.squid-minigame__join-button');
+      var joinBtn = null;
+      for (var i = 0; i < joinBtns.length; i++) {
+          var b = joinBtns[i];
+          // Alpine x-show sets display:none when hidden
+          var hidden = (b.style && b.style.display === 'none');
+          var disabled = b.disabled || b.classList.contains('disabled');
+          if (!hidden && !disabled) {
+              joinBtn = b;
+              break;
+          }
+      }
+
+      if (joinBtn) {
+          // Daily limit check
+          if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
+              if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
+                  _squid.signupLoggedAt = Date.now();
+                  sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
+              }
+              return false;
+          }
+          _squid.actionPending = true;
+          sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (DOM)...');
+          var delay2 = 400 + Math.floor(Math.random() * 400);
+          setTimeout(function () {
+              try {
+                  sqNativeClick(joinBtn);
+              } finally {
+                  setTimeout(function () { _squid.actionPending = false; }, 2500);
+              }
+          }, delay2);
+          return true;
+      }
+
+      // === No join available — log status ===
+      // Check if we're already in an active game
+      var gameActive = document.querySelector('.squid-minigame__board, .squid-field');
+      if (gameActive) return false; // In-game, don't log lobby messages
+
+      // Check entry status from Alpine
+      if (s && s.entry) {
+          var entryStatus = '';
+          try { entryStatus = String(s.entry.status || '').toLowerCase(); } catch (e) { }
+          if (/paid_waiting|assigned|active|playing|alive|confirmed|waiting/.test(entryStatus)) {
+              if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+                  _squid.signupLoggedAt = Date.now();
+                  sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b (entry: ' + entryStatus + '). \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
+              }
+              return false;
+          }
+      }
+
+      if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+          _squid.signupLoggedAt = Date.now();
+          var hintText = '';
+          try { hintText = (document.querySelector('.squid-header__about') || {}).textContent || ''; } catch (e) { }
+          var signupText = '';
+          try { if (s && s.signupClosedText) signupText = s.signupClosedText; } catch (e) { }
+          sqLog('\u23f3 \u0417\u0430\u043f\u0438\u0441\u044c \u0437\u0430\u043a\u0440\u044b\u0442\u0430. ' + (signupText || hintText || '\u041e\u0436\u0438\u0434\u0430\u0435\u043c \u043e\u0442\u043a\u0440\u044b\u0442\u0438\u044f...'));
+      }
+      return false;
+  }
+
+  // SPA navigation to minigame
+  function squidGoto() {
+      try {
+          if (window.AngryAjax && typeof window.AngryAjax.goToUrl === 'function') {
+              window.AngryAjax.goToUrl('/squid/game/');
+              return;
+          }
+      } catch (e) { }
+      try { window.location.href = '/squid/game/'; } catch (e) { }
+  }
+
+  // Main autopilot tick
+  function squidTick() {
+      if (!_squid.running) return;
+
+      var curPath = location.pathname;
+      if (!/\/squid\/game/.test(curPath)) {
+          if (Date.now() - (_squid.lastNavAt || 0) > 5000) {
+              _squid.lastNavAt = Date.now();
+              sqLog('\ud83d\udce1 \u041d\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044f \u043d\u0430 /squid/game/ ...');
+              squidGoto();
+          }
+          return;
+      }
+
+      if (_squid.actionPending) return;
+
+      // Try to get Alpine scope; if not found, still proceed with DOM-only
+      var s = findSquidScope();
+
+      // Diagnostic: log scope status once on first success/failure
+      if (!_squid._scopeLogged) {
+          _squid._scopeLogged = true;
+          if (s) {
+              sqLog('\u2705 Alpine scope \u043d\u0430\u0439\u0434\u0435\u043d. canJoin=' + (s.canJoin) + ' joining=' + (s.joining) + ' joined=' + (s.joined));
+          } else {
+              sqLog('\u26a0\ufe0f Alpine scope \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d, \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u043c \u0447\u0435\u0440\u0435\u0437 DOM');
+              _squid._scopeLogged = false; // retry logging next tick
+          }
+      }
+
+      // 1. Results modal
+      if (checkAndCloseResult(s)) return;
+
+      // 2. Action choices (during active game)
+      if (isMyActionTurn(s)) {
+          if (pickAndExecuteAction(s)) return;
+      }
+
+      // 3. Cell turn (during active game)
+      if (isMyCellTurn(s)) {
+          if (pickAndOpenCell(s)) return;
+      }
+
+      // 4. Lobby: join or wait
+      checkAndJoinLobby(s);
+  }
+
+  /* ─── Autopilot controls & persistence ─── */
+
+  function squidAutoSave(on) {
+      try { localStorage.setItem(SQUID_AUTO_KEY, on ? '1' : ''); } catch (e) { }
+  }
+
+  function squidAutoLoad() {
+      try { return localStorage.getItem(SQUID_AUTO_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function pauseOtherModules() {
+      _squid.pausedOthers = [];
+      try {
+          Object.keys(ModuleSessionRegistry._specs || {}).forEach(function (id) {
+              if (id === 'squid') return;
+              var ids = ModuleSessionRegistry._ids[id];
+              if (!ids) return;
+              var live = Object.keys(ids).filter(function (k) { return ids[k] != null; });
+              if (!live.length) return;
+              ModuleSessionRegistry.pause(id);
+              ModuleSessionRegistry.clear(id);
+              _squid.pausedOthers.push({ id: id, keys: live });
+          });
+      } catch (e) { }
+  }
+
+  function resumeOtherModules() {
+      if (!_squid.pausedOthers || !_squid.pausedOthers.length) return;
+      var list = _squid.pausedOthers.slice();
+      _squid.pausedOthers = [];
+      list.forEach(function (rec) {
+          try {
+              var ids = ModuleSessionRegistry._ids[rec.id];
+              var specs = ModuleSessionRegistry._specs[rec.id];
+              if (ids && specs) {
+                  rec.keys.forEach(function (k) {
+                      if (ids[k] != null || !specs[k]) return;
+                      ids[k] = setInterval(specs[k].fn, specs[k].ms);
+                  });
+              }
+              ModuleSessionRegistry.pause(rec.id);
+          } catch (_) {}
+      });
+  }
+
+  function squidStart() {
+      if (_squid.running) return true;
+      _squid.running = true;
+      _squid.lastTick = 0;
+      pauseOtherModules();
+      if (!_squid.timer) _squid.timer = setInterval(squidTick, 600);
+      squidAutoSave(true);
+      sqLog('🔄 Автопилот «Игра на вылет» запущен');
+      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+      if (!/\/squid\/game/.test(location.pathname)) squidGoto();
+      return true;
+  }
+
+  function squidStop() {
+      _squid.running = false;
+      if (_squid.timer) { clearInterval(_squid.timer); _squid.timer = null; }
+      resumeOtherModules();
+      squidAutoSave(false);
+      sqLog('⏹️ Автопилот «Игра на вылет» остановлен');
+      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+      return false;
+  }
+
+  // Assistant menu bridge
+  window.__mwSquidToggle = function () {
+      return _squid.running ? squidStop() : squidStart();
+  };
+  window.__mwSquidIsRunning = function () { return _squid.running; };
+
+  /* ─── UI Panel ─── */
+
+  function initSquidPanel() {
+      if (document.getElementById('mw-squid-panel')) return;
+
+      if (!document.getElementById('mw-squid-style')) {
+          var st = document.createElement('style');
+          st.id = 'mw-squid-style';
+          st.textContent = [
+              '#mw-squid-panel{position:fixed;left:16px;bottom:16px;z-index:2147483600;width:260px;',
+              'font:12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1a1410;',
+              'background:linear-gradient(165deg,rgba(255,250,240,.95),rgba(245,230,200,.90));',
+              'backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);',
+              'border:1px solid rgba(209,148,92,.45);border-radius:20px;',
+              'box-shadow:0 18px 44px rgba(30,20,10,.18),inset 0 1px 0 rgba(255,255,255,.55);overflow:hidden;}',
+              '#mw-squid-panel *{box-sizing:border-box;}',
+              '.squid-panel-header{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:move;',
+              'background:rgba(209,148,92,.18);border-bottom:1px solid rgba(209,148,92,.25);',
+              'font-weight:700;font-size:13px;user-select:none;color:#1a1410;}',
+              '.squid-panel-icon{font-size:16px;}',
+              '.squid-panel-close{margin-left:auto;cursor:pointer;opacity:.55;font-size:17px;line-height:1;padding:0 3px;border-radius:5px;}',
+              '.squid-panel-close:hover{opacity:1;background:rgba(196,71,71,.15);color:#c44747;}',
+              '.squid-panel-body{padding:10px 12px;}',
+              '.squid-panel-status{padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.65);',
+              'border:1px solid rgba(209,148,92,.3);margin-bottom:8px;font-size:11px;color:#333;word-break:break-word;}',
+              '.squid-panel-log{height:90px;overflow-y:auto;background:rgba(0,0,0,.04);border-radius:8px;',
+              'padding:6px;font-family:monospace;font-size:10px;line-height:1.3;white-space:pre-wrap;color:#444;margin-bottom:8px;}',
+              '.squid-panel-btn{display:block;width:100%;padding:7px;border-radius:12px;border:none;cursor:pointer;',
+              'font-weight:700;font-size:12px;text-align:center;transition:all .15s ease;}',
+              '.squid-panel-btn.is-active{background:#c44747;color:#fff;}',
+              '.squid-panel-btn.is-idle{background:linear-gradient(135deg,#e0243c,#b0182c);color:#fff;}'
+          ].join('');
+          document.head.appendChild(st);
+      }
+
+      var p = document.createElement('div');
+      p.id = 'mw-squid-panel';
+      p.innerHTML = [
+          '<div class="squid-panel-header">',
+          '  <span class="squid-panel-icon">🦑</span>',
+          '  <span>Игра на вылет 2.0</span>',
+          '  <span class="squid-panel-close" title="Скрыть">×</span>',
+          '</div>',
+          '<div class="squid-panel-body">',
+          '  <div class="squid-panel-status" id="mw-squid-status-text">Ожидание старта</div>',
+          '  <div class="squid-panel-log" id="mw-squid-log">[Лог инициализирован]</div>',
+          '  <button class="squid-panel-btn ' + (_squid.running ? 'is-active' : 'is-idle') + '" id="mw-squid-toggle-btn">',
+          '    ' + (_squid.running ? '⏹️ Остановить' : '▶️ Запустить автопилот'),
+          '  </button>',
+          '</div>'
+      ].join('');
+
+      document.body.appendChild(p);
+
+      var toggleBtn = document.getElementById('mw-squid-toggle-btn');
+      if (toggleBtn) {
+          toggleBtn.addEventListener('click', function () {
+              if (_squid.running) {
+                  squidStop();
+                  toggleBtn.className = 'squid-panel-btn is-idle';
+                  toggleBtn.textContent = '▶️ Запустить автопилот';
+              } else {
+                  squidStart();
+                  toggleBtn.className = 'squid-panel-btn is-active';
+                  toggleBtn.textContent = '⏹️ Остановить';
+              }
+          });
+      }
+
+      var closeBtn = p.querySelector('.squid-panel-close');
+      if (closeBtn) {
+          closeBtn.addEventListener('click', function () { p.remove(); });
+      }
+
+      // Dragging
+      var header = p.querySelector('.squid-panel-header');
+      if (header) {
+          var isDragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+          header.addEventListener('mousedown', function (e) {
+              if (e.target === closeBtn) return;
+              isDragging = true;
+              startX = e.clientX;
+              startY = e.clientY;
+              var rect = p.getBoundingClientRect();
+              startLeft = rect.left;
+              startTop = rect.top;
+              p.style.bottom = 'auto';
+              p.style.left = startLeft + 'px';
+              p.style.top = startTop + 'px';
+              e.preventDefault();
+          });
+          document.addEventListener('mousemove', function (e) {
+              if (!isDragging) return;
+              p.style.left = (startLeft + (e.clientX - startX)) + 'px';
+              p.style.top = (startTop + (e.clientY - startY)) + 'px';
+          });
+          document.addEventListener('mouseup', function () { isDragging = false; });
+      }
+  }
+
+  // Restore autopilot on page reload if active
+  if (squidAutoLoad()) {
+      setTimeout(function () {
+          try {
+              squidStart();
+          } catch (e) { }
+      }, 1200);
+  }
+
+  ModuleSessionRegistry.register('squid', {
+      onAbort: function (reason) {
+          squidStop();
+          var p = document.getElementById('mw-squid-panel');
+          if (p) p.remove();
+      }
+  });
+
+
   BotModules.omniscience = function() {
       console.log('[Omniscience] Запуск модуля');
       try {
