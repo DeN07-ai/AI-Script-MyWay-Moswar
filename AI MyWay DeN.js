@@ -19305,6 +19305,8 @@ body.mw-helper-tip-on .simple-tooltip {
       lastActionAt: 0,
       lastNavAt: 0,
       gamesPlayed: 0,
+      dayKey: '',
+      lastResultCloseAt: 0,
       maxGamesDay: 5,       // До 5 игр за долги в день
       allowHoney: false     // Не тратить мед после 5-й игры по умолчанию
   };
@@ -19635,18 +19637,52 @@ body.mw-helper-tip-on .simple-tooltip {
   }
 
   // Result modal closer
+  // Реально видим ли элемент (Alpine x-show ставит display:none)
+  function sqVisible(el) {
+      if (!el) return false;
+      try {
+          var cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+          var r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+      } catch (e) { return false; }
+  }
+
+  // Закрываем оверлей результата ТОЛЬКО когда он реально показан.
+  // В лобби .squid-minigame__reward-overlay скрыт через x-show="result && resultOpen".
+  // .squid-minigame__header-finale есть в статичном HTML всегда — НЕ используем его.
   function checkAndCloseResult(s) {
       if (_squid.actionPending) return false;
 
-      var resultPanel = document.querySelector('.squid-minigame__reward-panel, .squid-minigame__phase-result, .squid-minigame__header-finale');
-      var closeBtn = document.querySelector('button.squid-minigame__reward-close, .squid-modal__close, [aria-label*="Закрыть результат"], button[title="Закрыть"]');
+      // Ищем видимый оверлей награды
+      var overlay = null;
+      var overlays = document.querySelectorAll('.squid-minigame__reward-overlay');
+      for (var i = 0; i < overlays.length; i++) {
+          if (sqVisible(overlays[i])) { overlay = overlays[i]; break; }
+      }
 
-      var isResultOpen = !!resultPanel || (s && (s.resultOpen || (s.result && s.resultFresh)));
-      if (!isResultOpen) return false;
+      // Alpine-подтверждение: resultOpen=true и result!=null
+      var scopeOpen = false;
+      try { scopeOpen = !!(s && s.resultOpen && s.result); } catch (e) { }
+
+      // Должно быть И видимый оверлей, И подтверждение из Alpine
+      if (!overlay && !scopeOpen) return false;
+      if (overlay && !scopeOpen) {
+          if (!sqVisible(overlay)) return false;
+      }
+
+      // Кулдаун 15с — не плодим счётчик при залипшем оверлее
+      if (Date.now() - (_squid.lastResultCloseAt || 0) < 15000) return true;
+      _squid.lastResultCloseAt = Date.now();
+
+      var closeBtn = overlay
+          ? (overlay.querySelector('button.squid-minigame__reward-close') ||
+             document.querySelector('button.squid-minigame__reward-close'))
+          : document.querySelector('button.squid-minigame__reward-close');
 
       _squid.actionPending = true;
       _squid.gamesPlayed++;
-      sqLog('🏆 Результаты матча зафиксированы (всего игр: ' + _squid.gamesPlayed + '). Закрываем окно...');
+      sqLog('\ud83c\udfc6 Матч окончен (игра #' + _squid.gamesPlayed + '). Закрываю окно...');
 
       setTimeout(function () {
           try {
@@ -19657,7 +19693,7 @@ body.mw-helper-tip-on .simple-tooltip {
           } finally {
               setTimeout(function () { _squid.actionPending = false; }, 1500);
           }
-      }, 2000);
+      }, 1200);
 
       return true;
   }
@@ -19788,6 +19824,13 @@ body.mw-helper-tip-on .simple-tooltip {
   // Main autopilot tick
   function squidTick() {
       if (!_squid.running) return;
+
+      // Новый день — обнуляем счётчик сыгранных игр
+      var today = new Date().toISOString().slice(0, 10);
+      if (_squid.dayKey !== today) {
+          _squid.dayKey = today;
+          _squid.gamesPlayed = 0;
+      }
 
       var curPath = location.pathname;
       if (!/\/squid\/game/.test(curPath)) {
