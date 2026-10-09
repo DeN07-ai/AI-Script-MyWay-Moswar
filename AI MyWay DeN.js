@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.5
+// @version      3.6
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -559,7 +559,7 @@
   const MODULES = [
       { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
       { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.5' },
-      { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
+      { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.8' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы + одиночная', version: '1.3.21' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
@@ -4467,6 +4467,7 @@
       let actionDropMin = 20;              // порог дропа в акционном режиме
       let actionBelowBehavior = "run";     // elevator | run
       let actionAutoMax = false;           // авто‑выбор максимума из блока .metro-sparkles-block
+      let actionAutoMaxPct = 100;          // процент от максимума при авто-выборе (10-100)
 
       // двойные спуски
       let doubleRunEnabled = false;
@@ -4563,6 +4564,7 @@
           localStorage.setItem("ratbot-darkTunnelCollections", (darkTunnelReward === "collections" || darkTunnelReward === "both") ? "1" : "0");
           localStorage.setItem("ratbot-darkTunnelChests", (darkTunnelReward === "chests" || darkTunnelReward === "both") ? "1" : "0");
           localStorage.setItem("ratbot-actionAutoMax", actionAutoMax ? "1" : "0");
+          localStorage.setItem("ratbot-actionAutoMaxPct", String(actionAutoMaxPct));
       }
 
       function restoreFlags() {
@@ -4593,6 +4595,8 @@
           labubuLetuchik = localStorage.getItem("ratbot-labubuLetuchik") === "1";
 
           actionAutoMax = localStorage.getItem("ratbot-actionAutoMax") === "1";
+          const aamp = parseInt(localStorage.getItem("ratbot-actionAutoMaxPct") || "100", 10);
+          if (!isNaN(aamp) && aamp >= 0) actionAutoMaxPct = aamp;
 
           darkTunnelMode = localStorage.getItem("ratbot-darkTunnelMode") === "1";
           const savedReward = localStorage.getItem("ratbot-darkTunnelReward");
@@ -4697,6 +4701,18 @@
       </div>
       <div style="font-size:12px;margin-bottom:6px;">
         <label><input type="checkbox" id="rat-action-auto-max"> Авто-выбор максимума</label>
+        <select id="rat-action-auto-max-pct" class="mw-input" style="width:64px;margin-left:4px;">
+          <option value="100">100%</option>
+          <option value="90">90%</option>
+          <option value="80">80%</option>
+          <option value="70">70%</option>
+          <option value="60">60%</option>
+          <option value="50">50%</option>
+          <option value="40">40%</option>
+          <option value="30">30%</option>
+          <option value="20">20%</option>
+          <option value="10">10%</option>
+        </select>
       </div>
       <div style="font-size:12px;">
         <label><input type="radio" name="rat-action-below" id="rat-action-below-elev" value="elevator"> Искать другого</label><br>
@@ -4844,6 +4860,17 @@
           selActionDrop.value = actionDropType;
           inpActionMin.value = actionDropMin;
           chkActionAuto.checked = !!actionAutoMax;
+          const selAutoMaxPct = document.getElementById("rat-action-auto-max-pct");
+          if (selAutoMaxPct) {
+              let pv = actionAutoMaxPct;
+              if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
+              selAutoMaxPct.value = String(pv);
+              selAutoMaxPct.onchange = () => {
+                  actionAutoMaxPct = parseInt(selAutoMaxPct.value, 10) || 100;
+                  saveFlags();
+                  addLog("Авто-выбор максимума: " + actionAutoMaxPct + "% от найденного");
+              };
+          }
           if (actionBelowBehavior === "elevator") {
               rbActionElev.checked = true;
           } else {
@@ -5612,6 +5639,8 @@
               if (rbR && rbR.checked) actionBelowBehavior = "run";
               if (chkBadge) useBadgeElevator = !!chkBadge.checked;
               if (chkAuto) actionAutoMax = !!chkAuto.checked;
+              const selAutoMaxPct2 = document.getElementById("rat-action-auto-max-pct");
+              if (selAutoMaxPct2) actionAutoMaxPct = parseInt(selAutoMaxPct2.value, 10) || 100;
           } catch (e) {
               console.warn("[RatBot] sync UI failed:", e);
           }
@@ -5620,11 +5649,12 @@
           if (modeAction && actionAutoMax) {
               const parsedMax = parseMaxFromSparklesBlock();
               if (parsedMax && parsedMax > 0) {
-                  actionDropMin = parsedMax;
+                  const threshold = Math.floor(parsedMax * actionAutoMaxPct / 100);
+                  actionDropMin = threshold;
                   const ipt = document.getElementById("rat-action-drop-min");
-                  if (ipt) ipt.value = parsedMax;
+                  if (ipt) ipt.value = threshold;
                   saveFlags();
-                  addLog(`Авто‑выбор максимума: найдено до ${parsedMax} → устанавливаю порог ${parsedMax}`);
+                  addLog(`Авто‑выбор максимума: найдено до ${parsedMax}, порог ${actionAutoMaxPct}% = ${threshold} → устанавливаю порог ${threshold}`);
               } else {
                   addLog("Авто‑выбор максимума: блок .metro-sparkles-block не найден или число не распознано");
               }
@@ -5972,9 +6002,9 @@
   },
 
   neft: function() {
-      // v3.7
+      // v3.8
       if (document.getElementById('neftbot-panel')) { return; }
-      console.log('[MODULE_neft] v3.7');
+      console.log('[MODULE_neft] v3.8');
 
 
       /* ========================= УТИЛИТЫ ========================= */
@@ -6038,8 +6068,9 @@
       let neftActionDropType = 'iskr'; // iskr | puli | sneg | meld
       let neftActionDropMin = 0;
 
-      // Авто-максимум: перебирать патрули до "до N" (если найден блок .lenin-attack-block с "до N")
-      let autoMaxEnabled = false;
+      // Процентный дроп от максимума: атакуем, если выбранный дроп >= ceil(макс × pct / 100).
+      // Максимум парсится из блока .lenin-attack-block ("до N").
+      let dropPctFromMax = 100;
 
       /* ========================= НАСТРОЙКИ (localStorage) ========================= */
 
@@ -6052,7 +6083,7 @@
           localStorage.setItem("neftbot-normalNeftMin", String(normalNeftMin));
           localStorage.setItem("neftbot-actionDropType", neftActionDropType);
           localStorage.setItem("neftbot-actionDropMin", String(neftActionDropMin));
-          localStorage.setItem("neftbot-autoMax", autoMaxEnabled ? "1" : "0");
+          localStorage.setItem("neftbot-dropPct", String(dropPctFromMax));
       }
 
       function restoreFlags() {
@@ -6062,7 +6093,8 @@
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
 
-          autoMaxEnabled = localStorage.getItem("neftbot-autoMax") === "1";
+          const pct = parseInt(localStorage.getItem("neftbot-dropPct") || "100", 10);
+          if (!isNaN(pct) && pct >= 1 && pct <= 100) dropPctFromMax = pct;
 
           const nMin = parseInt(localStorage.getItem("neftbot-normalNeftMin") || "1500", 10);
           if (!isNaN(nMin) && nMin > 0) normalNeftMin = nMin;
@@ -6112,14 +6144,26 @@
       </div>
     </div>
 
-    <div style="margin-bottom:10px;">
-      <label><input type="checkbox" id="neft-auto-max"> Авто-максимум</label><br>
-    </div>
+     <div style="margin-bottom:10px;">
+       <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
+         <option value="10">10%</option>
+         <option value="20">20%</option>
+         <option value="30">30%</option>
+         <option value="40">40%</option>
+         <option value="50">50%</option>
+         <option value="60">60%</option>
+         <option value="70">70%</option>
+         <option value="80">80%</option>
+         <option value="90">90%</option>
+         <option value="100">100%</option>
+       </select></label><br>
+       <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
+     </div>
 
-    <div style="margin-bottom:10px;">
-      <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-      <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
-    </div>
+     <div style="margin-bottom:10px;">
+       <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
+       <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
+     </div>
 
     <div style="margin-bottom:10px;">
       <b>Статус:</b> <span id="neftbot-status">ожидание…</span><br>
@@ -6163,7 +6207,7 @@
           /* --- элементы настроек --- */
           const chkTickets = document.getElementById("neft-use-tickets");
           const chkSnickers = document.getElementById("neft-use-snickers");
-          const chkAutoMax = document.getElementById("neft-auto-max");
+          const selDropPct = document.getElementById("neft-drop-pct");
           const rNormal = document.getElementById("neft-mode-normal");
           const rFestive = document.getElementById("neft-mode-festive");
           const inpNeftMin = document.getElementById("neft-normal-min");
@@ -6172,7 +6216,11 @@
 
           chkTickets.checked = useTickets;
           chkSnickers.checked = useSnickers;
-          chkAutoMax.checked = autoMaxEnabled;
+          if (selDropPct) {
+              let pv = dropPctFromMax;
+              if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
+              selDropPct.value = String(pv);
+          }
           rFestive.checked = modeFestive;
           rNormal.checked = !modeFestive;
 
@@ -6190,11 +6238,13 @@
               saveFlags();
               addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
           };
-          chkAutoMax.onchange = () => {
-              autoMaxEnabled = chkAutoMax.checked;
-              saveFlags();
-              addLog("Авто-максимум: " + (autoMaxEnabled ? "ON" : "OFF"));
-          };
+          if (selDropPct) selDropPct.onchange = () => {
+              const v = parseInt(selDropPct.value, 10);
+              dropPctFromMax = isNaN(v) ? 100 : Math.min(100, Math.max(1, v));
+              selDropPct.value = String(dropPctFromMax);
+               saveFlags();
+               addLog("Дроп от максимума: " + dropPctFromMax + "%");
+           };
           rNormal.onchange = () => {
               if (rNormal.checked) {
                   modeFestive = false;
@@ -6467,20 +6517,20 @@
               const c = countsFest;
               addLog(`Праздничный дроп найден: искры=${c.iskr}, пули=${c.puli}, снег=${c.sneg}, мельд=${c.meld}`);
 
-              // Сначала — если включён авто-максимум, попробуем распознать "до N"
-              const leninMax = parseLeninAttackBlockMax(alertRoot);
-              if (autoMaxEnabled && leninMax) {
-                  addLog(`Авто-максимум включён: цель "до ${leninMax}"`);
-                  // если какой-либо праздничный ресурс >= leninMax — нападаем, иначе — перебираем
-                  if (c.iskr >= leninMax || c.puli >= leninMax || c.sneg >= leninMax || c.meld >= leninMax) {
-                      doAttack = true;
-                      addLog("Авто-максимум: текущий дроп достигает или превышает цель → нападаю");
-                  } else {
-                      doAttack = false;
-                      addLog("Авто-максимум: текущий дроп меньше цели → другой патруль");
-                  }
-              } else {
-                  // Если авто-максимум не применим — обычная логика по порогам/любой дроп
+               // Дроп от максимума: сравниваем текущий дроп с dropPctFromMax% от "до N"
+               const leninMax = parseLeninAttackBlockMax(alertRoot);
+               if (leninMax) {
+                   const threshold = Math.floor(leninMax * dropPctFromMax / 100);
+                   addLog(`Максимум "до ${leninMax}", порог ${dropPctFromMax}% = ${threshold}`);
+                   if (c.iskr >= threshold || c.puli >= threshold || c.sneg >= threshold || c.meld >= threshold) {
+                       doAttack = true;
+                       addLog(`Дроп ${dropPctFromMax}%: текущий дроп >= ${threshold} → нападаю`);
+                   } else {
+                       doAttack = false;
+                       addLog(`Дроп ${dropPctFromMax}%: текущий дроп < ${threshold} → другой патруль`);
+                   }
+               } else {
+                   // Если максимум не распознан — обычная логика по порогам/любой дроп
                   const curVal = c[neftActionDropType] || 0;
                   if (neftActionDropMin > 0) {
                       if (curVal >= neftActionDropMin) {
@@ -6527,18 +6577,50 @@
           return null;
       }
 
-      function getMissionEnemyDice(root) {
+      function getMissionActiveStep(root) {
           if (!root) return null;
           const step = root.querySelector(".step-block.active") ||
               root.querySelector(".step-block .action[style*='display: block']")?.closest(".step-block");
           if (!step) return null;
-          const dice = step.querySelector(".enemy-dice .dice");
+          // Определяем номер шага: ищем span с текстом "Шаг N"
+          const stepSpan = step.querySelector("span");
+          if (stepSpan) {
+              const m = stepSpan.textContent.match(/Шаг\s*(\d)/i);
+              if (m) {
+                  const v = parseInt(m[1], 10);
+                  if (v >= 1 && v <= 3) return { el: step, num: v };
+              }
+          }
+          // Fallback: определяем по индексу среди .step-block
+          const allSteps = Array.from(root.querySelectorAll(".step-block"));
+          const idx = allSteps.indexOf(step);
+          if (idx >= 0) return { el: step, num: idx + 1 };
+          return { el: step, num: 1 };
+      }
+
+      function getMissionEnemyDice(root) {
+          if (!root) return null;
+          const stepInfo = getMissionActiveStep(root);
+          if (!stepInfo) return null;
+          const dice = stepInfo.el.querySelector(".enemy-dice .dice");
           if (!dice) return null;
           const cls = dice.className || "";
           const m = cls.match(/dice-(\d)/);
           if (!m) return null;
           const v = parseInt(m[1], 10);
           return isNaN(v) ? null : v;
+      }
+
+      function getMissionWinCost(root) {
+          if (!root) return 0;
+          const stepInfo = getMissionActiveStep(root);
+          if (!stepInfo) return 0;
+          const el = stepInfo.el.querySelector(".price") ||
+              stepInfo.el.querySelector(".suspicion .price") ||
+              stepInfo.el.querySelector(".sus .price");
+          if (!el) return 0;
+          const v = parseInt(el.textContent.replace(/[^\d]/g, ""), 10);
+          return isNaN(v) ? 0 : v;
       }
 
       function getMissionEscapeCost(root) {
@@ -6551,45 +6633,70 @@
           return isNaN(v) ? 30 : v;
       }
 
-      async function handleMission() {
+      async function handleNegotiations() {
           const root = getMissionRoot();
           if (!root) return;
 
+          const stepInfo = getMissionActiveStep(root);
           const enemyDice = getMissionEnemyDice(root);
+          const winCost = getMissionWinCost(root);
           const escapeCost = getMissionEscapeCost(root);
 
-          const actionBtn = root.querySelector(".step-block.active .action button.button");
-          const btnEscape = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
+          const btnPlay = root.querySelector(".step-block.active .action button.button") ||
+              (stepInfo ? stepInfo.el.querySelector("button.button") : null);
+          const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
               root.querySelector(".actions button.button .price_escape")?.closest("button") ||
               root.querySelector(".actions button.button");
+
           const sus = getGlobalSuspicion();
           updateSuspicionUI(sus);
           updateTicketsUI(getTicketsCount());
 
-          if (enemyDice == null) {
-              addLog("Мини-игра: кубик охранника ещё не готов, жду…");
+          if (enemyDice == null || !stepInfo) {
+              addLog("Переговоры: кубик охранника или шаг не определены, жду…");
               return;
           }
 
-          if (enemyDice <= 3) {
-              if (actionBtn && isVisible(actionBtn)) {
-                  addLog("Мини-игра: кубик охранника = " + enemyDice + " (<=3) → играю");
-                  actionBtn.click();
+          const stepNum = stepInfo.num;
+
+          // Логика по требованию:
+          // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
+          // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
+          // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
+
+          // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
+          const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
+
+          if (shouldLeave) {
+              if (btnLeave && isVisible(btnLeave)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
+                  await ensureSuspicionForDelta(escapeCost);
+                  btnLeave.click();
+                  setStatus("Переговоры: уйти от охраны");
                   await humanPause(1500, 3000);
               } else {
-                  addLog("Мини-игра: кнопка действия не найдена/скрыта");
+                  addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
               }
-              return;
-          } else {
-              if (!btnEscape) {
-                  addLog("Мини-игра: кубик=" + enemyDice + " (>3), но кнопка побега не найдена");
-                  return;
+          } else if (enemyDice === 1) {
+              // Кубик = 1, сбежать не нужно → играем
+              if (btnPlay && isVisible(btnPlay)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
+                  btnPlay.click();
+                  await humanPause(1500, 3000);
+              } else {
+                  addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
               }
-              addLog("Мини-игра: кубик охранника = " + enemyDice + " (>3) → сбегаю, escapeCost=" + escapeCost);
-              await ensureSuspicionForDelta(escapeCost);
-              btnEscape.click();
-              setStatus("Мини-игра: сбежать от охраны");
-              await humanPause(1500, 3000);
+          } else if (enemyDice >= 2 && enemyDice <= 6) {
+              // Кубик = 2-6 → сбегаем
+              if (btnLeave && isVisible(btnLeave)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
+                  await ensureSuspicionForDelta(escapeCost);
+                  btnLeave.click();
+                  setStatus("Переговоры: уйти от охраны");
+                  await humanPause(1500, 3000);
+              } else {
+                  addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
+              }
           }
       }
 
@@ -6765,7 +6872,7 @@
       async function handleNeftPage() {
           const missionRoot = getMissionRoot();
           if (missionRoot) {
-              await handleMission();
+              await handleNegotiations();
               return;
           }
 
