@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.6
+// @version      3.7
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -4367,13 +4367,37 @@
           const pa = localStorage.getItem("travelBotPaused");
           botEnabled = (st === "on");
           botPaused = (pa === "1");
+
+          // Восстанавливаем сохранённые настройки модуля Squid Game
+          const sqEnabled = localStorage.getItem('squidBotEnabled');
+          const sqAuto = localStorage.getItem('squidBotAutoMode');
+          const sqDropMin = localStorage.getItem('squidBotDropMin');
+          const sqDropMax = localStorage.getItem('squidBotDropMax');
+          const sqAutoMaxPct = localStorage.getItem('squidBotAutoMaxPct');
+          if (sqEnabled !== null) squidBotEnabled = (sqEnabled === '1');
+          if (sqAuto !== null) squidBotAutoMode = (sqAuto === '1');
+          if (sqDropMin !== null) squidBotDropMin = parseInt(sqDropMin) || 0;
+          if (sqDropMax !== null) squidBotDropMax = parseInt(sqDropMax) || 999999;
+          if (sqAutoMaxPct !== null) {
+              const aamp = parseInt(sqAutoMaxPct);
+              if (!isNaN(aamp) && aamp >= 0) squidBotAutoMaxPct = aamp;
+          }
+
+          // StateScanner может ещё не существовать — откладываем только остановку
+          if (botPaused) {
+              if (window.StateScanner) {
+                  window.StateScanner.stopAll();
+              } else {
+                  setTimeout(restoreFlags, 100);
+              }
+          }
       }
 
       installUltraSafeBase();
       ModuleSessionRegistry.trackInterval('raids', installJqPatch, 2000, 'jq');
 
-      createUI();
       restoreFlags();
+      createUI();
       updateUIHighlights();
       updateTicketUI();
 

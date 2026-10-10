@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.5
+// @version      3.7
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -144,6 +144,7 @@
           state: { hp: 100, energy: 100, location: '', nickname: '', clanId: null, clanName: '' },
           _intervalId: null,
           _updateInterval: 5000, // Обновлять каждые 5 секунд
+          _errAt: 0,
 
           init: function() {
               if (this._intervalId) clearInterval(this._intervalId);
@@ -153,7 +154,14 @@
 
           update: async function() {
               try {
-                  const playerJson = await fetch('/player/json/').then(res => res.json());
+                  // On non-player pages (e.g. /squid/game/) the endpoint answers HTML,
+                  // so res.json() threw every 5s and flooded the console. Read text,
+                  // parse only if it really is JSON, and stay quiet otherwise.
+                  const txt = await fetch('/player/json/').then(res => res.text());
+                  let playerJson;
+                  try { playerJson = JSON.parse(txt); }
+                  catch (e) { return; } // not JSON here — nothing to scan, no error
+                  if (!playerJson || !playerJson.stats) return;
                   this.state.hp = playerJson.stats.hp_percent;
                   this.state.energy = playerJson.stats.energy_percent;
                   this.state.location = window.location.pathname;
@@ -162,7 +170,12 @@
                   this.state.clanName = playerJson.clan?.name || '';
                   MoswarLib.events.emit('state:updated', this.state);
               } catch (e) {
-                  console.error('[StateScanner] Ошибка обновления состояния:', e);
+                  // Network/auth failure: log at most once a minute, not every tick
+                  var now = Date.now();
+                  if (now - this._errAt > 60000) {
+                      this._errAt = now;
+                      console.warn('[StateScanner] состояние недоступно:', e && e.message);
+                  }
               }
           }
       },
@@ -546,7 +559,7 @@
   const MODULES = [
       { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
       { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.5' },
-      { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.7' },
+      { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.8' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы + одиночная', version: '1.3.21' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
@@ -2023,7 +2036,8 @@
       'fulldope': 'fulldope-modal',
       'tcshop': 'tcshop-panel',
       'omon': 'omon-panel',
-      'omniscience': 'mw-omniscience-panel'
+      'omniscience': 'mw-omniscience-panel',
+      'squid': 'mw-squid-panel'
   };
 
   function getPanelEl(id) {
@@ -2602,7 +2616,8 @@
               'flag': 'flag-stop',
               'tcshop': 'tcshop-stop',
               'omon': 'omon-stop',
-              'omniscience': 'omniscience-stop-btn'
+              'omniscience': 'omniscience-stop-btn',
+              'squid': 'squid-stop-btn'
           };
           const btnId = stopMap[id];
           if (btnId) {
@@ -4352,13 +4367,37 @@
           const pa = localStorage.getItem("travelBotPaused");
           botEnabled = (st === "on");
           botPaused = (pa === "1");
+
+          // Восстанавливаем сохранённые настройки модуля Squid Game
+          const sqEnabled = localStorage.getItem('squidBotEnabled');
+          const sqAuto = localStorage.getItem('squidBotAutoMode');
+          const sqDropMin = localStorage.getItem('squidBotDropMin');
+          const sqDropMax = localStorage.getItem('squidBotDropMax');
+          const sqAutoMaxPct = localStorage.getItem('squidBotAutoMaxPct');
+          if (sqEnabled !== null) squidBotEnabled = (sqEnabled === '1');
+          if (sqAuto !== null) squidBotAutoMode = (sqAuto === '1');
+          if (sqDropMin !== null) squidBotDropMin = parseInt(sqDropMin) || 0;
+          if (sqDropMax !== null) squidBotDropMax = parseInt(sqDropMax) || 999999;
+          if (sqAutoMaxPct !== null) {
+              const aamp = parseInt(sqAutoMaxPct);
+              if (!isNaN(aamp) && aamp >= 0) squidBotAutoMaxPct = aamp;
+          }
+
+          // StateScanner может ещё не существовать — откладываем только остановку
+          if (botPaused) {
+              if (window.StateScanner) {
+                  window.StateScanner.stopAll();
+              } else {
+                  setTimeout(restoreFlags, 100);
+              }
+          }
       }
 
       installUltraSafeBase();
       ModuleSessionRegistry.trackInterval('raids', installJqPatch, 2000, 'jq');
 
-      createUI();
       restoreFlags();
+      createUI();
       updateUIHighlights();
       updateTicketUI();
 
@@ -4452,6 +4491,7 @@
       let actionDropMin = 20;              // порог дропа в акционном режиме
       let actionBelowBehavior = "run";     // elevator | run
       let actionAutoMax = false;           // авто‑выбор максимума из блока .metro-sparkles-block
+      let actionAutoMaxPct = 100;          // процент от максимума при авто-выборе (10-100)
 
       // двойные спуски
       let doubleRunEnabled = false;
@@ -4548,6 +4588,7 @@
           localStorage.setItem("ratbot-darkTunnelCollections", (darkTunnelReward === "collections" || darkTunnelReward === "both") ? "1" : "0");
           localStorage.setItem("ratbot-darkTunnelChests", (darkTunnelReward === "chests" || darkTunnelReward === "both") ? "1" : "0");
           localStorage.setItem("ratbot-actionAutoMax", actionAutoMax ? "1" : "0");
+          localStorage.setItem("ratbot-actionAutoMaxPct", String(actionAutoMaxPct));
       }
 
       function restoreFlags() {
@@ -4578,6 +4619,8 @@
           labubuLetuchik = localStorage.getItem("ratbot-labubuLetuchik") === "1";
 
           actionAutoMax = localStorage.getItem("ratbot-actionAutoMax") === "1";
+          const aamp = parseInt(localStorage.getItem("ratbot-actionAutoMaxPct") || "100", 10);
+          if (!isNaN(aamp) && aamp >= 0) actionAutoMaxPct = aamp;
 
           darkTunnelMode = localStorage.getItem("ratbot-darkTunnelMode") === "1";
           const savedReward = localStorage.getItem("ratbot-darkTunnelReward");
@@ -4682,6 +4725,18 @@
       </div>
       <div style="font-size:12px;margin-bottom:6px;">
         <label><input type="checkbox" id="rat-action-auto-max"> Авто-выбор максимума</label>
+        <select id="rat-action-auto-max-pct" class="mw-input" style="width:64px;margin-left:4px;">
+          <option value="100">100%</option>
+          <option value="90">90%</option>
+          <option value="80">80%</option>
+          <option value="70">70%</option>
+          <option value="60">60%</option>
+          <option value="50">50%</option>
+          <option value="40">40%</option>
+          <option value="30">30%</option>
+          <option value="20">20%</option>
+          <option value="10">10%</option>
+        </select>
       </div>
       <div style="font-size:12px;">
         <label><input type="radio" name="rat-action-below" id="rat-action-below-elev" value="elevator"> Искать другого</label><br>
@@ -4829,6 +4884,17 @@
           selActionDrop.value = actionDropType;
           inpActionMin.value = actionDropMin;
           chkActionAuto.checked = !!actionAutoMax;
+          const selAutoMaxPct = document.getElementById("rat-action-auto-max-pct");
+          if (selAutoMaxPct) {
+              let pv = actionAutoMaxPct;
+              if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
+              selAutoMaxPct.value = String(pv);
+              selAutoMaxPct.onchange = () => {
+                  actionAutoMaxPct = parseInt(selAutoMaxPct.value, 10) || 100;
+                  saveFlags();
+                  addLog("Авто-выбор максимума: " + actionAutoMaxPct + "% от найденного");
+              };
+          }
           if (actionBelowBehavior === "elevator") {
               rbActionElev.checked = true;
           } else {
@@ -5597,6 +5663,8 @@
               if (rbR && rbR.checked) actionBelowBehavior = "run";
               if (chkBadge) useBadgeElevator = !!chkBadge.checked;
               if (chkAuto) actionAutoMax = !!chkAuto.checked;
+              const selAutoMaxPct2 = document.getElementById("rat-action-auto-max-pct");
+              if (selAutoMaxPct2) actionAutoMaxPct = parseInt(selAutoMaxPct2.value, 10) || 100;
           } catch (e) {
               console.warn("[RatBot] sync UI failed:", e);
           }
@@ -5605,11 +5673,12 @@
           if (modeAction && actionAutoMax) {
               const parsedMax = parseMaxFromSparklesBlock();
               if (parsedMax && parsedMax > 0) {
-                  actionDropMin = parsedMax;
+                  const threshold = Math.floor(parsedMax * actionAutoMaxPct / 100);
+                  actionDropMin = threshold;
                   const ipt = document.getElementById("rat-action-drop-min");
-                  if (ipt) ipt.value = parsedMax;
+                  if (ipt) ipt.value = threshold;
                   saveFlags();
-                  addLog(`Авто‑выбор максимума: найдено до ${parsedMax} → устанавливаю порог ${parsedMax}`);
+                  addLog(`Авто‑выбор максимума: найдено до ${parsedMax}, порог ${actionAutoMaxPct}% = ${threshold} → устанавливаю порог ${threshold}`);
               } else {
                   addLog("Авто‑выбор максимума: блок .metro-sparkles-block не найден или число не распознано");
               }
@@ -5957,9 +6026,9 @@
   },
 
   neft: function() {
-      // v3.7
+      // v3.8
       if (document.getElementById('neftbot-panel')) { return; }
-      console.log('[MODULE_neft] v3.7');
+      console.log('[MODULE_neft] v3.8');
 
 
       /* ========================= УТИЛИТЫ ========================= */
@@ -6023,8 +6092,9 @@
       let neftActionDropType = 'iskr'; // iskr | puli | sneg | meld
       let neftActionDropMin = 0;
 
-      // Авто-максимум: перебирать патрули до "до N" (если найден блок .lenin-attack-block с "до N")
-      let autoMaxEnabled = false;
+      // Процентный дроп от максимума: атакуем, если выбранный дроп >= ceil(макс × pct / 100).
+      // Максимум парсится из блока .lenin-attack-block ("до N").
+      let dropPctFromMax = 100;
 
       /* ========================= НАСТРОЙКИ (localStorage) ========================= */
 
@@ -6037,7 +6107,7 @@
           localStorage.setItem("neftbot-normalNeftMin", String(normalNeftMin));
           localStorage.setItem("neftbot-actionDropType", neftActionDropType);
           localStorage.setItem("neftbot-actionDropMin", String(neftActionDropMin));
-          localStorage.setItem("neftbot-autoMax", autoMaxEnabled ? "1" : "0");
+          localStorage.setItem("neftbot-dropPct", String(dropPctFromMax));
       }
 
       function restoreFlags() {
@@ -6047,7 +6117,8 @@
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
 
-          autoMaxEnabled = localStorage.getItem("neftbot-autoMax") === "1";
+          const pct = parseInt(localStorage.getItem("neftbot-dropPct") || "100", 10);
+          if (!isNaN(pct) && pct >= 1 && pct <= 100) dropPctFromMax = pct;
 
           const nMin = parseInt(localStorage.getItem("neftbot-normalNeftMin") || "1500", 10);
           if (!isNaN(nMin) && nMin > 0) normalNeftMin = nMin;
@@ -6097,14 +6168,26 @@
       </div>
     </div>
 
-    <div style="margin-bottom:10px;">
-      <label><input type="checkbox" id="neft-auto-max"> Авто-максимум</label><br>
-    </div>
+     <div style="margin-bottom:10px;">
+       <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
+         <option value="10">10%</option>
+         <option value="20">20%</option>
+         <option value="30">30%</option>
+         <option value="40">40%</option>
+         <option value="50">50%</option>
+         <option value="60">60%</option>
+         <option value="70">70%</option>
+         <option value="80">80%</option>
+         <option value="90">90%</option>
+         <option value="100">100%</option>
+       </select></label><br>
+       <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
+     </div>
 
-    <div style="margin-bottom:10px;">
-      <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-      <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
-    </div>
+     <div style="margin-bottom:10px;">
+       <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
+       <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
+     </div>
 
     <div style="margin-bottom:10px;">
       <b>Статус:</b> <span id="neftbot-status">ожидание…</span><br>
@@ -6148,7 +6231,7 @@
           /* --- элементы настроек --- */
           const chkTickets = document.getElementById("neft-use-tickets");
           const chkSnickers = document.getElementById("neft-use-snickers");
-          const chkAutoMax = document.getElementById("neft-auto-max");
+          const selDropPct = document.getElementById("neft-drop-pct");
           const rNormal = document.getElementById("neft-mode-normal");
           const rFestive = document.getElementById("neft-mode-festive");
           const inpNeftMin = document.getElementById("neft-normal-min");
@@ -6157,7 +6240,11 @@
 
           chkTickets.checked = useTickets;
           chkSnickers.checked = useSnickers;
-          chkAutoMax.checked = autoMaxEnabled;
+          if (selDropPct) {
+              let pv = dropPctFromMax;
+              if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
+              selDropPct.value = String(pv);
+          }
           rFestive.checked = modeFestive;
           rNormal.checked = !modeFestive;
 
@@ -6175,11 +6262,13 @@
               saveFlags();
               addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
           };
-          chkAutoMax.onchange = () => {
-              autoMaxEnabled = chkAutoMax.checked;
-              saveFlags();
-              addLog("Авто-максимум: " + (autoMaxEnabled ? "ON" : "OFF"));
-          };
+          if (selDropPct) selDropPct.onchange = () => {
+              const v = parseInt(selDropPct.value, 10);
+              dropPctFromMax = isNaN(v) ? 100 : Math.min(100, Math.max(1, v));
+              selDropPct.value = String(dropPctFromMax);
+               saveFlags();
+               addLog("Дроп от максимума: " + dropPctFromMax + "%");
+           };
           rNormal.onchange = () => {
               if (rNormal.checked) {
                   modeFestive = false;
@@ -6452,20 +6541,20 @@
               const c = countsFest;
               addLog(`Праздничный дроп найден: искры=${c.iskr}, пули=${c.puli}, снег=${c.sneg}, мельд=${c.meld}`);
 
-              // Сначала — если включён авто-максимум, попробуем распознать "до N"
-              const leninMax = parseLeninAttackBlockMax(alertRoot);
-              if (autoMaxEnabled && leninMax) {
-                  addLog(`Авто-максимум включён: цель "до ${leninMax}"`);
-                  // если какой-либо праздничный ресурс >= leninMax — нападаем, иначе — перебираем
-                  if (c.iskr >= leninMax || c.puli >= leninMax || c.sneg >= leninMax || c.meld >= leninMax) {
-                      doAttack = true;
-                      addLog("Авто-максимум: текущий дроп достигает или превышает цель → нападаю");
-                  } else {
-                      doAttack = false;
-                      addLog("Авто-максимум: текущий дроп меньше цели → другой патруль");
-                  }
-              } else {
-                  // Если авто-максимум не применим — обычная логика по порогам/любой дроп
+               // Дроп от максимума: сравниваем текущий дроп с dropPctFromMax% от "до N"
+               const leninMax = parseLeninAttackBlockMax(alertRoot);
+               if (leninMax) {
+                   const threshold = Math.floor(leninMax * dropPctFromMax / 100);
+                   addLog(`Максимум "до ${leninMax}", порог ${dropPctFromMax}% = ${threshold}`);
+                   if (c.iskr >= threshold || c.puli >= threshold || c.sneg >= threshold || c.meld >= threshold) {
+                       doAttack = true;
+                       addLog(`Дроп ${dropPctFromMax}%: текущий дроп >= ${threshold} → нападаю`);
+                   } else {
+                       doAttack = false;
+                       addLog(`Дроп ${dropPctFromMax}%: текущий дроп < ${threshold} → другой патруль`);
+                   }
+               } else {
+                   // Если максимум не распознан — обычная логика по порогам/любой дроп
                   const curVal = c[neftActionDropType] || 0;
                   if (neftActionDropMin > 0) {
                       if (curVal >= neftActionDropMin) {
@@ -6512,18 +6601,50 @@
           return null;
       }
 
-      function getMissionEnemyDice(root) {
+      function getMissionActiveStep(root) {
           if (!root) return null;
           const step = root.querySelector(".step-block.active") ||
               root.querySelector(".step-block .action[style*='display: block']")?.closest(".step-block");
           if (!step) return null;
-          const dice = step.querySelector(".enemy-dice .dice");
+          // Определяем номер шага: ищем span с текстом "Шаг N"
+          const stepSpan = step.querySelector("span");
+          if (stepSpan) {
+              const m = stepSpan.textContent.match(/Шаг\s*(\d)/i);
+              if (m) {
+                  const v = parseInt(m[1], 10);
+                  if (v >= 1 && v <= 3) return { el: step, num: v };
+              }
+          }
+          // Fallback: определяем по индексу среди .step-block
+          const allSteps = Array.from(root.querySelectorAll(".step-block"));
+          const idx = allSteps.indexOf(step);
+          if (idx >= 0) return { el: step, num: idx + 1 };
+          return { el: step, num: 1 };
+      }
+
+      function getMissionEnemyDice(root) {
+          if (!root) return null;
+          const stepInfo = getMissionActiveStep(root);
+          if (!stepInfo) return null;
+          const dice = stepInfo.el.querySelector(".enemy-dice .dice");
           if (!dice) return null;
           const cls = dice.className || "";
           const m = cls.match(/dice-(\d)/);
           if (!m) return null;
           const v = parseInt(m[1], 10);
           return isNaN(v) ? null : v;
+      }
+
+      function getMissionWinCost(root) {
+          if (!root) return 0;
+          const stepInfo = getMissionActiveStep(root);
+          if (!stepInfo) return 0;
+          const el = stepInfo.el.querySelector(".price") ||
+              stepInfo.el.querySelector(".suspicion .price") ||
+              stepInfo.el.querySelector(".sus .price");
+          if (!el) return 0;
+          const v = parseInt(el.textContent.replace(/[^\d]/g, ""), 10);
+          return isNaN(v) ? 0 : v;
       }
 
       function getMissionEscapeCost(root) {
@@ -6536,45 +6657,70 @@
           return isNaN(v) ? 30 : v;
       }
 
-      async function handleMission() {
+      async function handleNegotiations() {
           const root = getMissionRoot();
           if (!root) return;
 
+          const stepInfo = getMissionActiveStep(root);
           const enemyDice = getMissionEnemyDice(root);
+          const winCost = getMissionWinCost(root);
           const escapeCost = getMissionEscapeCost(root);
 
-          const actionBtn = root.querySelector(".step-block.active .action button.button");
-          const btnEscape = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
+          const btnPlay = root.querySelector(".step-block.active .action button.button") ||
+              (stepInfo ? stepInfo.el.querySelector("button.button") : null);
+          const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
               root.querySelector(".actions button.button .price_escape")?.closest("button") ||
               root.querySelector(".actions button.button");
+
           const sus = getGlobalSuspicion();
           updateSuspicionUI(sus);
           updateTicketsUI(getTicketsCount());
 
-          if (enemyDice == null) {
-              addLog("Мини-игра: кубик охранника ещё не готов, жду…");
+          if (enemyDice == null || !stepInfo) {
+              addLog("Переговоры: кубик охранника или шаг не определены, жду…");
               return;
           }
 
-          if (enemyDice <= 3) {
-              if (actionBtn && isVisible(actionBtn)) {
-                  addLog("Мини-игра: кубик охранника = " + enemyDice + " (<=3) → играю");
-                  actionBtn.click();
+          const stepNum = stepInfo.num;
+
+          // Логика по требованию:
+          // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
+          // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
+          // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
+
+          // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
+          const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
+
+          if (shouldLeave) {
+              if (btnLeave && isVisible(btnLeave)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
+                  await ensureSuspicionForDelta(escapeCost);
+                  btnLeave.click();
+                  setStatus("Переговоры: уйти от охраны");
                   await humanPause(1500, 3000);
               } else {
-                  addLog("Мини-игра: кнопка действия не найдена/скрыта");
+                  addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
               }
-              return;
-          } else {
-              if (!btnEscape) {
-                  addLog("Мини-игра: кубик=" + enemyDice + " (>3), но кнопка побега не найдена");
-                  return;
+          } else if (enemyDice === 1) {
+              // Кубик = 1, сбежать не нужно → играем
+              if (btnPlay && isVisible(btnPlay)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
+                  btnPlay.click();
+                  await humanPause(1500, 3000);
+              } else {
+                  addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
               }
-              addLog("Мини-игра: кубик охранника = " + enemyDice + " (>3) → сбегаю, escapeCost=" + escapeCost);
-              await ensureSuspicionForDelta(escapeCost);
-              btnEscape.click();
-              setStatus("Мини-игра: сбежать от охраны");
-              await humanPause(1500, 3000);
+          } else if (enemyDice >= 2 && enemyDice <= 6) {
+              // Кубик = 2-6 → сбегаем
+              if (btnLeave && isVisible(btnLeave)) {
+                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
+                  await ensureSuspicionForDelta(escapeCost);
+                  btnLeave.click();
+                  setStatus("Переговоры: уйти от охраны");
+                  await humanPause(1500, 3000);
+              } else {
+                  addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
+              }
           }
       }
 
@@ -6750,7 +6896,7 @@
       async function handleNeftPage() {
           const missionRoot = getMissionRoot();
           if (missionRoot) {
-              await handleMission();
+              await handleNegotiations();
               return;
           }
 
@@ -15830,6 +15976,63 @@ utils_.init();
           }, 600);
       })();
 
+      // [MOD] Кнопка «Игра на вылет» (Кальмар 2.0) в меню Помощник
+      (function () {
+          const SQUID_BTN_ID = 'mw-squid-btn';
+
+          function paintBtn() {
+              const btn = document.getElementById(SQUID_BTN_ID);
+              if (!btn) return;
+              const running = typeof window.__mwSquidIsRunning === 'function' && window.__mwSquidIsRunning();
+              btn.classList.toggle('is-on', !!running);
+              btn.removeAttribute('title');
+              const tip = btn.querySelector('.mw-helper-tip');
+              if (tip) tip.textContent = running ? 'Стоп' : 'Кальмар';
+              const label = btn.querySelector('.c');
+              if (label) label.style.filter = running ? 'drop-shadow(0 0 4px #2ecc71)' : '';
+          }
+
+          function makeBtn() {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.id = SQUID_BTN_ID;
+              btn.className = 'button mw-helper-ico';
+              const svgIcon = '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI4MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZiN2EiLz48c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2UwMjQzYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhmMGYyMiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjIiIGZpbGw9InVybCgjZykiIHN0cm9rZT0iIzVlMDcxNiIgc3Ryb2tlLXdpZHRoPSIxIi8+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTAuNiIgZmlsbD0iIzE3MTgxYyIvPjxwYXRoIGQ9Ik0xNiA4LjZsNy4yIDEyLjlIOC44eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==" style="width:18px;height:18px;vertical-align:middle;display:inline-block;" alt="Кальмар">';
+              btn.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">' + svgIcon + '</div></span><span class="mw-helper-tip">Кальмар</span>';
+              btn.setAttribute('data-name', 'Игра на вылет');
+              btn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (typeof window.__mwSquidToggle === 'function') {
+                      window.__mwSquidToggle();
+                  }
+                  paintBtn();
+              });
+              paintBtn();
+              return btn;
+          }
+
+          function mount() {
+              const box = document.getElementById('assistant-autopilot');
+              if (!box || document.getElementById(SQUID_BTN_ID)) return false;
+              box.appendChild(makeBtn());
+              paintBtn();
+              return true;
+          }
+
+          window.__mwSquidMount = mount;
+          window.__mwSquidPaintBtn = paintBtn;
+
+          const obs = new MutationObserver(() => {
+              mount();
+          });
+          obs.observe(document.documentElement, { childList: true, subtree: true });
+          mount();
+          setTimeout(() => {
+              mount();
+          }, 800);
+      })();
+
       // [MOD] Меню помощника — стиль хаба (стекло, круглые иконки)
       (function () {
           const CSS = `
@@ -16032,6 +16235,7 @@ body.mw-helper-tip-on .simple-tooltip {
               { re: /пахан|man102/i, html: '<img src="/@/images/pers/man102_thumb.png" alt="">' },
               { re: /телефон|батаре/i, html: '🔋' },
               { re: /омон/i, html: '<img src="/@/images/pers/man119.png" alt="">' },
+              { re: /вылет|кальмар|squid/i, html: '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI4MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZiN2EiLz48c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2UwMjQzYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhmMGYyMiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjIiIGZpbGw9InVybCgjZykiIHN0cm9rZT0iIzVlMDcxNiIgc3Ryb2tlLXdpZHRoPSIxIi8+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTAuNiIgZmlsbD0iIzE3MTgxYyIvPjxwYXRoIGQ9Ik0xNiA4LjZsNy4yIDEyLjlIOC44eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==" alt="">' },
               { re: /задан/i, html: '<img src="/@/images/obj/jobs/sun.png" alt="">' }
           ];
 
@@ -16052,6 +16256,7 @@ body.mw-helper-tip-on .simple-tooltip {
               { re: /пахан|man102/i, name: 'Пахан' },
               { re: /телефон|батаре|заряд|\uD83D\uDD0B/i, name: 'Телефон' },
               { re: /омон|man119|\uD83E\uDE96/i, name: 'Омон' },
+              { re: /вылет|кальмар|squid/i, name: 'Игра на вылет' },
               { re: /задан|sun\.png|квест/i, name: 'Квест' }
           ];
 
@@ -16100,6 +16305,9 @@ body.mw-helper-tip-on .simple-tooltip {
           function shortName(btn, title, html) {
               if (btn && btn.id === 'mw-ai-jobs-btn') {
                   return btn.classList.contains('is-on') ? 'Стоп' : 'Квест';
+              }
+              if (btn && btn.id === 'mw-squid-btn') {
+                  return btn.classList.contains('is-on') ? 'Стоп' : 'Кальмар';
               }
               const stored = btn && btn.getAttribute('data-name');
               if (stored && stored !== '•') return stored;
@@ -16353,6 +16561,31 @@ body.mw-helper-tip-on .simple-tooltip {
           setTimeout(ensureHubVisible, 800);
           setTimeout(restorePanel, 200);
           setTimeout(restorePanel, 900);
+
+          /* Кнопки меню пересоздаются (SPA-навигация, поздняя инициализация утилит) —
+             restyle() уже остановился, поэтому следим за рядом и дообрабатываем новые кнопки,
+             иначе у них пропадают иконка-подпись (data-name + .mw-helper-tip). */
+          let restyleTimer = null;
+          function scheduleRestyle() {
+              if (restyleTimer) return;
+              restyleTimer = setTimeout(() => {
+                  restyleTimer = null;
+                  try { restyle(); } catch (_) {}
+              }, 250);
+          }
+          function watchRow() {
+              const row = document.getElementById('assistant-autopilot');
+              if (!row || row.dataset.mwRowWatch === '1') return !!row;
+              row.dataset.mwRowWatch = '1';
+              new MutationObserver(scheduleRestyle).observe(row, { childList: true });
+              scheduleRestyle();
+              return true;
+          }
+          let watchTimer = setInterval(() => {
+              if (watchRow()) clearInterval(watchTimer);
+          }, 500);
+          setTimeout(() => clearInterval(watchTimer), 60000);
+          document.addEventListener('contextmenu', scheduleRestyle, true);
       })();
 //# sourceMappingURL=bundle.js.map
 },
@@ -19166,7 +19399,805 @@ body.mw-helper-tip-on .simple-tooltip {
       }
   }
 
-  // === МОДУЛЬ: ОКО ПРОВИДЕНИЯ (OMNISCIENCE) ===
+  // === МОДУЛЬ: ИГРА НА ВЫЛЕТ (SQUID GAME 2026) ===
+
+  BotModules.squid = function () {
+      if (document.getElementById('mw-squid-panel')) {
+          ModuleSessionRegistry.restartIntervals('squid');
+          squidStart();
+          return;
+      }
+      initSquidPanel();
+      squidStart();
+  };
+
+  MoswarLib.modules['squid'] = {
+      init: function () {
+          try { BotModules.squid(); } catch (e) { console.error('[🦑 Squid]', e); }
+      }
+  };
+
+  /* ─── squid state & engine ─── */
+
+  var SQUID_AUTO_KEY = 'mw_squid_auto_v1';
+
+  var _squid = {
+      running: false,
+      timer: null,
+      lastTick: 0,
+      pagePhase: 'none',
+      signupLoggedAt: 0,
+      cds: {},
+      pausedOthers: [],
+      scope: null,
+      scopeEl: null,
+      scopeAt: 0,
+      actionPending: false,
+      lastActionAt: 0,
+      lastNavAt: 0,
+      gamesPlayed: 0,
+      dayKey: '',
+      lastResultCloseAt: 0,
+      maxGamesDay: 5,       // До 5 игр за долги в день
+      allowHoney: false     // Не тратить мед после 5-й игры по умолчанию
+  };
+
+  function sqLog(msg) {
+      var time = new Date().toLocaleTimeString();
+      var full = '[' + time + '] ' + msg;
+      console.log('[🦑 Squid] ' + full);
+      var logBox = document.getElementById('mw-squid-log');
+      if (logBox) {
+          logBox.textContent = (logBox.textContent + String.fromCharCode(10) + full).split(String.fromCharCode(10)).slice(-100).join(String.fromCharCode(10));
+          logBox.scrollTop = logBox.scrollHeight;
+      }
+      var statusEl = document.getElementById('mw-squid-status-text');
+      if (statusEl) {
+          statusEl.textContent = msg;
+      }
+  }
+
+  // Safe native click dispatching full pointer & mouse events
+  function sqNativeClick(el) {
+      if (!el) return false;
+      try {
+          if (typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+          }
+      } catch (e) { }
+      try {
+          var evtTypes = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+          for (var i = 0; i < evtTypes.length; i++) {
+              var t = evtTypes[i];
+              var evt = t.indexOf('pointer') === 0
+                  ? new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, view: window })
+                  : new MouseEvent(t, { bubbles: true, cancelable: true, composed: true, view: window });
+              el.dispatchEvent(evt);
+          }
+          if (typeof el.click === 'function') el.click();
+          return true;
+      } catch (e) {
+          try {
+              if (typeof el.click === 'function') { el.click(); return true; }
+          } catch (e2) { }
+          return false;
+      }
+  }
+
+  // Find live Alpine scope safely across sandbox
+  function findSquidScope() {
+      var now = Date.now();
+      if (_squid.scope && (now - _squid.scopeAt < 800)) return _squid.scope;
+
+      // Selectors that target the Alpine root of the squid minigame component
+      var SEL = '.squid-minigame[x-data], [x-data*="squidGamePage"], .squid[x-data], .squid-minigame, .squid';
+
+      // In userscript context, unsafeWindow's document has the REAL Alpine data.
+      // The sandbox document may have cloned elements without _x_dataStack.
+      var docs = [];
+      try {
+          if (typeof unsafeWindow !== 'undefined' && unsafeWindow.document) {
+              docs.push(unsafeWindow.document);
+          }
+      } catch (e) { }
+      docs.push(document);
+
+      for (var d = 0; d < docs.length; d++) {
+          var doc = docs[d];
+          try {
+              var els = doc.querySelectorAll(SEL);
+              for (var e = 0; e < els.length; e++) {
+                  var el = els[e];
+                  // Walk up the DOM tree too — Alpine root might be a parent
+                  var candidates = [el];
+                  try {
+                      var parent = el.closest('[x-data]');
+                      if (parent && parent !== el) candidates.unshift(parent);
+                  } catch (ex) { }
+
+                  for (var c = 0; c < candidates.length; c++) {
+                      var root = candidates[c];
+                      var stack = null;
+                      try { stack = root._x_dataStack; } catch (ex) { }
+                      if (!stack || !stack.length) continue;
+
+                      for (var i = 0; i < stack.length; i++) {
+                          var obj = stack[i];
+                          if (!obj || typeof obj !== 'object') continue;
+                          // Match by key signatures of the squidGamePage() component
+                          var hits = 0;
+                          var markers = ['openCell', 'canOpen', 'join', 'canJoin', 'cells',
+                                         'game', 'resultOpen', 'entry', 'closeResult',
+                                         'chooseAction', 'isChooser', 'actionChoices'];
+                          for (var m = 0; m < markers.length; m++) {
+                              try { if (markers[m] in obj) hits++; } catch (ex) { }
+                          }
+                          if (hits >= 2) {
+                              _squid.scope = obj;
+                              _squid.scopeEl = root;
+                              _squid.scopeAt = now;
+                              return obj;
+                          }
+                      }
+                  }
+              }
+          } catch (ex) { }
+      }
+      _squid.scope = null;
+      return null;
+  }
+
+  // Are we currently eligible to open a cell?
+  function isMyCellTurn(s) {
+      // 1. DOM is the supreme ground truth:
+      // In game template: :disabled="!canOpen(cell)"
+      // When it's not our turn, every single cell button has disabled="disabled"
+      // When it IS our turn, openable cells have no disabled attribute!
+      var enabledCellBtns = document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)');
+      if (enabledCellBtns.length > 0) return true;
+
+      // 2. Alpine check
+      if (s) {
+          try {
+              if (typeof s.isChooser === 'function' && s.isChooser()) {
+                  if (s.game && s.game.phase === 'choose_cell') return true;
+              }
+          } catch (e) { }
+          try {
+              if (s.game && s.game.phase === 'choose_cell') {
+                  var pid = s.playerId || (s.entry && s.entry.playerId);
+                  if (pid && s.game.turnPlayerId && String(pid) === String(s.game.turnPlayerId)) return true;
+              }
+          } catch (e) { }
+      }
+      return false;
+  }
+
+  // Are we currently required to pick an action?
+  function isMyActionTurn(s) {
+      // 1. DOM check: action choices
+      var actionBtns = document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)');
+      if (actionBtns.length > 0) return true;
+
+      // 2. Alpine check:
+      if (s && s.game && s.game.phase === 'choose_action') {
+          try {
+              if (typeof s.isChooser === 'function' && s.isChooser()) return true;
+          } catch (e) { }
+      }
+      return false;
+  }
+
+  // Decision logic for cells (incorporates Moswar 2026 rules)
+  function pickAndOpenCell(s) {
+      if (_squid.actionPending) return false;
+
+      var btns = Array.from(document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)'));
+      if (!btns.length) return false;
+
+      var allCellBtns = Array.from(document.querySelectorAll('button.squid-field-cell'));
+      var candidates = [];
+
+      for (var i = 0; i < btns.length; i++) {
+          var btn = btns[i];
+          var numEl = btn.querySelector('.squid-minigame__cell-number');
+          var idx = -1;
+          if (numEl) {
+              var n = parseInt(numEl.textContent.trim(), 10);
+              if (!isNaN(n)) idx = n - 1;
+          }
+          if (idx === -1) {
+              idx = allCellBtns.indexOf(btn);
+          }
+          if (idx === -1) idx = i;
+
+          var hintEl = btn.querySelector('.squid-minigame__hint-img, img, .squid-field-cell__figure');
+          var hintSrc = hintEl ? (hintEl.getAttribute('src') || hintEl.className || '') : '';
+          var isGlass = /glass|стекло/i.test(hintSrc);
+          var isMine = /mine|мина/i.test(hintSrc);
+          var isPiggy = /piggy|bank|gold|копилка/i.test(hintSrc);
+          var isPrize = /prize|gift|приз/i.test(hintSrc);
+          var isAmbulance = /ambulance|скорая/i.test(hintSrc);
+          var isRecruiter = /recruiter|вербов/i.test(hintSrc);
+
+          if (s && s.game && s.game.privateHints && s.game.privateHints[idx]) {
+              var ph = String(s.game.privateHints[idx]).toLowerCase();
+              if (/piggy|bank|gold/.test(ph)) isPiggy = true;
+              if (/prize|gift/.test(ph)) isPrize = true;
+              if (/ambulance/.test(ph)) isAmbulance = true;
+              if (/recruiter/.test(ph)) isRecruiter = true;
+              if (/glass/.test(ph)) isGlass = true;
+              if (/mine/.test(ph)) isMine = true;
+          }
+
+          candidates.push({
+              btn: btn,
+              index: idx,
+              isGlass: isGlass,
+              isMine: isMine,
+              isPiggy: isPiggy,
+              isPrize: isPrize,
+              isAmbulance: isAmbulance,
+              isRecruiter: isRecruiter
+          });
+      }
+
+      // Filter dangerous cells
+      var safeCandidates = candidates.filter(function (c) { return !c.isGlass && !c.isMine; });
+      if (!safeCandidates.length) safeCandidates = candidates;
+
+      // Priority 1: Piggy Bank (wins the bank!)
+      var target = safeCandidates.find(function (c) { return c.isPiggy; });
+
+      // Priority 2: Valued items (prizes, extra life ambulance, recruiter)
+      if (!target) {
+          target = safeCandidates.find(function (c) { return c.isPrize || c.isAmbulance || c.isRecruiter; });
+      }
+
+      // Priority 3: Unknown safe cells. Avoid the last 10 cells (idx >= 54) per 2026 rules
+      if (!target) {
+          var earlyCells = safeCandidates.filter(function (c) { return c.index < 54; });
+          if (earlyCells.length > 0 && safeCandidates.length > 12) {
+              target = earlyCells[Math.floor(Math.random() * earlyCells.length)];
+          } else {
+              target = safeCandidates[Math.floor(Math.random() * safeCandidates.length)];
+          }
+      }
+
+      if (!target) return false;
+
+      _squid.actionPending = true;
+      var cellNum = target.index + 1;
+      sqLog('🎯 Ход игрока! Выбираем ячейку #' + cellNum + (target.isPiggy ? ' (🏆 Золотая Копилка!)' : target.isPrize ? ' (🎁 Приз)' : ''));
+
+      // Natural human reaction 1200-2200ms within 20s limit
+      var delay = 1200 + Math.floor(Math.random() * 800);
+      setTimeout(function () {
+          try {
+              sqNativeClick(target.btn);
+              if (s && typeof s.openCell === 'function') {
+                  var cellObj = null;
+                  if (s.game && s.game.cells && s.game.cells[target.index]) {
+                      cellObj = s.game.cells[target.index];
+                  } else if (s.cells && s.cells[target.index]) {
+                      cellObj = s.cells[target.index];
+                  }
+                  if (cellObj) {
+                      try { s.openCell(cellObj); } catch (e) { }
+                  }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 800);
+          }
+      }, delay);
+
+      return true;
+  }
+
+  // Decision logic for actions (Frontman, Dalgona, Ambulance)
+  function pickAndExecuteAction(s) {
+      if (_squid.actionPending) return false;
+
+      var actionBtns = Array.from(document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)'));
+      if (!actionBtns.length) return false;
+
+      var chosenBtn = null;
+      var chosenVal = null;
+
+      var actionKind = (s && s.game && s.game.actionKind) || '';
+      var promptText = (document.querySelector('.squid-minigame__action-prompt') || {}).textContent || '';
+
+      for (var i = 0; i < actionBtns.length; i++) {
+          var b = actionBtns[i];
+          var text = (b.textContent || '').trim().toLowerCase();
+          var val = b.getAttribute('data-value') || b.value || text;
+
+          // 1. Ambulance (Скорая помощь) - always use to save life
+          if (/скорая|помощь|ambulance|спасти|revive/i.test(text) || /ambulance/i.test(val)) {
+              chosenBtn = b; chosenVal = val; break;
+          }
+
+          // 2. Frontman: cash out or stay
+          if (/frontman/i.test(actionKind) || /забрать|остать|куш|банк/i.test(promptText)) {
+              var aliveCount = 10;
+              if (s && typeof s.aliveCount === 'function') {
+                  try { aliveCount = s.aliveCount(); } catch (e) { }
+              }
+              var shouldTake = aliveCount <= 3;
+              if (shouldTake && /забрать|take/i.test(text)) {
+                  chosenBtn = b; chosenVal = val; break;
+              } else if (!shouldTake && /остать|stay/i.test(text)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+          }
+
+          // 3. Dalgona (sugar shapes): prefer circle or triangle
+          if (/dalgona/i.test(actionKind) || b.classList.contains('squid-minigame__action-choice--shape')) {
+              if (/круг|circle/i.test(text) || /circle/i.test(val)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+              if (/треуголь|triangle/i.test(text) || /triangle/i.test(val)) {
+                  chosenBtn = b; chosenVal = val; break;
+              }
+          }
+      }
+
+      if (!chosenBtn && actionBtns.length > 0) {
+          chosenBtn = actionBtns[0];
+          chosenVal = chosenBtn.getAttribute('data-value') || chosenBtn.value || chosenBtn.textContent.trim();
+      }
+
+      if (!chosenBtn) return false;
+
+      _squid.actionPending = true;
+      sqLog('⚡ Выбор действия: ' + (chosenBtn.textContent.trim() || chosenVal));
+
+      var delay = 1200 + Math.floor(Math.random() * 600);
+      setTimeout(function () {
+          try {
+              sqNativeClick(chosenBtn);
+              if (s && typeof s.chooseAction === 'function' && chosenVal) {
+                  try { s.chooseAction(chosenVal); } catch (e) { }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 800);
+          }
+      }, delay);
+
+      return true;
+  }
+
+  // Result modal closer
+  // Реально видим ли элемент (Alpine x-show ставит display:none)
+  function sqVisible(el) {
+      if (!el) return false;
+      try {
+          var cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+          var r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+      } catch (e) { return false; }
+  }
+
+  // Закрываем оверлей результата ТОЛЬКО когда он реально показан.
+  // В лобби .squid-minigame__reward-overlay скрыт через x-show="result && resultOpen".
+  // .squid-minigame__header-finale есть в статичном HTML всегда — НЕ используем его.
+  function checkAndCloseResult(s) {
+      if (_squid.actionPending) return false;
+
+      // Ищем видимый оверлей награды
+      var overlay = null;
+      var overlays = document.querySelectorAll('.squid-minigame__reward-overlay');
+      for (var i = 0; i < overlays.length; i++) {
+          if (sqVisible(overlays[i])) { overlay = overlays[i]; break; }
+      }
+
+      // Alpine-подтверждение: resultOpen=true и result!=null
+      var scopeOpen = false;
+      try { scopeOpen = !!(s && s.resultOpen && s.result); } catch (e) { }
+
+      // Должно быть И видимый оверлей, И подтверждение из Alpine
+      if (!overlay && !scopeOpen) return false;
+      if (overlay && !scopeOpen) {
+          if (!sqVisible(overlay)) return false;
+      }
+
+      // Кулдаун 15с — не плодим счётчик при залипшем оверлее
+      if (Date.now() - (_squid.lastResultCloseAt || 0) < 15000) return true;
+      _squid.lastResultCloseAt = Date.now();
+
+      var closeBtn = overlay
+          ? (overlay.querySelector('button.squid-minigame__reward-close') ||
+             document.querySelector('button.squid-minigame__reward-close'))
+          : document.querySelector('button.squid-minigame__reward-close');
+
+      _squid.actionPending = true;
+      _squid.gamesPlayed++;
+      sqLog('\ud83c\udfc6 Матч окончен (игра #' + _squid.gamesPlayed + '). Закрываю окно...');
+
+      setTimeout(function () {
+          try {
+              if (closeBtn) sqNativeClick(closeBtn);
+              if (s && typeof s.closeResult === 'function') {
+                  try { s.closeResult(); } catch (e) { }
+              }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 1500);
+          }
+      }, 1200);
+
+      return true;
+  }
+
+  // Lobby registration
+  function checkAndJoinLobby(s) {
+      if (_squid.actionPending) return false;
+
+      // === Strategy 1: Alpine scope knows best ===
+      // The game component exposes canJoin/joining/join() — these are reactive
+      // and authoritative. The DOM button state lags behind Alpine.
+      if (s) {
+          try {
+              // Already joined/joining — just wait
+              if (s.joining || s.joined) {
+                  if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+                      _squid.signupLoggedAt = Date.now();
+                      sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b \u043d\u0430 \u0438\u0433\u0440\u0443. \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
+                  }
+                  return false;
+              }
+              // Registration open via Alpine
+              if (s.canJoin && typeof s.join === 'function') {
+                  // Daily limit check
+                  if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
+                      if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
+                          _squid.signupLoggedAt = Date.now();
+                          sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
+                      }
+                      return false;
+                  }
+                  _squid.actionPending = true;
+                  sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (Alpine)...');
+                  var delay = 400 + Math.floor(Math.random() * 400);
+                  setTimeout(function () {
+                      try {
+                          // Click the DOM button first (triggers @click="join()")
+                          var domBtn = document.querySelector('button.squid-minigame__join-button:not(.disabled):not([disabled])');
+                          if (domBtn) sqNativeClick(domBtn);
+                          // Also call Alpine join() directly as backup
+                          try { s.join(); } catch (e) { }
+                      } finally {
+                          setTimeout(function () { _squid.actionPending = false; }, 2500);
+                      }
+                  }, delay);
+                  return true;
+              }
+          } catch (e) { }
+      }
+
+      // === Strategy 2: Pure DOM fallback ===
+      // Find join button that is NOT disabled and IS visible
+      var joinBtns = document.querySelectorAll('button.squid-minigame__join-button');
+      var joinBtn = null;
+      for (var i = 0; i < joinBtns.length; i++) {
+          var b = joinBtns[i];
+          // Alpine x-show sets display:none when hidden
+          var hidden = (b.style && b.style.display === 'none');
+          var disabled = b.disabled || b.classList.contains('disabled');
+          if (!hidden && !disabled) {
+              joinBtn = b;
+              break;
+          }
+      }
+
+      if (joinBtn) {
+          // Daily limit check
+          if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
+              if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
+                  _squid.signupLoggedAt = Date.now();
+                  sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
+              }
+              return false;
+          }
+          _squid.actionPending = true;
+          sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (DOM)...');
+          var delay2 = 400 + Math.floor(Math.random() * 400);
+          setTimeout(function () {
+              try {
+                  sqNativeClick(joinBtn);
+              } finally {
+                  setTimeout(function () { _squid.actionPending = false; }, 2500);
+              }
+          }, delay2);
+          return true;
+      }
+
+      // === No join available — log status ===
+      // Check if we're already in an active game
+      var gameActive = document.querySelector('.squid-minigame__board, .squid-field');
+      if (gameActive) return false; // In-game, don't log lobby messages
+
+      // Check entry status from Alpine
+      if (s && s.entry) {
+          var entryStatus = '';
+          try { entryStatus = String(s.entry.status || '').toLowerCase(); } catch (e) { }
+          if (/paid_waiting|assigned|active|playing|alive|confirmed|waiting/.test(entryStatus)) {
+              if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+                  _squid.signupLoggedAt = Date.now();
+                  sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b (entry: ' + entryStatus + '). \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
+              }
+              return false;
+          }
+      }
+
+      if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
+          _squid.signupLoggedAt = Date.now();
+          var hintText = '';
+          try { hintText = (document.querySelector('.squid-header__about') || {}).textContent || ''; } catch (e) { }
+          var signupText = '';
+          try { if (s && s.signupClosedText) signupText = s.signupClosedText; } catch (e) { }
+          sqLog('\u23f3 \u0417\u0430\u043f\u0438\u0441\u044c \u0437\u0430\u043a\u0440\u044b\u0442\u0430. ' + (signupText || hintText || '\u041e\u0436\u0438\u0434\u0430\u0435\u043c \u043e\u0442\u043a\u0440\u044b\u0442\u0438\u044f...'));
+      }
+      return false;
+  }
+
+  // SPA navigation to minigame
+  function squidGoto() {
+      try {
+          if (window.AngryAjax && typeof window.AngryAjax.goToUrl === 'function') {
+              window.AngryAjax.goToUrl('/squid/game/');
+              return;
+          }
+      } catch (e) { }
+      try { window.location.href = '/squid/game/'; } catch (e) { }
+  }
+
+  // Main autopilot tick
+  function squidTick() {
+      if (!_squid.running) return;
+
+      // Новый день — обнуляем счётчик сыгранных игр
+      var today = new Date().toISOString().slice(0, 10);
+      if (_squid.dayKey !== today) {
+          _squid.dayKey = today;
+          _squid.gamesPlayed = 0;
+      }
+
+      var curPath = location.pathname;
+      if (!/\/squid\/game/.test(curPath)) {
+          if (Date.now() - (_squid.lastNavAt || 0) > 5000) {
+              _squid.lastNavAt = Date.now();
+              sqLog('\ud83d\udce1 \u041d\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044f \u043d\u0430 /squid/game/ ...');
+              squidGoto();
+          }
+          return;
+      }
+
+      if (_squid.actionPending) return;
+
+      // Try to get Alpine scope; if not found, still proceed with DOM-only
+      var s = findSquidScope();
+
+      // Diagnostic: log scope status once on first success/failure
+      if (!_squid._scopeLogged) {
+          _squid._scopeLogged = true;
+          if (s) {
+              sqLog('\u2705 Alpine scope \u043d\u0430\u0439\u0434\u0435\u043d. canJoin=' + (s.canJoin) + ' joining=' + (s.joining) + ' joined=' + (s.joined));
+          } else {
+              sqLog('\u26a0\ufe0f Alpine scope \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d, \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u043c \u0447\u0435\u0440\u0435\u0437 DOM');
+              _squid._scopeLogged = false; // retry logging next tick
+          }
+      }
+
+      // 1. Results modal
+      if (checkAndCloseResult(s)) return;
+
+      // 2. Action choices (during active game)
+      if (isMyActionTurn(s)) {
+          if (pickAndExecuteAction(s)) return;
+      }
+
+      // 3. Cell turn (during active game)
+      if (isMyCellTurn(s)) {
+          if (pickAndOpenCell(s)) return;
+      }
+
+      // 4. Lobby: join or wait
+      checkAndJoinLobby(s);
+  }
+
+  /* ─── Autopilot controls & persistence ─── */
+
+  function squidAutoSave(on) {
+      try { localStorage.setItem(SQUID_AUTO_KEY, on ? '1' : ''); } catch (e) { }
+  }
+
+  function squidAutoLoad() {
+      try { return localStorage.getItem(SQUID_AUTO_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function pauseOtherModules() {
+      _squid.pausedOthers = [];
+      try {
+          Object.keys(ModuleSessionRegistry._specs || {}).forEach(function (id) {
+              if (id === 'squid') return;
+              var ids = ModuleSessionRegistry._ids[id];
+              if (!ids) return;
+              var live = Object.keys(ids).filter(function (k) { return ids[k] != null; });
+              if (!live.length) return;
+              ModuleSessionRegistry.pause(id);
+              ModuleSessionRegistry.clear(id);
+              _squid.pausedOthers.push({ id: id, keys: live });
+          });
+      } catch (e) { }
+  }
+
+  function resumeOtherModules() {
+      if (!_squid.pausedOthers || !_squid.pausedOthers.length) return;
+      var list = _squid.pausedOthers.slice();
+      _squid.pausedOthers = [];
+      list.forEach(function (rec) {
+          try {
+              var ids = ModuleSessionRegistry._ids[rec.id];
+              var specs = ModuleSessionRegistry._specs[rec.id];
+              if (ids && specs) {
+                  rec.keys.forEach(function (k) {
+                      if (ids[k] != null || !specs[k]) return;
+                      ids[k] = setInterval(specs[k].fn, specs[k].ms);
+                  });
+              }
+              ModuleSessionRegistry.pause(rec.id);
+          } catch (_) {}
+      });
+  }
+
+  function squidStart() {
+      if (_squid.running) return true;
+      _squid.running = true;
+      _squid.lastTick = 0;
+      pauseOtherModules();
+      if (!_squid.timer) _squid.timer = setInterval(squidTick, 600);
+      squidAutoSave(true);
+      sqLog('🔄 Автопилот «Игра на вылет» запущен');
+      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+      if (!/\/squid\/game/.test(location.pathname)) squidGoto();
+      return true;
+  }
+
+  function squidStop() {
+      _squid.running = false;
+      if (_squid.timer) { clearInterval(_squid.timer); _squid.timer = null; }
+      resumeOtherModules();
+      squidAutoSave(false);
+      sqLog('⏹️ Автопилот «Игра на вылет» остановлен');
+      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+      return false;
+  }
+
+  // Assistant menu bridge
+  window.__mwSquidToggle = function () {
+      return _squid.running ? squidStop() : squidStart();
+  };
+  window.__mwSquidIsRunning = function () { return _squid.running; };
+
+  /* ─── UI Panel ─── */
+
+  function initSquidPanel() {
+      if (document.getElementById('mw-squid-panel')) return;
+
+      if (!document.getElementById('mw-squid-style')) {
+          var st = document.createElement('style');
+          st.id = 'mw-squid-style';
+          st.textContent = [
+              '#mw-squid-panel{position:fixed;left:16px;bottom:16px;z-index:2147483600;width:260px;',
+              'font:12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1a1410;',
+              'background:linear-gradient(165deg,rgba(255,250,240,.95),rgba(245,230,200,.90));',
+              'backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);',
+              'border:1px solid rgba(209,148,92,.45);border-radius:20px;',
+              'box-shadow:0 18px 44px rgba(30,20,10,.18),inset 0 1px 0 rgba(255,255,255,.55);overflow:hidden;}',
+              '#mw-squid-panel *{box-sizing:border-box;}',
+              '.squid-panel-header{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:move;',
+              'background:rgba(209,148,92,.18);border-bottom:1px solid rgba(209,148,92,.25);',
+              'font-weight:700;font-size:13px;user-select:none;color:#1a1410;}',
+              '.squid-panel-icon{font-size:16px;}',
+              '.squid-panel-close{margin-left:auto;cursor:pointer;opacity:.55;font-size:17px;line-height:1;padding:0 3px;border-radius:5px;}',
+              '.squid-panel-close:hover{opacity:1;background:rgba(196,71,71,.15);color:#c44747;}',
+              '.squid-panel-body{padding:10px 12px;}',
+              '.squid-panel-status{padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.65);',
+              'border:1px solid rgba(209,148,92,.3);margin-bottom:8px;font-size:11px;color:#333;word-break:break-word;}',
+              '.squid-panel-log{height:90px;overflow-y:auto;background:rgba(0,0,0,.04);border-radius:8px;',
+              'padding:6px;font-family:monospace;font-size:10px;line-height:1.3;white-space:pre-wrap;color:#444;margin-bottom:8px;}',
+              '.squid-panel-btn{display:block;width:100%;padding:7px;border-radius:12px;border:none;cursor:pointer;',
+              'font-weight:700;font-size:12px;text-align:center;transition:all .15s ease;}',
+              '.squid-panel-btn.is-active{background:#c44747;color:#fff;}',
+              '.squid-panel-btn.is-idle{background:linear-gradient(135deg,#e0243c,#b0182c);color:#fff;}'
+          ].join('');
+          document.head.appendChild(st);
+      }
+
+      var p = document.createElement('div');
+      p.id = 'mw-squid-panel';
+      p.innerHTML = [
+          '<div class="squid-panel-header">',
+          '  <span class="squid-panel-icon">🦑</span>',
+          '  <span>Игра на вылет 2.0</span>',
+          '  <span class="squid-panel-close" title="Скрыть">×</span>',
+          '</div>',
+          '<div class="squid-panel-body">',
+          '  <div class="squid-panel-status" id="mw-squid-status-text">Ожидание старта</div>',
+          '  <div class="squid-panel-log" id="mw-squid-log">[Лог инициализирован]</div>',
+          '  <button class="squid-panel-btn ' + (_squid.running ? 'is-active' : 'is-idle') + '" id="mw-squid-toggle-btn">',
+          '    ' + (_squid.running ? '⏹️ Остановить' : '▶️ Запустить автопилот'),
+          '  </button>',
+          '</div>'
+      ].join('');
+
+      document.body.appendChild(p);
+
+      var toggleBtn = document.getElementById('mw-squid-toggle-btn');
+      if (toggleBtn) {
+          toggleBtn.addEventListener('click', function () {
+              if (_squid.running) {
+                  squidStop();
+                  toggleBtn.className = 'squid-panel-btn is-idle';
+                  toggleBtn.textContent = '▶️ Запустить автопилот';
+              } else {
+                  squidStart();
+                  toggleBtn.className = 'squid-panel-btn is-active';
+                  toggleBtn.textContent = '⏹️ Остановить';
+              }
+          });
+      }
+
+      var closeBtn = p.querySelector('.squid-panel-close');
+      if (closeBtn) {
+          closeBtn.addEventListener('click', function () { p.remove(); });
+      }
+
+      // Dragging
+      var header = p.querySelector('.squid-panel-header');
+      if (header) {
+          var isDragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+          header.addEventListener('mousedown', function (e) {
+              if (e.target === closeBtn) return;
+              isDragging = true;
+              startX = e.clientX;
+              startY = e.clientY;
+              var rect = p.getBoundingClientRect();
+              startLeft = rect.left;
+              startTop = rect.top;
+              p.style.bottom = 'auto';
+              p.style.left = startLeft + 'px';
+              p.style.top = startTop + 'px';
+              e.preventDefault();
+          });
+          document.addEventListener('mousemove', function (e) {
+              if (!isDragging) return;
+              p.style.left = (startLeft + (e.clientX - startX)) + 'px';
+              p.style.top = (startTop + (e.clientY - startY)) + 'px';
+          });
+          document.addEventListener('mouseup', function () { isDragging = false; });
+      }
+  }
+
+  // Restore autopilot on page reload if active
+  if (squidAutoLoad()) {
+      setTimeout(function () {
+          try {
+              squidStart();
+          } catch (e) { }
+      }, 1200);
+  }
+
+  ModuleSessionRegistry.register('squid', {
+      onAbort: function (reason) {
+          squidStop();
+          var p = document.getElementById('mw-squid-panel');
+          if (p) p.remove();
+      }
+  });
+
+
   BotModules.omniscience = function() {
       console.log('[Omniscience] Запуск модуля');
       try {
