@@ -1,31 +1,3 @@
-// ==UserScript==
-// @name         AI MyWay DeN
-// @namespace    MyWay.Moswar
-// @version      3.7
-// @author       MyWay DeN
-// @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
-// @match        https://*.moswar.ru/*
-// @match        http://moswar.net/*
-// @match        https://moswar.net/*
-// @match        http://*.moswar.net/*
-// @match        https://*.moswar.net/*
-// @grant        GM_info
-// @grant        GM_xmlhttpRequest
-// @grant        GM_addStyle
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_deleteValue
-// @grant        unsafeWindow
-// @noframes
-// @connect      api.telegram.org
-// @connect      raw.githubusercontent.com
-// @connect      github.com
-// @connect      moskwar.ru
-// @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
-// @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js
-// ==/UserScript==
-// @ts-nocheck
-
 (function () {
   'use strict';
   // Свой GM_addStyle (грант тоже указан — так TM не ругается на стили)
@@ -15979,17 +15951,41 @@ utils_.init();
       // [MOD] Кнопка «Игра на вылет» (Кальмар 2.0) в меню Помощник
       (function () {
           const SQUID_BTN_ID = 'mw-squid-btn';
+          const SQUID_HONEY_ID = 'mw-squid-honey-badge';
 
           function paintBtn() {
               const btn = document.getElementById(SQUID_BTN_ID);
               if (!btn) return;
               const running = typeof window.__mwSquidIsRunning === 'function' && window.__mwSquidIsRunning();
+              const honey = typeof window.__mwSquidHoneyAllowed === 'function' && window.__mwSquidHoneyAllowed();
               btn.classList.toggle('is-on', !!running);
               btn.removeAttribute('title');
               const tip = btn.querySelector('.mw-helper-tip');
-              if (tip) tip.textContent = running ? 'Стоп' : 'Кальмар';
+              if (tip) {
+                  let tipText = running ? 'Стоп' : 'Кальмар';
+                  if (running && typeof window.__mwSquidPhase === 'function') {
+                      const ph = window.__mwSquidPhase();
+                      if (ph === 'waiting' || ph === 'sync') tipText = 'Кальмар: ожидание';
+                      if (ph === 'registering') tipText = 'Кальмар: запись';
+                      if (ph === 'arriving') tipText = 'Кальмар: возврат к матчу';
+                      if (ph === 'playing') tipText = 'Кальмар: матч';
+                  }
+                  tip.textContent = tipText;
+              }
               const label = btn.querySelector('.c');
               if (label) label.style.filter = running ? 'drop-shadow(0 0 4px #2ecc71)' : '';
+              // Бейдж мёда: состояние видно всегда, меняется не только цветом
+              const badge = btn.querySelector('#' + SQUID_HONEY_ID);
+              if (badge) {
+                  badge.style.opacity = honey ? '1' : '0.45';
+                  badge.style.filter = honey ? 'none' : 'grayscale(1)';
+                  badge.style.textDecoration = honey ? 'none' : 'line-through';
+                  badge.style.borderColor = honey ? 'rgba(46,204,113,.8)' : 'rgba(120,120,120,.6)';
+                  badge.title = honey
+                      ? 'Участие за мёд: РАЗРЕШЕНО. Клик — запретить (автоматизацию не трогает).'
+                      : 'Участие за мёд: запрещено. Клик — разрешить (автоматизацию не трогает).';
+              }
+              btn.title = honey ? 'Мёд: разрешён' : 'Мёд: запрещён';
           }
 
           function makeBtn() {
@@ -15997,8 +15993,14 @@ utils_.init();
               btn.type = 'button';
               btn.id = SQUID_BTN_ID;
               btn.className = 'button mw-helper-ico';
+              btn.style.position = 'relative';
               const svgIcon = '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iMzUlIiBjeT0iMzAlIiByPSI4MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjZiN2EiLz48c3RvcCBvZmZzZXQ9IjU1JSIgc3RvcC1jb2xvcj0iI2UwMjQzYyIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzhmMGYyMiIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjIiIGZpbGw9InVybCgjZykiIHN0cm9rZT0iIzVlMDcxNiIgc3Ryb2tlLXdpZHRoPSIxIi8+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTAuNiIgZmlsbD0iIzE3MTgxYyIvPjxwYXRoIGQ9Ik0xNiA4LjZsNy4yIDEyLjlIOC44eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==" style="width:18px;height:18px;vertical-align:middle;display:inline-block;" alt="Кальмар">';
-              btn.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">' + svgIcon + '</div></span><span class="mw-helper-tip">Кальмар</span>';
+              btn.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c">' + svgIcon + '</div></span><span class="mw-helper-tip">Кальмар</span>' +
+                  '<span id="' + SQUID_HONEY_ID + '" role="button" tabindex="-1" ' +
+                  'style="position:absolute;right:-3px;bottom:-3px;z-index:3;display:inline-flex;align-items:center;justify-content:center;' +
+                  'min-width:15px;height:15px;padding:0 2px;border-radius:8px;font-size:10px;line-height:1;cursor:pointer;' +
+                  'background:rgba(255,250,240,.95);border:1px solid rgba(120,120,120,.6);' +
+                  'box-shadow:0 1px 3px rgba(30,20,10,.25);user-select:none;">🍯</span>';
               btn.setAttribute('data-name', 'Игра на вылет');
               btn.addEventListener('click', (e) => {
                   e.preventDefault();
@@ -16008,6 +16010,30 @@ utils_.init();
                   }
                   paintBtn();
               });
+              // Бейдж мёда: клики не должны доходить до основной кнопки (двойное срабатывание запрещено)
+              const badge = btn.querySelector('#' + SQUID_HONEY_ID);
+              if (badge) {
+                  ['pointerdown', 'mousedown', 'mouseup', 'dblclick'].forEach((evt) => {
+                      badge.addEventListener(evt, (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                      });
+                  });
+                  badge.addEventListener('click', (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (typeof window.__mwSquidToggleHoney === 'function') window.__mwSquidToggleHoney();
+                      paintBtn();
+                  });
+                  badge.addEventListener('keydown', (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (typeof window.__mwSquidToggleHoney === 'function') window.__mwSquidToggleHoney();
+                          paintBtn();
+                      }
+                  });
+              }
               paintBtn();
               return btn;
           }
@@ -19402,11 +19428,7 @@ body.mw-helper-tip-on .simple-tooltip {
   // === МОДУЛЬ: ИГРА НА ВЫЛЕТ (SQUID GAME 2026) ===
 
   BotModules.squid = function () {
-      if (document.getElementById('mw-squid-panel')) {
-          ModuleSessionRegistry.restartIntervals('squid');
-          squidStart();
-          return;
-      }
+      // trackInterval внутри squidStart защищает от дублей; повторный вызов безопасен
       initSquidPanel();
       squidStart();
   };
@@ -19419,28 +19441,246 @@ body.mw-helper-tip-on .simple-tooltip {
 
   /* ─── squid state & engine ─── */
 
-  var SQUID_AUTO_KEY = 'mw_squid_auto_v1';
+  var SQUID_AUTO_KEY = 'mw_squid_auto_v1';           // legacy: '1' = включено (обратная совместимость)
+  var SQUID_SETTINGS_KEY = 'mw_squid_settings_v2';   // JSON {enabled, allowHoney, stopAfterMatch, dayKey, gamesPlayed}
+
+  /* __SQUID_PURE_BEGIN__ */
+  // Чистые функции без DOM — извлекаются и тестируются из Node (tests/squid-lifecycle.test.js).
+
+  // Фазы жизненного цикла (не булев флаг!). Ожидание НЕ удерживает персонажа на странице игры.
+  var SQUID_PHASE = {
+      OFF: 'off',                  // автоматизация выключена
+      SYNC: 'sync',                // включено, серверное состояние ещё не получено
+      WAITING: 'waiting',          // регистрация закрыта ИЛИ запись подтверждена и ждём старта — персонаж свободен
+      REGISTERING: 'registering',  // страница перехвачена ради записи (короткая фаза)
+      ARRIVING: 'arriving',        // вернулись на страницу к началу матча, ждём game.active
+      PLAYING: 'playing'           // матч идёт, ходим
+  };
+
+  var SQUID_TIMING = {
+      TICK_MS: 600,
+      GO_START_LEAD_MS: 45000,   // за сколько до старта вернуться на страницу игры
+      REGISTRATION_LEAD_MS: 120000, // за 2 минуты до старта — целевое время регистрации
+      SYNC_BASE_MS: 60000,       // фоновый опрос состояния в обычном режиме
+      SYNC_NEAR_MS: 20000,       // в окне записи (≈15 мин до старта)
+      SYNC_HOT_MS: 5000,         // последние ~2 минуты до старта
+      SYNC_FAIL_BACKOFF_MS: 120000,
+      JOIN_CONFIRM_MS: 20000,    // окно подтверждения записи по entry.status
+      JOIN_MAX_TRIES: 3          // попыток записи на один раунд (дальше ждём следующий раунд)
+  };
+
+  // Настройки: новый JSON + обратная совместимость со старым булевым ключом.
+  // Безопасное значение по умолчанию: allowHoney = false. Старые данные НИКОГДА
+  // не разрешают расход мёда автоматически.
+  function squidParseSettings(rawV2, rawLegacy) {
+      var s = { enabled: false, allowHoney: false, stopAfterMatch: false, dayKey: '', gamesPlayed: 0 };
+      if (rawV2) {
+          try {
+              var j = JSON.parse(rawV2);
+              if (j && typeof j === 'object') {
+                  s.enabled = j.enabled === true;
+                  s.allowHoney = j.allowHoney === true;
+                  s.stopAfterMatch = j.stopAfterMatch === true;
+                  if (typeof j.dayKey === 'string') s.dayKey = j.dayKey;
+                  var gp = Number(j.gamesPlayed);
+                  if (isFinite(gp) && gp >= 0) s.gamesPlayed = Math.floor(gp);
+                  return s;
+              }
+          } catch (e) { }
+      }
+      s.enabled = rawLegacy === '1';
+      return s;
+  }
+
+  // Извлечение window.squidGameInitial = {...} из HTML-ответа страницы /squid/game/
+  function squidExtractInitial(htmlText) {
+      if (typeof htmlText !== 'string') return null;
+      var marker = 'squidGameInitial';
+      var i = htmlText.indexOf(marker);
+      while (i !== -1) {
+          var j = htmlText.indexOf('{', i);
+          if (j === -1) return null;
+          var depth = 0, k = j, inStr = false, esc = false;
+          for (; k < htmlText.length; k++) {
+              var ch = htmlText[k];
+              if (inStr) {
+                  if (esc) esc = false;
+                  else if (ch.charCodeAt(0) === 92) esc = true; // backslash
+                  else if (ch === '"') inStr = false;
+              } else if (ch === '"') inStr = true;
+              else if (ch === '{') depth++;
+              else if (ch === '}') { depth--; if (depth === 0) break; }
+          }
+          if (depth === 0) {
+              try {
+                  var obj = JSON.parse(htmlText.slice(j, k + 1));
+                  if (obj && typeof obj === 'object') return obj;
+              } catch (e) { }
+          }
+          i = htmlText.indexOf(marker, k + 1);
+      }
+      return null;
+  }
+
+  // Подтверждённое участие — только по серверному entry.status.
+  var SQUID_ENTRY_ACTIVE_RE = /paid_waiting|assigned|active|playing|alive|confirmed/;
+  function squidEntryActive(entry) {
+      if (!entry || typeof entry !== 'object' || !entry.status) return false;
+      return SQUID_ENTRY_ACTIVE_RE.test(String(entry.status).toLowerCase());
+  }
+
+  function squidGameActive(game) {
+      return !!(game && typeof game === 'object' && String(game.status).toLowerCase() === 'active');
+  }
+
+  // Чистая decision-функция жизненного цикла. Никаких побочных эффектов.
+  // settings: {enabled, allowHoney}; st: серверное состояние или null; nowMs: Date.now().
+  function squidPlanAction(settings, st, nowMs) {
+      settings = settings || {};
+      if (!settings.enabled) return { action: 'none', reason: 'disabled' };
+      if (!st || typeof st !== 'object') return { action: 'sync', reason: 'no_state' };
+      if (st.enabled === false) return { action: 'none', reason: 'feature_off' };
+      if (squidGameActive(st.game)) return { action: 'play', reason: 'game_active' };
+      var serverNow = Number(st.serverTime) || Number(nowMs) || 0;
+      var startsAt = Number(st.startsAt) || 0;
+      var leadMs = startsAt ? (startsAt - serverNow) : Infinity;
+      if (squidEntryActive(st.entry)) {
+          // Участие подтверждено сервером — повторная регистрация не выполняется всегда.
+          if (leadMs <= SQUID_TIMING.GO_START_LEAD_MS) return { action: 'go_start', reason: 'start_soon' };
+          return { action: 'none', reason: 'registered_waiting' };
+      }
+      if (st.canJoin === true) {
+          var honey = (typeof st.entryHoney === 'number' && isFinite(st.entryHoney)) ? st.entryHoney : null;
+          if (honey === null) {
+              // Стоимость участия не подтверждена сервером.
+              if (leadMs > SQUID_TIMING.REGISTRATION_LEAD_MS) {
+                  return { action: 'register_delayed', reason: 'cost_unknown_delayed' };
+              }
+              return settings.allowHoney
+                  ? { action: 'register', reason: 'cost_unknown_honey_allowed' }
+                  : { action: 'none', reason: 'cost_unknown_honey_forbidden' };
+          }
+          if (honey > 0 && !settings.allowHoney) return { action: 'none', reason: 'honey_required_forbidden' };
+          if (leadMs > SQUID_TIMING.REGISTRATION_LEAD_MS) {
+              return { action: 'register_delayed', reason: 'join_open_delayed' };
+          }
+          return { action: 'register', reason: 'join_open' };
+      }
+      return { action: 'none', reason: 'signup_closed' };
+  }
+
+  // Ограничитель попыток записи на раунд (чистый). Защищает от бесконечных повторов
+  // при отказе сервера / нехватке мест.
+  function squidJoinGate(info, roundKey, now, maxTries) {
+      var sameRound = info && info.joinRoundKey === roundKey;
+      var tries = sameRound ? (Number(info.joinTries) || 0) : 0;
+      var nextAt = sameRound ? (Number(info.joinNextAt) || 0) : 0;
+      if (tries >= maxTries) return { allow: false, reason: 'max_tries', tries: tries, resetTries: false };
+      if (now < nextAt) return { allow: false, reason: 'backoff', tries: tries, resetTries: false };
+      return { allow: true, reason: 'ok', tries: tries, resetTries: !sameRound };
+  }
+
+  // Приостановка других модулей через РЕАЛЬНЫЙ API реестра (pause = toggle-обработчик
+  // у всех модулей + clearIntervals). Ошибка одного модуля не прерывает остальных.
+  // Возвращает список реально приостановленных модулей.
+  function squidPauseModulesCore(registry, log) {
+      var paused = [];
+      try {
+          Object.keys(registry._specs || {}).forEach(function (id) {
+              if (id === 'squid') return;
+              try {
+                  var ids = registry._ids && registry._ids[id];
+                  if (!ids) return; // модуль никогда не запускал трекнутые таймеры — не приостанавливаем
+                  var live = Object.keys(ids).filter(function (k) { return ids[k] != null; });
+                  if (!live.length) return; // модуль не запущен — не считаем приостановленным
+                  registry.pause(id);
+                  registry.clearIntervals(id);
+                  paused.push({ id: id, keys: live });
+                  if (log) log('⏸ Модуль «' + id + '» приостановлен на время матча');
+              } catch (e) {
+                  if (log) log('⚠️ Не удалось приостановить «' + id + '»: ' + ((e && e.message) || e));
+              }
+          });
+      } catch (e) {
+          if (log) log('⚠️ Ошибка обхода реестра модулей: ' + ((e && e.message) || e));
+      }
+      return paused;
+  }
+
+  // Возобновление только того, что squid реально приостанавливал:
+  // restartIntervals пересоздаёт отсутствующие таймеры, повторный pause = toggle = снятие паузы.
+  function squidResumeModulesCore(registry, list, log) {
+      (list || []).forEach(function (rec) {
+          try {
+              registry.restartIntervals(rec.id);
+              registry.pause(rec.id);
+              if (log) log('▶️ Модуль «' + rec.id + '» возобновлён');
+          } catch (e) {
+              if (log) log('⚠️ Не удалось возобновить «' + rec.id + '»: ' + ((e && e.message) || e));
+          }
+      });
+  }
+  /* __SQUID_PURE_END__ */
 
   var _squid = {
-      running: false,
-      timer: null,
-      lastTick: 0,
-      pagePhase: 'none',
+      running: false,          // enabled — пользователь включил автоматизацию
+      allowHoney: false,       // разрешение на участие в играх с расходом мёда (независимая настройка)
+      stopAfterMatch: false,   // выключить после завершения текущего матча (безопасный стоп во время игры)
+      phase: SQUID_PHASE.OFF,
+      phaseStartAt: 0,
+      serverState: null,       // последний снимок squidGameInitial / Alpine-состояния
+      stateAt: 0,
+      nextSyncAt: 0,
+      syncing: false,
+      syncFailUntil: 0,
+      joinRoundKey: '',        // startsAt раунда, по которому считаем попытки записи
+      joinTries: 0,
+      joinNextAt: 0,
+      joinConfirmedRound: 0,
+      pageTask: '',            // 'join' | 'start' | 'game' — зачем squid находится на странице игры
+      pausedOthers: [],        // реально приостановленные модули (id + keys)
+      actionPending: false,
+      lastNavAt: 0,
+      lastResultCloseAt: 0,
       signupLoggedAt: 0,
-      cds: {},
-      pausedOthers: [],
+      gamesPlayed: 0,          // статистика;persist в настройках (раньше терялся при reload)
+      dayKey: '',
+      maxGamesDay: 5,          // справочно: экономика теперь управляется серверным entryHoney
       scope: null,
       scopeEl: null,
       scopeAt: 0,
-      actionPending: false,
-      lastActionAt: 0,
-      lastNavAt: 0,
-      gamesPlayed: 0,
-      dayKey: '',
-      lastResultCloseAt: 0,
-      maxGamesDay: 5,       // До 5 игр за долги в день
-      allowHoney: false     // Не тратить мед после 5-й игры по умолчанию
+      panelPaintTimer: null
   };
+
+  // Восстанавливаем пользовательские настройки при загрузке скрипта.
+  squidLoadSettings();
+
+  function squidSaveSettings() {
+      try {
+          localStorage.setItem(SQUID_SETTINGS_KEY, JSON.stringify({
+              enabled: _squid.running === true,
+              allowHoney: _squid.allowHoney === true,
+              stopAfterMatch: _squid.stopAfterMatch === true,
+              dayKey: _squid.dayKey || '',
+              gamesPlayed: _squid.gamesPlayed || 0
+          }));
+      } catch (e) { }
+      // Legacy-ключ продолжаем писать для совместимости со старыми версиями скрипта.
+      try { localStorage.setItem(SQUID_AUTO_KEY, _squid.running ? '1' : ''); } catch (e) { }
+  }
+
+  function squidLoadSettings() {
+      var rawV2 = null, rawLegacy = null;
+      try { rawV2 = localStorage.getItem(SQUID_SETTINGS_KEY); } catch (e) { }
+      try { rawLegacy = localStorage.getItem(SQUID_AUTO_KEY); } catch (e) { }
+      var s = squidParseSettings(rawV2, rawLegacy);
+      _squid.running = s.enabled;
+      _squid.allowHoney = s.allowHoney;
+      _squid.stopAfterMatch = s.stopAfterMatch;
+      _squid.dayKey = s.dayKey;
+      _squid.gamesPlayed = s.gamesPlayed;
+      return s;
+  }
 
   function sqLog(msg) {
       var time = new Date().toLocaleTimeString();
@@ -19812,8 +20052,7 @@ body.mw-helper-tip-on .simple-tooltip {
           : document.querySelector('button.squid-minigame__reward-close');
 
       _squid.actionPending = true;
-      _squid.gamesPlayed++;
-      sqLog('\ud83c\udfc6 Матч окончен (игра #' + _squid.gamesPlayed + '). Закрываю окно...');
+      sqLog('\ud83c\udfc6 \u041c\u0430\u0442\u0447 \u043e\u043a\u043e\u043d\u0447\u0435\u043d. \u0417\u0430\u043a\u0440\u044b\u0432\u0430\u044e \u043e\u043a\u043d\u043e...');
 
       setTimeout(function () {
           try {
@@ -19823,122 +20062,251 @@ body.mw-helper-tip-on .simple-tooltip {
               }
           } finally {
               setTimeout(function () { _squid.actionPending = false; }, 1500);
+              // Завершение матча: освобождение персонажа, возобновление модулей,
+              // учёт сыгранных игр, план следующего раунда или отложенный стоп.
+              squidOnMatchEnded();
           }
       }, 1200);
 
       return true;
   }
 
-  // Lobby registration
-  function checkAndJoinLobby(s) {
-      if (_squid.actionPending) return false;
+  /* ─── Server state & lifecycle helpers ─── */
 
-      // === Strategy 1: Alpine scope knows best ===
-      // The game component exposes canJoin/joining/join() — these are reactive
-      // and authoritative. The DOM button state lags behind Alpine.
-      if (s) {
+  // Снимок состояния из живого Alpine-скоупа (только проверенные поля squidGamePage)
+  function squidScopeToState(s) {
+      if (!s || typeof s !== 'object') return null;
+      try {
+          var st = {};
+          var keys = ['canJoin', 'joining', 'joined', 'entry', 'startsAt', 'serverTime',
+              'intervalSeconds', 'entryFee', 'entryHoney', 'enabled', 'game', 'signupClosedText',
+              'waitingCount', 'error'];
+          for (var i = 0; i < keys.length; i++) {
+              try { if (keys[i] in s) st[keys[i]] = s[keys[i]]; } catch (e) { }
+          }
+          if (st.canJoin === undefined && st.startsAt === undefined && st.game === undefined) return null;
+          return st;
+      } catch (e) { return null; }
+  }
+
+  function squidSettings() {
+      return { enabled: _squid.running === true, allowHoney: _squid.allowHoney === true };
+  }
+
+  var _squidLastLogKey = '', _squidLastLogAt = 0;
+  function squidLogThrottled(msg, ms) {
+      var now = Date.now();
+      ms = ms || 60000;
+      if (msg === _squidLastLogKey && now - _squidLastLogAt < ms) return;
+      _squidLastLogKey = msg;
+      _squidLastLogAt = now;
+      sqLog(msg);
+  }
+
+  function squidSyncIntervalMs() {
+      var st = _squid.serverState;
+      if (!st) return 10000;
+      var lead = (Number(st.startsAt) || 0) - (Number(st.serverTime) || Date.now());
+      if (lead > 0 && lead <= 120000) return SQUID_TIMING.SYNC_HOT_MS;
+      if (!squidEntryActive(st.entry) && lead > 0 && lead < 21 * 60000) return SQUID_TIMING.SYNC_NEAR_MS;
+      return SQUID_TIMING.SYNC_BASE_MS;
+  }
+
+  // Фоновое получение состояния ИГРЫ, а не персонажа:
+  // 1) живой Alpine-скоуп (если мы уже на странице игры) — самый свежий;
+  // 2) иначе fetch той же страницы /squid/game/ (тот же URL, что и обычный переход)
+  //    и разбор window.squidGameInitial. Это НЕ навигация: персонаж остаётся где был.
+  function squidSyncState(cb) {
+      if (_squid.syncing) return;
+      var now = Date.now();
+      if (now < (_squid.syncFailUntil || 0)) return;
+
+      if (/\/squid\/game/.test(location.pathname)) {
+          var stLive = squidScopeToState(findSquidScope());
+          if (stLive) {
+              _squid.serverState = stLive;
+              _squid.stateAt = now;
+              if (cb) cb(stLive);
+              return;
+          }
+      }
+
+      _squid.syncing = true;
+      try {
+          fetch('/squid/game/', { credentials: 'same-origin', cache: 'no-store' })
+              .then(function (r) { return r && r.ok ? r.text() : ''; })
+              .then(function (html) {
+                  _squid.syncing = false;
+                  var st = squidExtractInitial(html || '');
+                  if (st) {
+                      _squid.serverState = st;
+                      _squid.stateAt = Date.now();
+                      _squid.syncFailUntil = 0;
+                      if (cb) cb(st);
+                  } else {
+                      _squid.syncFailUntil = Date.now() + SQUID_TIMING.SYNC_FAIL_BACKOFF_MS;
+                      squidLogThrottled('⚠️ Состояние игры не прочитано из ответа страницы. Повтор через 2 мин.');
+                  }
+              })
+              .catch(function () {
+                  _squid.syncing = false;
+                  _squid.syncFailUntil = Date.now() + SQUID_TIMING.SYNC_FAIL_BACKOFF_MS;
+                  squidLogThrottled('⚠️ Ошибка фонового запроса /squid/game/. Повтор через 2 мин.');
+              });
+      } catch (e) {
+          _squid.syncing = false;
+          _squid.syncFailUntil = Date.now() + SQUID_TIMING.SYNC_FAIL_BACKOFF_MS;
+      }
+  }
+
+  function squidPaintUi() {
+      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+  }
+
+  // Смена фазы с побочными эффектами: «занятые» фазы приостанавливают другие модули,
+  // выход из них — возобновляет. Ожидание (waiting/sync) НИКОГО не блокирует.
+  function squidSetPhase(p, note) {
+      if (_squid.phase === p) return;
+      var prev = _squid.phase;
+      var busyPrev = (prev === SQUID_PHASE.REGISTERING || prev === SQUID_PHASE.ARRIVING || prev === SQUID_PHASE.PLAYING);
+      var busyNow = (p === SQUID_PHASE.REGISTERING || p === SQUID_PHASE.ARRIVING || p === SQUID_PHASE.PLAYING);
+      _squid.phase = p;
+      _squid.phaseStartAt = Date.now();
+      if (busyNow && !_squid.pausedOthers.length) {
+          _squid.pausedOthers = squidPauseModulesCore(ModuleSessionRegistry, sqLog);
+      }
+      if (!busyNow && busyPrev && _squid.pausedOthers.length) {
+          var list = _squid.pausedOthers;
+          _squid.pausedOthers = [];
+          squidResumeModulesCore(ModuleSessionRegistry, list, sqLog);
+      }
+      sqLog('ℹ️ Фаза: ' + prev + ' → ' + p + (note ? ' (' + note + ')' : ''));
+      squidPaintUi();
+  }
+
+  function squidEnterPlaying(note) {
+      if (_squid.phase === SQUID_PHASE.PLAYING) return;
+      _squid.pageTask = 'game';
+      squidSetPhase(SQUID_PHASE.PLAYING, note || 'матч идёт');
+      sqLog('🦑 Матч «Игра на вылет» — выполняем ходы');
+  }
+
+  // Освобождаем персонажа: уходим со страницы игры ТОЛЬКО если сами сюда привели
+  // (запись/ожидание старта). Если страницу открыл пользователь — не трогаем.
+  function squidLeaveGamePage() {
+      if (!/\/squid\/game/.test(location.pathname)) { _squid.pageTask = ''; return; }
+      if (_squid.pageTask !== 'join' && _squid.pageTask !== 'start') return;
+      _squid.pageTask = '';
+      sqLog('🚶 Персонаж освобождён — возврат на /home/ до начала матча');
+      try {
+          if (window.AngryAjax && typeof window.AngryAjax.goToUrl === 'function') {
+              window.AngryAjax.goToUrl('/home/');
+              return;
+          }
+      } catch (e) { }
+      try { window.location.href = '/home/'; } catch (e) { }
+  }
+
+  // Завершение матча: освобожаем ресурсы, возобновляем модули, планируем следующий цикл
+  // (или окончательно останавливаемся, если пользователь просил стоп во время матча).
+  function squidOnMatchEnded() {
+      _squid.gamesPlayed = (_squid.gamesPlayed || 0) + 1;
+      _squid.joinRoundKey = '';
+      _squid.joinTries = 0;
+      _squid.joinNextAt = 0;
+      _squid.pageTask = '';
+      squidSaveSettings();
+      sqLog('🏁 Матч завершён (сыграно сегодня: ' + _squid.gamesPlayed + ')');
+      if (_squid.stopAfterMatch) {
+          _squid.stopAfterMatch = false;
+          _squid.running = false;
+          _squid.phase = SQUID_PHASE.OFF;
+          ModuleSessionRegistry.clearIntervals('squid');
+          if (_squid.pausedOthers.length) {
+              var list = _squid.pausedOthers;
+              _squid.pausedOthers = [];
+              squidResumeModulesCore(ModuleSessionRegistry, list, sqLog);
+          }
+          squidSaveSettings();
+          sqLog('⏹️ Автопилот «Игра на вылет» остановлен после матча');
+          squidPaintUi();
+          return;
+      }
+      _squid.serverState = null;
+      _squid.stateAt = 0;
+      _squid.nextSyncAt = 0;
+      squidSetPhase(SQUID_PHASE.SYNC, 'ожидание следующего раунда');
+  }
+
+  /* ─── Registration (только в фазе REGISTERING, с серверным подтверждением) ─── */
+
+  function squidDoJoinAttempt(s, now) {
+      if (_squid.actionPending) return;
+      var st = squidScopeToState(s) || _squid.serverState;
+
+      // Подтверждение участия — фактический серверный entry.status, а не попытка клика.
+      if (st && squidEntryActive(st.entry)) {
+          _squid.joinConfirmedRound = Number(st.entry.roundId) || Number(st.startsAt) || 0;
+          _squid.joinTries = 0;
+          _squid.joinNextAt = 0;
+          sqLog('✅ Запись подтверждена сервером (entry: ' + st.entry.status + ')');
+          var lead = (Number(st.startsAt) || 0) - (Number(st.serverTime) || Date.now());
+          if (lead > SQUID_TIMING.GO_START_LEAD_MS) {
+              squidSetPhase(SQUID_PHASE.WAITING, 'registered');
+              squidLeaveGamePage();
+          } else {
+              squidSetPhase(SQUID_PHASE.ARRIVING, 'старт скоро');
+          }
+          return;
+      }
+
+      // Матч начался (например, запись прошла мгновенно) — сразу играем.
+      if (st && squidGameActive(st.game)) { squidEnterPlaying('игра активна при проверке записи'); return; }
+
+      // Серверная ошибка (поле error в компоненте) — логируем, повтор ограничен squidJoinGate.
+      if (st && st.error) squidLogThrottled('⚠️ Ответ игры: ' + String(st.error).slice(0, 120), 20000);
+
+      var roundKey = String(Number(st && st.startsAt) || 0);
+      var gate = squidJoinGate(_squid, roundKey, now, SQUID_TIMING.JOIN_MAX_TRIES);
+      if (gate.resetTries) { _squid.joinRoundKey = roundKey; _squid.joinTries = 0; }
+      if (!gate.allow) {
+          if (gate.reason === 'max_tries') {
+              squidLogThrottled('🛑 Запись не подтвердилась (' + gate.tries + ' попыток). Ждём следующий раунд.');
+              squidSetPhase(SQUID_PHASE.WAITING, 'join_failed');
+              squidLeaveGamePage();
+          }
+          return; // backoff — просто ждём следующий тик
+      }
+
+      var plan = squidPlanAction(squidSettings(), st, now);
+      if (plan.action === 'play' || plan.action === 'go_start') { squidEnterPlaying(plan.reason); return; }
+      if (plan.action !== 'register') {
+          // Экономика запретила (нужен мёд / стоимость неизвестна) или регистрация закрылась —
+          // отпускаем страницу и ждём.
+          if (plan.reason === 'honey_required_forbidden') {
+              squidLogThrottled('🍯⛔ Игра требует мёд (' + (st && st.entryHoney) + '). Участие за мёд запрещено — пропускаем раунд.');
+          } else if (plan.reason === 'cost_unknown_honey_forbidden') {
+              squidLogThrottled('🍯⛔ Стоимость участия не подтверждена, а мёд запрещён — не регистрируемся.');
+          }
+          squidSetPhase(SQUID_PHASE.WAITING, plan.reason);
+          squidLeaveGamePage();
+          return;
+      }
+
+      _squid.joinTries = gate.tries + 1;
+      _squid.joinNextAt = now + SQUID_TIMING.JOIN_CONFIRM_MS;
+      sqLog('📝 Попытка записи ' + _squid.joinTries + '/' + SQUID_TIMING.JOIN_MAX_TRIES + ' (' + plan.reason + ')...');
+      _squid.actionPending = true;
+      setTimeout(function () {
           try {
-              // Already joined/joining — just wait
-              if (s.joining || s.joined) {
-                  if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
-                      _squid.signupLoggedAt = Date.now();
-                      sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b \u043d\u0430 \u0438\u0433\u0440\u0443. \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
-                  }
-                  return false;
-              }
-              // Registration open via Alpine
-              if (s.canJoin && typeof s.join === 'function') {
-                  // Daily limit check
-                  if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
-                      if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
-                          _squid.signupLoggedAt = Date.now();
-                          sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
-                      }
-                      return false;
-                  }
-                  _squid.actionPending = true;
-                  sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (Alpine)...');
-                  var delay = 400 + Math.floor(Math.random() * 400);
-                  setTimeout(function () {
-                      try {
-                          // Click the DOM button first (triggers @click="join()")
-                          var domBtn = document.querySelector('button.squid-minigame__join-button:not(.disabled):not([disabled])');
-                          if (domBtn) sqNativeClick(domBtn);
-                          // Also call Alpine join() directly as backup
-                          try { s.join(); } catch (e) { }
-                      } finally {
-                          setTimeout(function () { _squid.actionPending = false; }, 2500);
-                      }
-                  }, delay);
-                  return true;
-              }
-          } catch (e) { }
-      }
-
-      // === Strategy 2: Pure DOM fallback ===
-      // Find join button that is NOT disabled and IS visible
-      var joinBtns = document.querySelectorAll('button.squid-minigame__join-button');
-      var joinBtn = null;
-      for (var i = 0; i < joinBtns.length; i++) {
-          var b = joinBtns[i];
-          // Alpine x-show sets display:none when hidden
-          var hidden = (b.style && b.style.display === 'none');
-          var disabled = b.disabled || b.classList.contains('disabled');
-          if (!hidden && !disabled) {
-              joinBtn = b;
-              break;
+              // Кнопка страницы вызывает @click="join()"; прямой вызов — только если кнопки нет
+              var domBtn = document.querySelector('button.squid-minigame__join-button:not(.disabled):not([disabled])');
+              if (domBtn) sqNativeClick(domBtn);
+              else if (s && typeof s.join === 'function') { try { s.join(); } catch (e) { } }
+          } finally {
+              setTimeout(function () { _squid.actionPending = false; }, 1500);
           }
-      }
-
-      if (joinBtn) {
-          // Daily limit check
-          if (!_squid.allowHoney && _squid.gamesPlayed >= _squid.maxGamesDay) {
-              if (Date.now() - (_squid.signupLoggedAt || 0) > 60000) {
-                  _squid.signupLoggedAt = Date.now();
-                  sqLog('\ud83d\uded1 \u041b\u0438\u043c\u0438\u0442 5 \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0445 \u0438\u0433\u0440 \u0437\u0430 \u0434\u043e\u043b\u0433\u0438 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d.');
-              }
-              return false;
-          }
-          _squid.actionPending = true;
-          sqLog('\ud83d\udcdd \u0417\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u043c\u0441\u044f \u0432 \u0418\u0433\u0440\u0443 \u043d\u0430 \u0432\u044b\u043b\u0435\u0442 (DOM)...');
-          var delay2 = 400 + Math.floor(Math.random() * 400);
-          setTimeout(function () {
-              try {
-                  sqNativeClick(joinBtn);
-              } finally {
-                  setTimeout(function () { _squid.actionPending = false; }, 2500);
-              }
-          }, delay2);
-          return true;
-      }
-
-      // === No join available — log status ===
-      // Check if we're already in an active game
-      var gameActive = document.querySelector('.squid-minigame__board, .squid-field');
-      if (gameActive) return false; // In-game, don't log lobby messages
-
-      // Check entry status from Alpine
-      if (s && s.entry) {
-          var entryStatus = '';
-          try { entryStatus = String(s.entry.status || '').toLowerCase(); } catch (e) { }
-          if (/paid_waiting|assigned|active|playing|alive|confirmed|waiting/.test(entryStatus)) {
-              if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
-                  _squid.signupLoggedAt = Date.now();
-                  sqLog('\u23f3 \u0412\u044b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b (entry: ' + entryStatus + '). \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u0441\u0442\u0430\u0440\u0442...');
-              }
-              return false;
-          }
-      }
-
-      if (Date.now() - (_squid.signupLoggedAt || 0) > 30000) {
-          _squid.signupLoggedAt = Date.now();
-          var hintText = '';
-          try { hintText = (document.querySelector('.squid-header__about') || {}).textContent || ''; } catch (e) { }
-          var signupText = '';
-          try { if (s && s.signupClosedText) signupText = s.signupClosedText; } catch (e) { }
-          sqLog('\u23f3 \u0417\u0430\u043f\u0438\u0441\u044c \u0437\u0430\u043a\u0440\u044b\u0442\u0430. ' + (signupText || hintText || '\u041e\u0436\u0438\u0434\u0430\u0435\u043c \u043e\u0442\u043a\u0440\u044b\u0442\u0438\u044f...'));
-      }
-      return false;
+      }, 300 + Math.floor(Math.random() * 300));
   }
 
   // SPA navigation to minigame
@@ -19952,125 +20320,245 @@ body.mw-helper-tip-on .simple-tooltip {
       try { window.location.href = '/squid/game/'; } catch (e) { }
   }
 
-  // Main autopilot tick
+  // Main autopilot tick — фазовая машина.
+  // Ключевой принцип: фазы ожидания (SYNC/WAITING) не трогают страницу персонажа
+  // и не приостанавливают другие модули. Страница игры перехватывается только
+  // короткой фазой REGISTERING и рабочими ARRIVING/PLAYING.
   function squidTick() {
       if (!_squid.running) return;
 
-      // Новый день — обнуляем счётчик сыгранных игр
+      // Новый день — обнуляем счётчик сыгранных игр (persist)
       var today = new Date().toISOString().slice(0, 10);
       if (_squid.dayKey !== today) {
           _squid.dayKey = today;
           _squid.gamesPlayed = 0;
+          squidSaveSettings();
       }
 
-      var curPath = location.pathname;
-      if (!/\/squid\/game/.test(curPath)) {
-          if (Date.now() - (_squid.lastNavAt || 0) > 5000) {
-              _squid.lastNavAt = Date.now();
-              sqLog('\ud83d\udce1 \u041d\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044f \u043d\u0430 /squid/game/ ...');
-              squidGoto();
+      var now = Date.now();
+      var onGame = /\/squid\/game/.test(location.pathname);
+
+      // ── PLAYING: боевая логика без изменений (результат → действие → клетка) ──
+      if (_squid.phase === SQUID_PHASE.PLAYING) {
+          // Watchdog: матч давно идёт, но оверлей результата не пойман (сбой/разрыв) —
+          // завершаем сессию штатно, чтобы не удерживать персонажа вечно
+          if (_squid.phaseStartAt && now - _squid.phaseStartAt > 20 * 60000) {
+              var sw = squidScopeToState(findSquidScope());
+              if (sw && !squidGameActive(sw.game)) {
+                  sqLog('⏱ Матч по состоянию завершён, а оверлей не пойман — закрываю сессию');
+                  squidOnMatchEnded();
+                  return;
+              }
+          }
+          if (!onGame) {
+              // Идёт матч, но персонаж ушёл — возвращаем (защита от пропуска хода)
+              if (now - (_squid.lastNavAt || 0) > 5000) {
+                  _squid.lastNavAt = now;
+                  sqLog('📡 Матч идёт — возврат на /squid/game/ ...');
+                  squidGoto();
+              }
+              return;
+          }
+          if (_squid.actionPending) return;
+          var sp = findSquidScope();
+          if (checkAndCloseResult(sp)) return;
+          if (isMyActionTurn(sp)) {
+              if (pickAndExecuteAction(sp)) return;
+          }
+          if (isMyCellTurn(sp)) {
+              if (pickAndOpenCell(sp)) return;
           }
           return;
       }
 
-      if (_squid.actionPending) return;
-
-      // Try to get Alpine scope; if not found, still proceed with DOM-only
-      var s = findSquidScope();
-
-      // Diagnostic: log scope status once on first success/failure
-      if (!_squid._scopeLogged) {
-          _squid._scopeLogged = true;
-          if (s) {
-              sqLog('\u2705 Alpine scope \u043d\u0430\u0439\u0434\u0435\u043d. canJoin=' + (s.canJoin) + ' joining=' + (s.joining) + ' joined=' + (s.joined));
-          } else {
-              sqLog('\u26a0\ufe0f Alpine scope \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d, \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u043c \u0447\u0435\u0440\u0435\u0437 DOM');
-              _squid._scopeLogged = false; // retry logging next tick
+      // ── REGISTERING: страница перехвачена ради записи ──
+      if (_squid.phase === SQUID_PHASE.REGISTERING) {
+          // Watchdog: страница перехвачена не дольше 90 с — не удерживать персонажа втуне
+          if (_squid.phaseStartAt && now - _squid.phaseStartAt > 90000) {
+              sqLog('⏱ Запись не завершилась за 90 с — отпускаю персонажа, ждём следующий раунд');
+              _squid.joinTries = SQUID_TIMING.JOIN_MAX_TRIES;
+              squidSetPhase(SQUID_PHASE.WAITING, 'join_timeout');
+              squidLeaveGamePage();
+              return;
           }
+          if (!onGame) {
+              if (now - (_squid.lastNavAt || 0) > 5000) {
+                  _squid.lastNavAt = now;
+                  sqLog('📡 Переход на /squid/game/ для записи...');
+                  squidGoto();
+              }
+              return;
+          }
+          var sj = findSquidScope();
+          if (checkAndCloseResult(sj)) return;
+          var stj = squidScopeToState(sj);
+          if (stj && squidGameActive(stj.game)) { squidEnterPlaying('матч стартовал при записи'); return; }
+          squidDoJoinAttempt(sj, now);
+          return;
       }
 
-      // 1. Results modal
-      if (checkAndCloseResult(s)) return;
-
-      // 2. Action choices (during active game)
-      if (isMyActionTurn(s)) {
-          if (pickAndExecuteAction(s)) return;
+      // ── ARRIVING: вернулись к началу матча, ждём фактической активности игры ──
+      if (_squid.phase === SQUID_PHASE.ARRIVING) {
+          // Watchdog: если через 12 минут после возвращения игра так и не активна —
+          // отпускаем персонажа (иначе ждём на странице: участие подтверждено сервером)
+          if (_squid.phaseStartAt && now - _squid.phaseStartAt > 12 * 60000) {
+              sqLog('⏱ Игра так и не началась — отпускаю персонажа до следующего раунда');
+              squidSetPhase(SQUID_PHASE.WAITING, 'start_timeout');
+              squidLeaveGamePage();
+              return;
+          }
+          if (!onGame) {
+              if (now - (_squid.lastNavAt || 0) > 5000) {
+                  _squid.lastNavAt = now;
+                  sqLog('📡 Возврат на /squid/game/ к началу матча...');
+                  squidGoto();
+              }
+              return;
+          }
+          var sa = findSquidScope();
+          if (sa && checkAndCloseResult(sa)) return;
+          if (squidGameActive(sa && sa.game) || isMyCellTurn(sa) || isMyActionTurn(sa)) {
+              squidEnterPlaying('игра активна');
+              return;
+          }
+          // Игра ещё не активна — тихо ждём на странице, состояние приходит из скоупа
+          if (now >= _squid.nextSyncAt) {
+              _squid.nextSyncAt = now + 2000;
+              squidSyncState(function (st) {
+                  var plan = squidPlanAction(squidSettings(), st, Date.now());
+                  if (plan.action === 'play') squidEnterPlaying(plan.reason);
+              });
+          }
+          return;
       }
 
-      // 3. Cell turn (during active game)
-      if (isMyCellTurn(s)) {
-          if (pickAndOpenCell(s)) return;
+      // ── OFF ──
+      if (_squid.phase === SQUID_PHASE.OFF) return;
+
+      // ── SYNC / WAITING: фазы ожидания. Персонаж свободен, модули не тронуты. ──
+      if (now >= _squid.nextSyncAt) {
+          _squid.nextSyncAt = now + squidSyncIntervalMs();
+          squidSyncState(function (st) { squidEvaluateWaiting(st, now); });
+      }
+  }
+
+  // Обработка снимка серверного состояния в фазах ожидания.
+  function squidEvaluateWaiting(st, now) {
+      if (_squid.phase !== SQUID_PHASE.SYNC && _squid.phase !== SQUID_PHASE.WAITING) return;
+      var plan = squidPlanAction(squidSettings(), st, now);
+
+      if ((plan.action === 'play' || plan.action === 'go_start')) {
+          if (_squid.phase === SQUID_PHASE.SYNC) squidSetPhase(SQUID_PHASE.WAITING, 'состояние получено');
+          _squid.pageTask = 'start';
+          squidSetPhase(SQUID_PHASE.ARRIVING, plan.reason);
+          if (!/\/squid\/game/.test(location.pathname)) squidGoto();
+          return;
       }
 
-      // 4. Lobby: join or wait
-      checkAndJoinLobby(s);
-  }
+      if (plan.action === 'register') {
+          // stopAfterMatch: новые участия не планируются (безопасный стоп во время матча)
+          if (_squid.stopAfterMatch) return;
+          var roundKey = String(Number(st.startsAt) || 0);
+          var gate = squidJoinGate(_squid, roundKey, now, SQUID_TIMING.JOIN_MAX_TRIES);
+          if (gate.resetTries) { _squid.joinRoundKey = roundKey; _squid.joinTries = 0; _squid.joinNextAt = 0; }
+          if (!gate.allow) return;
+          if (_squid.phase === SQUID_PHASE.SYNC) squidSetPhase(SQUID_PHASE.WAITING, 'состояние получено');
+          _squid.pageTask = 'join';
+          squidSetPhase(SQUID_PHASE.REGISTERING, plan.reason);
+          if (!/\/squid\/game/.test(location.pathname)) squidGoto();
+          return;
+      }
 
-  /* ─── Autopilot controls & persistence ─── */
+      // plan.action === 'register_delayed' — регистрация открыта рано, ждём целевого момента.
+      // Не переходим в REGISTERING, не удерживаем персонажа на странице игры.
+      if (plan.action === 'register_delayed') {
+          if (_squid.phase === SQUID_PHASE.SYNC) squidSetPhase(SQUID_PHASE.WAITING, 'ожидание окна регистрации');
+          return;
+      }
 
-  function squidAutoSave(on) {
-      try { localStorage.setItem(SQUID_AUTO_KEY, on ? '1' : ''); } catch (e) { }
-  }
-
-  function squidAutoLoad() {
-      try { return localStorage.getItem(SQUID_AUTO_KEY) === '1'; } catch (e) { return false; }
-  }
-
-  function pauseOtherModules() {
-      _squid.pausedOthers = [];
-      try {
-          Object.keys(ModuleSessionRegistry._specs || {}).forEach(function (id) {
-              if (id === 'squid') return;
-              var ids = ModuleSessionRegistry._ids[id];
-              if (!ids) return;
-              var live = Object.keys(ids).filter(function (k) { return ids[k] != null; });
-              if (!live.length) return;
-              ModuleSessionRegistry.pause(id);
-              ModuleSessionRegistry.clear(id);
-              _squid.pausedOthers.push({ id: id, keys: live });
-          });
-      } catch (e) { }
+      // plan.action === 'none' — ждём без переходов
+      if (_squid.phase === SQUID_PHASE.SYNC && plan.reason !== 'no_state') {
+          squidSetPhase(SQUID_PHASE.WAITING, plan.reason);
+      }
+      if (plan.reason === 'honey_required_forbidden') {
+          squidLogThrottled('🍯⛔ Следующая игра требует мёд (' + (st && st.entryHoney) +
+              '). Участие за мёд запрещено — пропускаем раунд.');
+      } else if (plan.reason === 'cost_unknown_honey_forbidden') {
+          squidLogThrottled('🍯⛔ Стоимость участия не подтверждена сервером, а мёд запрещён — не регистрируемся.');
+      } else if (plan.reason === 'registered_waiting') {
+          var leadMin = Math.max(0, Math.round(((Number(st.startsAt) || 0) - (Number(st.serverTime) || now)) / 60000));
+          squidLogThrottled('⏳ Вы записаны (entry: ' + ((st.entry && st.entry.status) || '?') +
+              '). До старта ~' + leadMin + ' мин. Персонаж свободен.');
+      } else if (plan.reason === 'signup_closed') {
+          var signupText = '';
+          try { signupText = String(st.signupClosedText || ''); } catch (e) { }
+          squidLogThrottled('⏳ Запись закрыта. ' + (signupText || 'Ожидаем открытия...') + ' Персонаж свободен.');
+      }
   }
 
   function resumeOtherModules() {
       if (!_squid.pausedOthers || !_squid.pausedOthers.length) return;
-      var list = _squid.pausedOthers.slice();
+      var list = _squid.pausedOthers;
       _squid.pausedOthers = [];
-      list.forEach(function (rec) {
-          try {
-              var ids = ModuleSessionRegistry._ids[rec.id];
-              var specs = ModuleSessionRegistry._specs[rec.id];
-              if (ids && specs) {
-                  rec.keys.forEach(function (k) {
-                      if (ids[k] != null || !specs[k]) return;
-                      ids[k] = setInterval(specs[k].fn, specs[k].ms);
-                  });
-              }
-              ModuleSessionRegistry.pause(rec.id);
-          } catch (_) {}
-      });
+      squidResumeModulesCore(ModuleSessionRegistry, list, sqLog);
   }
 
   function squidStart() {
       if (_squid.running) return true;
       _squid.running = true;
-      _squid.lastTick = 0;
-      pauseOtherModules();
-      if (!_squid.timer) _squid.timer = setInterval(squidTick, 600);
-      squidAutoSave(true);
-      sqLog('🔄 Автопилот «Игра на вылет» запущен');
-      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
-      if (!/\/squid\/game/.test(location.pathname)) squidGoto();
+      _squid.stopAfterMatch = false;
+      _squid.serverState = null;
+      _squid.stateAt = 0;
+      _squid.nextSyncAt = 0;
+      _squid.joinRoundKey = '';
+      _squid.joinTries = 0;
+      _squid.joinNextAt = 0;
+      _squid.pageTask = '';
+      _squid.phase = SQUID_PHASE.SYNC;
+      // Таймер через реестр: trackInterval сам защищает от дублей
+      ModuleSessionRegistry.trackInterval('squid', squidTick, SQUID_TIMING.TICK_MS, 'main');
+      squidSaveSettings();
+      sqLog('🔄 Автопилот «Игра на вылет» включён. Читаем расписание в фоне, персонаж свободен.');
+      squidPaintUi();
       return true;
   }
 
-  function squidStop() {
+  // Полный останов без условий (используется при abort из хаба и после матча).
+  function squidForceStop() {
       _squid.running = false;
-      if (_squid.timer) { clearInterval(_squid.timer); _squid.timer = null; }
+      _squid.stopAfterMatch = false;
+      _squid.phase = SQUID_PHASE.OFF;
+      _squid.pageTask = '';
+      ModuleSessionRegistry.clearIntervals('squid');
       resumeOtherModules();
-      squidAutoSave(false);
-      sqLog('⏹️ Автопилот «Игра на вылет» остановлен');
-      if (typeof window.__mwSquidPaintBtn === 'function') window.__mwSquidPaintBtn();
+      squidSaveSettings();
+      squidPaintUi();
+  }
+
+  function squidStop() {
+      if (!_squid.running) return false;
+      var entryConfirmed = squidEntryActive(_squid.serverState && _squid.serverState.entry);
+      var inMatch = (_squid.phase === SQUID_PHASE.PLAYING
+          || _squid.phase === SQUID_PHASE.ARRIVING
+          || (_squid.phase === SQUID_PHASE.REGISTERING && entryConfirmed));
+      if (inMatch) {
+          // Безопасная семантика выключения во время матча:
+          // 1-й клик — «стоп после матча» (текущий матч доигрывается, новые участия не планируются);
+          // 2-й клик — отмена отложенной остановки (продолжаем играть и записываться).
+          if (_squid.stopAfterMatch) {
+              _squid.stopAfterMatch = false;
+              squidSaveSettings();
+              sqLog('▶️ Отложенная остановка отменена — продолжаем играть');
+          } else {
+              _squid.stopAfterMatch = true;
+              squidSaveSettings();
+              sqLog('⏹️ Текущий матч будет доигран, автопилот остановится после его завершения');
+          }
+          squidPaintUi();
+          return false;
+      }
+      squidForceStop();
+      sqLog('⏹️ Автопилот «Игра на вылет» выключен');
       return false;
   }
 
@@ -20078,7 +20566,21 @@ body.mw-helper-tip-on .simple-tooltip {
   window.__mwSquidToggle = function () {
       return _squid.running ? squidStop() : squidStart();
   };
-  window.__mwSquidIsRunning = function () { return _squid.running; };
+  window.__mwSquidIsRunning = function () { return _squid.running === true; };
+
+  // allowHoney — независимая настройка: НЕ включает и НЕ выключает автоматизацию.
+  window.__mwSquidHoneyAllowed = function () { return _squid.allowHoney === true; };
+  window.__mwSquidSetHoney = function (val) {
+      _squid.allowHoney = !!val;
+      squidSaveSettings();
+      sqLog('🍯 Участие за мёд: ' + (_squid.allowHoney ? 'РАЗРЕШЕНО' : 'запрещено'));
+      squidPaintUi();
+      return _squid.allowHoney;
+  };
+  window.__mwSquidToggleHoney = function () {
+      return window.__mwSquidSetHoney(!_squid.allowHoney);
+  };
+  window.__mwSquidPhase = function () { return _squid.phase; };
 
   /* ─── UI Panel ─── */
 
@@ -20126,6 +20628,10 @@ body.mw-helper-tip-on .simple-tooltip {
           '<div class="squid-panel-body">',
           '  <div class="squid-panel-status" id="mw-squid-status-text">Ожидание старта</div>',
           '  <div class="squid-panel-log" id="mw-squid-log">[Лог инициализирован]</div>',
+          '  <label title="Разрешить записываться в игры, где сервер требует дополнительно мёд (обычно с 6-й игры за сутки). На включение/выключение автопилота не влияет."' +
+          '    style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;cursor:pointer;user-select:none;">',
+          '    <input type="checkbox" id="mw-squid-honey-chk" style="cursor:pointer;"> Разрешить участие за мёд',
+          '  </label>',
           '  <button class="squid-panel-btn ' + (_squid.running ? 'is-active' : 'is-idle') + '" id="mw-squid-toggle-btn">',
           '    ' + (_squid.running ? '⏹️ Остановить' : '▶️ Запустить автопилот'),
           '  </button>',
@@ -20134,19 +20640,33 @@ body.mw-helper-tip-on .simple-tooltip {
 
       document.body.appendChild(p);
 
+      var honeyChk = document.getElementById('mw-squid-honey-chk');
+      if (honeyChk) {
+          honeyChk.checked = _squid.allowHoney === true;
+          honeyChk.addEventListener('change', function () {
+              if (typeof window.__mwSquidSetHoney === 'function') window.__mwSquidSetHoney(honeyChk.checked);
+              else { _squid.allowHoney = honeyChk.checked; squidSaveSettings(); }
+          });
+      }
+
       var toggleBtn = document.getElementById('mw-squid-toggle-btn');
       if (toggleBtn) {
-          toggleBtn.addEventListener('click', function () {
+          var paintToggleBtn = function () {
               if (_squid.running) {
-                  squidStop();
+                  toggleBtn.className = 'squid-panel-btn is-active';
+                  toggleBtn.textContent = _squid.stopAfterMatch ? '⏳ Стоп после матча (клик — отменить)' : '⏹️ Остановить';
+              } else {
                   toggleBtn.className = 'squid-panel-btn is-idle';
                   toggleBtn.textContent = '▶️ Запустить автопилот';
-              } else {
-                  squidStart();
-                  toggleBtn.className = 'squid-panel-btn is-active';
-                  toggleBtn.textContent = '⏹️ Остановить';
               }
+          };
+          toggleBtn.addEventListener('click', function () {
+              if (_squid.running) squidStop(); else squidStart();
+              paintToggleBtn();
           });
+          // Отложенная остановка/её отмена могут меняться из меню-иконки — синхронизируем надпись
+          if (_squid.panelPaintTimer) clearInterval(_squid.panelPaintTimer);
+          _squid.panelPaintTimer = setInterval(paintToggleBtn, 5000);
       }
 
       var closeBtn = p.querySelector('.squid-panel-close');
@@ -20180,18 +20700,27 @@ body.mw-helper-tip-on .simple-tooltip {
       }
   }
 
-  // Restore autopilot on page reload if active
-  if (squidAutoLoad()) {
+  // Восстановление после перезагрузки страницы:
+  // настройки уже загружены (squidLoadSettings). Если автоматизация была включена —
+  // возобновляем ПЛАНИРОВАНИЕ (фаза SYNC), а не переход на страницу игры.
+  // Подтверждённая запись хранится на сервере и будет прочитана из состояния игры.
+  if (_squid.running) {
       setTimeout(function () {
           try {
-              squidStart();
+              if (!_squid.running) return;
+              _squid.phase = SQUID_PHASE.SYNC;
+              _squid.nextSyncAt = 0;
+              ModuleSessionRegistry.trackInterval('squid', squidTick, SQUID_TIMING.TICK_MS, 'main');
+              sqLog('♻️ Автопилот «Игра на вылет» восстановлен после перезагрузки (персонаж свободен)');
+              squidPaintUi();
           } catch (e) { }
       }, 1200);
   }
 
   ModuleSessionRegistry.register('squid', {
       onAbort: function (reason) {
-          squidStop();
+          // ✕ в хабе = жёсткая остановка: полный стоп без «доигровки» матча
+          squidForceStop();
           var p = document.getElementById('mw-squid-panel');
           if (p) p.remove();
       }
