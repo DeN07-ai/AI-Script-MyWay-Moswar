@@ -6078,9 +6078,27 @@
       const SAFE_PIPE_SUS = 120; // максимум для безопасного клика “Атаковать” по трубе
 
       // прирост подозрительности (примерно как в игре)
-      const ALERT_ATTACK_COST = 30; // “Напасть”
-      const ALERT_ESCAPE_COST = 15; // “Другой патруль”
+      const ALERT_ATTACK_COST = 30; // "Напасть"
+      const ALERT_ESCAPE_COST = 15; // "Другой патруль"
       let stopAfterBattle = false; // остановка после боя с Лениным
+
+      // защита от повторных кликов по одному и тому же окну патруля
+      let lastAlertId = null;
+      let lastAlertActionTime = 0;
+      const ALERT_COOLDOWN_MS = 5000; // ждём результат перед повторной попыткой
+
+      // двойное прохождение через праздничный бонус
+      let doublePassEnabled = false;
+      let doublePassState = 0;
+      const DOUBLE_PASS_LS_KEY = "neftbot-doublePassEnabled";
+      const DOUBLE_PASS_STATE_LS_KEY = "neftbot-doublePassState";
+
+      // Состояния машины двойного прохождения
+      const DP = { IDLE: 0, FIRST_DONE: 1, WAITING_RESET: 2, SECOND_IN_PROGRESS: 3, DONE: 4 };
+
+      // cooldown после клика по трубе: не ищем элементы, пока страница загружается
+      let pageTransitionAt = 0;
+      const PAGE_TRANSITION_WAIT_MS = 3000;
 
       // настройки режима
       let useTickets = true;   // снижать подозр партбилетами
@@ -6108,6 +6126,7 @@
           localStorage.setItem("neftbot-actionDropType", neftActionDropType);
           localStorage.setItem("neftbot-actionDropMin", String(neftActionDropMin));
           localStorage.setItem("neftbot-dropPct", String(dropPctFromMax));
+          localStorage.setItem(DOUBLE_PASS_LS_KEY, doublePassEnabled ? "1" : "0");
       }
 
       function restoreFlags() {
@@ -6116,6 +6135,11 @@
           useTickets = localStorage.getItem("neftbot-useTickets") !== "0";
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
+          doublePassEnabled = localStorage.getItem(DOUBLE_PASS_LS_KEY) === "1";
+
+          // Восстановление состояния двойного прохода (переживает перезагрузку)
+          const dps = parseInt(localStorage.getItem(DOUBLE_PASS_STATE_LS_KEY) || "0", 10);
+          doublePassState = (!isNaN(dps) && dps >= 0 && dps <= DP.DONE) ? dps : DP.IDLE;
 
           const pct = parseInt(localStorage.getItem("neftbot-dropPct") || "100", 10);
           if (!isNaN(pct) && pct >= 1 && pct <= 100) dropPctFromMax = pct;
@@ -6184,10 +6208,15 @@
        <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
      </div>
 
-     <div style="margin-bottom:10px;">
-       <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-       <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
-     </div>
+      <div style="margin-bottom:10px;">
+        <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
+        <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
+      </div>
+
+      <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,200,0,0.2);">
+        <label><input type="checkbox" id="neft-double-pass"> <img src="/@/images/s/may2014/x2.png" style="width:16px;vertical-align:middle;"> Двойное прохождение нефтепровода</label>
+        <div style="font-size:10px;opacity:0.6;margin-top:4px;">После победы — вернуться в начало и победить Ленина ещё раз (если доступен праздничный бонус)</div>
+      </div>
 
     <div style="margin-bottom:10px;">
       <b>Статус:</b> <span id="neftbot-status">ожидание…</span><br>
@@ -6257,11 +6286,20 @@
               saveFlags();
               addLog("Партбилеты: " + (useTickets ? "ON" : "OFF"));
           };
-          chkSnickers.onchange = () => {
-              useSnickers = chkSnickers.checked;
-              saveFlags();
-              addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
-          };
+           chkSnickers.onchange = () => {
+               useSnickers = chkSnickers.checked;
+               saveFlags();
+               addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
+           };
+           const chkDoublePass = document.getElementById("neft-double-pass");
+           if (chkDoublePass) {
+               chkDoublePass.checked = doublePassEnabled;
+               chkDoublePass.onchange = () => {
+                   doublePassEnabled = chkDoublePass.checked;
+                   saveFlags();
+                   addLog("Двойное прохождение: " + (doublePassEnabled ? "ВКЛ" : "ВЫКЛ"));
+               };
+           }
           if (selDropPct) selDropPct.onchange = () => {
               const v = parseInt(selDropPct.value, 10);
               dropPctFromMax = isNaN(v) ? 100 : Math.min(100, Math.max(1, v));
@@ -6343,16 +6381,18 @@
       /* ========================= УПРАВЛЕНИЕ БОТОМ ========================= */
 
       function startBot() {
-          botEnabled = true;
-          botPaused = false;
-          stopAfterBattle = false;
-          saveFlags();
-          updateButtonsVisual();
-          setStatus("▶ Старт");
-          Utils.reportToCreator('Neft', 'Started');
-          MoswarLib.events.emit('module:status', { id: 'neft', status: 'started' });
-          ModuleSessionRegistry.restartIntervals('neft');
-      }
+           botEnabled = true;
+           botPaused = false;
+           stopAfterBattle = false;
+           lastAlertId = null;
+           lastAlertActionTime = 0;
+           saveFlags();
+           updateButtonsVisual();
+           setStatus("▶ Старт");
+           Utils.reportToCreator('Neft', 'Started');
+           MoswarLib.events.emit('module:status', { id: 'neft', status: 'started' });
+           ModuleSessionRegistry.restartIntervals('neft');
+       }
       function togglePause() {
           if (!botEnabled) return;
           botPaused = !botPaused;
@@ -6362,16 +6402,23 @@
           Utils.reportToCreator('Neft', botPaused ? 'Paused' : 'Resumed');
       }
       function stopBot() {
-          botEnabled = false;
-          botPaused = false;
-          stopAfterBattle = false;
-          saveFlags();
-          updateButtonsVisual();
-          setStatus("⏹ Стоп");
-          ModuleSessionRegistry.clearIntervals('neft');
-          Utils.reportToCreator('Neft', 'Stopped');
-          MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
-      }
+           botEnabled = false;
+           botPaused = false;
+           stopAfterBattle = false;
+           // Сбрасываем состояние только если переход не был начат.
+           // Если бот в ожидании подтверждения возврата — сохраняем состояние
+           // для корректного завершения после перезагрузки.
+           if (doublePassState === DP.IDLE || doublePassState === DP.DONE) {
+               doublePassState = DP.IDLE;
+               localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+           }
+           saveFlags();
+           updateButtonsVisual();
+           setStatus("⏹ Стоп");
+           ModuleSessionRegistry.clearIntervals('neft');
+           Utils.reportToCreator('Neft', 'Stopped');
+           MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
+       }
 
       ModuleSessionRegistry.register('neft', {
           onAbort: () => stopBot(),
@@ -6514,6 +6561,17 @@
       async function handleAttackAlert(alertRoot) {
           if (!alertRoot) return;
 
+          const alertId = alertRoot.id || "unknown";
+
+          // Защита от повторных кликов: если тот же алерт обработан недавно — ждём
+          if (lastAlertId === alertId && (Date.now() - lastAlertActionTime) < ALERT_COOLDOWN_MS) {
+              return; // ждём результат предыдущего действия
+          }
+          // Если алерт тот же, но прошло достаточно времени — сбрасываем и разрешаем повтор
+          if (lastAlertId === alertId) {
+              lastAlertId = null; // новый тик — считаем как новое окно
+          }
+
           const neft = getAwardNeft(alertRoot);
           const countsFest = getFestiveCounts(alertRoot);
 
@@ -6577,17 +6635,29 @@
           if (doAttack) {
               await ensureSuspicionForDelta(ALERT_ATTACK_COST);
               btnAttack.click();
+              lastAlertId = alertId; // фиксируем: это окно уже обработано
+              lastAlertActionTime = Date.now();
               setStatus('Жму "Напасть" (окно патруля)');
               await humanPause(1500, 3000);
 
-              // если это Ленин и обычный режим — остановимся после боя
+              // если это Ленин и обычный режим — определяем поведение после боя
               if (alertRoot.id === "neftlenin_alert_b" && !modeFestive) {
-                  stopAfterBattle = true;
-                  addLog("Финальный бой с Лениным (обычный режим) → после боя бот остановится");
+                  // При двойном прохождении НЕ останавливаемся после боя —
+                  // нужно выйти на страницу нефтепровода и увидеть блок "Миссия выполнена".
+                  // Завершение произойдёт в handleWinAlert.
+                  if (doublePassEnabled) {
+                      addLog("Финальный бой с Лениным (двойной режим, проход " +
+                          (doublePassState === 0 ? "1" : "2") + ") → после боя жду блок победы");
+                  } else {
+                      stopAfterBattle = true;
+                      addLog("Финальный бой с Лениным (обычный режим) → после боя бот остановится");
+                  }
               }
           } else {
               await ensureSuspicionForDelta(ALERT_ESCAPE_COST);
               btnEscape.click();
+              lastAlertId = alertId; // фиксируем: это окно уже обработано
+              lastAlertActionTime = Date.now();
               setStatus('Жму "Другой патруль"');
               await humanPause(1500, 3000);
           }
@@ -6658,71 +6728,78 @@
       }
 
       async function handleNegotiations() {
-          const root = getMissionRoot();
-          if (!root) return;
+           const root = getMissionRoot();
+           if (!root) return;
 
-          const stepInfo = getMissionActiveStep(root);
-          const enemyDice = getMissionEnemyDice(root);
-          const winCost = getMissionWinCost(root);
-          const escapeCost = getMissionEscapeCost(root);
+           const stepInfo = getMissionActiveStep(root);
+           const enemyDice = getMissionEnemyDice(root);
+           const winCost = getMissionWinCost(root);
+           const escapeCost = getMissionEscapeCost(root);
 
-          const btnPlay = root.querySelector(".step-block.active .action button.button") ||
-              (stepInfo ? stepInfo.el.querySelector("button.button") : null);
-          const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
-              root.querySelector(".actions button.button .price_escape")?.closest("button") ||
-              root.querySelector(".actions button.button");
+           const btnPlay = root.querySelector(".step-block.active .action button.button") ||
+               (stepInfo ? stepInfo.el.querySelector("button.button") : null);
+           const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
+               root.querySelector(".actions button.button .price_escape")?.closest("button") ||
+               root.querySelector(".actions button.button");
 
-          const sus = getGlobalSuspicion();
-          updateSuspicionUI(sus);
-          updateTicketsUI(getTicketsCount());
+           const sus = getGlobalSuspicion();
+           updateSuspicionUI(sus);
+           updateTicketsUI(getTicketsCount());
 
-          if (enemyDice == null || !stepInfo) {
-              addLog("Переговоры: кубик охранника или шаг не определены, жду…");
-              return;
-          }
+           if (enemyDice == null || !stepInfo) {
+               // Страница ещё загружается или DOM не обновился после SPA-навигации.
+               // Логируем не чаще раза в 5 секунд, чтобы не засорять лог.
+               const now = Date.now();
+               if (now - (handleNegotiations._lastWaitLog || 0) > 5000) {
+                   addLog("Переговоры: кубик/шаг не определены, жду загрузки…");
+                   handleNegotiations._lastWaitLog = now;
+               }
+               return;
+           }
 
-          const stepNum = stepInfo.num;
+           const stepNum = stepInfo.num;
 
-          // Логика по требованию:
-          // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
-          // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
-          // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
+           // Логика по требованию:
+           // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
+           // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
+           // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
 
-          // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
-          const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
+           // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
+           const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
 
-          if (shouldLeave) {
-              if (btnLeave && isVisible(btnLeave)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
-                  await ensureSuspicionForDelta(escapeCost);
-                  btnLeave.click();
-                  setStatus("Переговоры: уйти от охраны");
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
-              }
-          } else if (enemyDice === 1) {
-              // Кубик = 1, сбежать не нужно → играем
-              if (btnPlay && isVisible(btnPlay)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
-                  btnPlay.click();
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
-              }
-          } else if (enemyDice >= 2 && enemyDice <= 6) {
-              // Кубик = 2-6 → сбегаем
-              if (btnLeave && isVisible(btnLeave)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
-                  await ensureSuspicionForDelta(escapeCost);
-                  btnLeave.click();
-                  setStatus("Переговоры: уйти от охраны");
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
-              }
-          }
-      }
+           if (shouldLeave) {
+               if (btnLeave && isVisible(btnLeave)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
+                   await ensureSuspicionForDelta(escapeCost);
+                   btnLeave.click();
+                   setStatus("Переговоры: уйти от охраны");
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
+               }
+           } else if (enemyDice === 1) {
+               // Кубик = 1, сбежать не нужно → играем
+               if (btnPlay && isVisible(btnPlay)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
+                   btnPlay.click();
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
+               }
+           } else if (enemyDice >= 2 && enemyDice <= 6) {
+               // Кубик = 2-6 → сбегаем
+               if (btnLeave && isVisible(btnLeave)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
+                   await ensureSuspicionForDelta(escapeCost);
+                   btnLeave.click();
+                   setStatus("Переговоры: уйти от охраны");
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
+               }
+           }
+       }
+       handleNegotiations._lastWaitLog = 0;
 
       /* ========================= ПРЕ-МИССИЯ ========================= */
 
@@ -6880,26 +6957,55 @@
               updateSuspicionUI(sus);
           }
 
-          const btn = document.querySelector(".pipeline-scroll .enemy-place button.button[onclick*='NeftLenin.viewPrize']") ||
-              document.querySelector(".pipeline-scroll .enemy-place .action button.button");
-          if (btn) {
-              btn.click();
-              setStatus('Жму "Атаковать" на трубе');
-              await humanPause(1500, 3000);
-          } else {
-              addLog("На трубе не найдено окно врага для атаки");
-          }
+           const btn = document.querySelector(".pipeline-scroll .enemy-place button.button[onclick*='NeftLenin.viewPrize']") ||
+               document.querySelector(".pipeline-scroll .enemy-place .action button.button");
+           if (btn) {
+               btn.click();
+               pageTransitionAt = Date.now(); // запоминаем момент клика — следующая проверка подождёт
+               setStatus('Жму "Атаковать" на трубе');
+               await humanPause(1500, 3000);
+           } else {
+               addLog("На трубе не найдено окно врага для атаки");
+           }
       }
 
       /* ========================= ОБРАБОТКА СТРАНИЦЫ НЕФТЕПРОВОДА ========================= */
 
       async function handleNeftPage() {
+          // Cooldown: сразу после клика по трубе не проверяем элементы — страница загружается
+          if (pageTransitionAt && (Date.now() - pageTransitionAt < PAGE_TRANSITION_WAIT_MS)) {
+              return;
+          }
+          pageTransitionAt = 0; // сброс cooldown после истечения
+
+          // ─── ПРОВЕРКА: ожидание подтверждения возврата ───
+          if (isDoublePassWaiting()) {
+              const winGone = !document.getElementById("neftlenin_alert_win");
+              const pipeBack = document.querySelector(".pipeline-scroll");
+              if (winGone && pipeBack) {
+                  doublePassState = DP.SECOND_IN_PROGRESS;
+                  localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+                  addLog("▶️ Переход подтверждён (проверка в тике). Второй проход запущен");
+                  setStatus("▶️ Второй проход нефтепровода");
+              }
+              return; // не обрабатываем патрули и трубу пока ждём подтверждения
+          }
+
+          // ─── 1. ПОБЕДА — максимальный приоритет, проверяем до любых патрулей ───
+          const winAlert = document.getElementById("neftlenin_alert_win");
+          if (winAlert && isVisible(winAlert)) {
+              await handleWinAlert(winAlert);
+              return;
+          }
+
+          // ─── 2. МИНИ-ИГРА (переговоры) ───
           const missionRoot = getMissionRoot();
           if (missionRoot) {
               await handleNegotiations();
               return;
           }
 
+          // ─── 3. ПРЕ-МИССИЯ ───
           const premFirst = document.getElementById("neftlenin_alert_prem_first");
           const prem = document.getElementById("neftlenin_alert_prem");
           if ((premFirst && isVisible(premFirst)) || (prem && isVisible(prem))) {
@@ -6907,6 +7013,7 @@
               return;
           }
 
+          // ─── 4. ПАТРУЛИ (атака / другой патруль) ───
           const alertD = document.getElementById("neftlenin_alert_d");
           if (alertD && isVisible(alertD)) {
               await handleAttackAlert(alertD);
@@ -6923,13 +7030,109 @@
               return;
           }
 
-          const winAlert = document.getElementById("neftlenin_alert_win");
-          if (winAlert && isVisible(winAlert)) {
-              addLog("Миссия выполнена — жду следующего шага");
+          // ─── 5. ОСНОВНАЯ СТРАНИЦА (труба) ───
+          await handlePipeMainPage();
+      }
+
+      /* ========================= ПОБЕДА И ДВОЙНОЕ ПРОХОЖДЕНИЕ ========================= */
+
+      function isDoublePassWaiting() {
+          return doublePassState === DP.WAITING_RESET;
+      }
+
+      async function handleWinAlert(winRoot) {
+          // Защита: если мы уже на странице праздничного сброса — не сбрасываем повторно
+          if (location.href.includes("/neftlenin/holidayreset/")) {
+              addLog("⚠️ Уже на странице праздничного сброса — пропускаю повторный клик");
               return;
           }
 
-          await handlePipeMainPage();
+          // Защита: если бот в ожидании возврата — не обрабатываем победу повторно
+          if (isDoublePassWaiting()) {
+              addLog("⚠️ Ожидание подтверждения возврата — пропускаю повторную обработку победы");
+              return;
+          }
+
+          // Состояние DONE — второй проход завершён
+          if (doublePassState === DP.DONE) {
+              addLog("🏆 Миссия выполнена — остановка (второй проход завершён)");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — бот остановлен");
+              return;
+          }
+
+          // Второе завершение — второй проход прошёл, бот останавливается
+          if (doublePassState === DP.SECOND_IN_PROGRESS) {
+              addLog("🏆 Второй проход завершён — бот останавливается");
+              doublePassState = DP.DONE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.DONE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — второй проход завершён, бот остановлен");
+              return;
+          }
+
+          // Обычное завершение (двойное не включено)
+          if (!doublePassEnabled) {
+              addLog("🏆 Миссия выполнена — остановка (двойное прохождение: выключено)");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — бот остановлен");
+              return;
+          }
+
+          // ─── ПЕРВЫЙ ПРОХОД ЗАВЕРШЁН ───
+          // Проверяем доступность ссылки возврата
+          const resetBtn = document.querySelector('a[href="/neftlenin/holidayreset/"]');
+
+          if (!resetBtn) {
+              addLog("⚠️ Праздничный бонус недоступен — завершаю после первого прохода");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа (бонус недоступен) — бот остановлен");
+              return;
+          }
+
+          // Бонус доступен — выполняем сброс
+          doublePassState = DP.WAITING_RESET;
+          localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.WAITING_RESET));
+          addLog("🔄 Праздничный бонус найден. Возвращаюсь в начало нефтепровода...");
+
+          // Кликаем по кнопке (использует AngryAjax.goToUrl)
+          resetBtn.click();
+          await humanPause(2000, 3500);
+
+          // Подтверждаем переход: победное окно исчезло И появилась труба
+          const winGone = !document.getElementById("neftlenin_alert_win");
+          const pipeBack = document.querySelector(".pipeline-scroll");
+          if (winGone && pipeBack) {
+              doublePassState = DP.SECOND_IN_PROGRESS;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+              addLog("▶️ Переход подтверждён. Второй проход нефтепровода запущен");
+              setStatus("▶️ Второй проход нефтепровода");
+          } else {
+              addLog("⚠️ Переход не подтверждён (winGone=" + winGone + ", pipeBack=" + !!pipeBack + ") — ждём следующего тика");
+              // Состояние WAITING_RESET сохраняется — следующий тик проверит DOM
+          }
       }
 
 
