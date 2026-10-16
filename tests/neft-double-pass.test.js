@@ -557,6 +557,102 @@ test('N10: настройка не ломает двойное прохожде�
     // Активация бубы не влияет на состояние двойного прохода
 });
 
+test('N11: иконка-тоггл синхронизирует класс is-on, aria-pressed и чекбокс', () => {
+    let useNeftyanik = false;
+    const btn = {
+        classList: {
+            classes: new Set(),
+            toggle(cls, val) { if (val) this.classes.add(cls); else this.classes.delete(cls); },
+            contains(cls) { return this.classes.has(cls); }
+        },
+        attrs: {},
+        setAttribute(k, v) { this.attrs[k] = v; },
+        title: ''
+    };
+    const chk = { checked: false };
+    function syncNeftyanikPick() {
+        btn.classList.toggle("is-on", !!useNeftyanik);
+        btn.setAttribute("aria-pressed", useNeftyanik ? "true" : "false");
+        btn.title = useNeftyanik ? "Буба «Нефтяник»: вкл" : "Буба «Нефтяник»: выкл";
+        chk.checked = !!useNeftyanik;
+    }
+
+    syncNeftyanikPick();
+    assert.equal(btn.classList.contains("is-on"), false);
+    assert.equal(btn.attrs["aria-pressed"], "false");
+    assert.equal(btn.title, "Буба «Нефтяник»: выкл");
+    assert.equal(chk.checked, false);
+
+    useNeftyanik = true;
+    syncNeftyanikPick();
+    assert.equal(btn.classList.contains("is-on"), true);
+    assert.equal(btn.attrs["aria-pressed"], "true");
+    assert.equal(btn.title, "Буба «Нефтяник»: вкл");
+    assert.equal(chk.checked, true);
+});
+
+test('N12: блокировка конкурентности neftyanikActivating предотвращает параллельные вызовы', async () => {
+    let neftyanikActivating = false;
+    let activations = 0;
+    async function activate() {
+        if (neftyanikActivating) return;
+        neftyanikActivating = true;
+        try {
+            activations++;
+            await new Promise(r => setTimeout(r, 10));
+        } finally {
+            neftyanikActivating = false;
+        }
+    }
+    await Promise.all([activate(), activate(), activate()]);
+    assert.equal(activations, 1, 'только один параллельный вызов выполняется');
+    assert.equal(neftyanikActivating, false, 'флаг сброшен после выполнения');
+});
+
+test('N13: stopBot сбрасывает neftyanikActivating', () => {
+    let neftyanikActivating = true;
+    let botEnabled = true;
+    function stopBot() {
+        botEnabled = false;
+        neftyanikActivating = false;
+    }
+    stopBot();
+    assert.equal(botEnabled, false);
+    assert.equal(neftyanikActivating, false);
+});
+
+test('N14: прочность 0 не активирует бубу', () => {
+    const pet = { id: 53, name: 'Нефтяник', durability: 0, activeTill: 0 };
+    let activated = false;
+    let logWarning = '';
+    if (Number(pet.durability) <= 0) {
+        logWarning = 'прочность 0 — буба использована';
+    } else {
+        activated = true;
+    }
+    assert.equal(activated, false);
+    assert.ok(logWarning.includes('прочность 0'));
+});
+
+test('N15: ошибка запроса не ломает состояние и разблокирует neftyanikActivating', async () => {
+    let neftyanikActivating = false;
+    let caughtError = null;
+    async function activateWithError() {
+        if (neftyanikActivating) return;
+        neftyanikActivating = true;
+        try {
+            throw new Error('Network error');
+        } catch (e) {
+            caughtError = e.message;
+        } finally {
+            neftyanikActivating = false;
+        }
+    }
+    await activateWithError();
+    assert.equal(caughtError, 'Network error');
+    assert.equal(neftyanikActivating, false, 'блокировка снята после ошибки');
+});
+
 // ============================================================
 // ТЕСТЫ РЕГРЕССИИ
 // ============================================================

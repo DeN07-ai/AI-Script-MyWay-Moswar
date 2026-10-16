@@ -1,3 +1,31 @@
+// ==UserScript==
+// @name         MoswarBot by MY WAY DEN
+// @namespace    MY WAY
+// @version      3.9
+// @author       MyWay DeN
+// @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
+// @match        https://*.moswar.ru/*
+// @match        http://moswar.net/*
+// @match        https://moswar.net/*
+// @match        http://*.moswar.net/*
+// @match        https://*.moswar.net/*
+// @grant        GM_info
+// @grant        GM_xmlhttpRequest
+// @grant        GM_addStyle
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        unsafeWindow
+// @noframes
+// @connect      api.telegram.org
+// @connect      raw.githubusercontent.com
+// @connect      github.com
+// @connect      moskwar.ru
+// @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// ==/UserScript==
+// @ts-nocheck
+
 (function () {
   'use strict';
   // Свой GM_addStyle (грант тоже указан — так TM не ругается на стили)
@@ -1910,8 +1938,8 @@
       white-space: nowrap;
   }
 
-  /* Лабуба Летучик — иконка-тоггл (как DM metro.labubuLetuchik) */
-  .rat-labubu-pick {
+  /* Лабуба Летучик и Буба Нефтяник — иконки-тогглы */
+  .rat-labubu-pick, .neft-labubu-pick {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1922,7 +1950,7 @@
       cursor: pointer;
       vertical-align: middle;
   }
-  .rat-labubu-pick-icon {
+  .rat-labubu-pick-icon, .neft-labubu-pick-icon {
       width: 44px;
       height: 44px;
       border-radius: 50%;
@@ -1936,23 +1964,23 @@
       position: relative;
       overflow: visible;
   }
-  .rat-labubu-pick-icon img {
+  .rat-labubu-pick-icon img, .neft-labubu-pick-icon img {
       width: 70%;
       height: 70%;
       object-fit: contain;
       pointer-events: none;
       filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
   }
-  .rat-labubu-pick:hover .rat-labubu-pick-icon {
+  .rat-labubu-pick:hover .rat-labubu-pick-icon, .neft-labubu-pick:hover .neft-labubu-pick-icon {
       border-color: rgba(255, 255, 255, 0.3);
       background: rgba(255, 255, 255, 0.12);
   }
-  .rat-labubu-pick.is-on .rat-labubu-pick-icon {
+  .rat-labubu-pick.is-on .rat-labubu-pick-icon, .neft-labubu-pick.is-on .neft-labubu-pick-icon {
       background: rgba(255, 236, 200, 0.95);
       border: 2.5px solid #d1945c;
       box-shadow: 0 0 0 3px rgba(209, 148, 92, 0.35), 0 6px 14px rgba(90, 60, 30, 0.2);
   }
-  .rat-labubu-pick.is-on .rat-labubu-pick-icon::before {
+  .rat-labubu-pick.is-on .rat-labubu-pick-icon::before, .neft-labubu-pick.is-on .neft-labubu-pick-icon::before {
       content: '✓';
       position: absolute;
       right: -3px;
@@ -6050,15 +6078,49 @@
       const SAFE_PIPE_SUS = 120; // максимум для безопасного клика “Атаковать” по трубе
 
       // прирост подозрительности (примерно как в игре)
-      const ALERT_ATTACK_COST = 30; // “Напасть”
-      const ALERT_ESCAPE_COST = 15; // “Другой патруль”
+      const ALERT_ATTACK_COST = 30; // "Напасть"
+      const ALERT_ESCAPE_COST = 15; // "Другой патруль"
       let stopAfterBattle = false; // остановка после боя с Лениным
 
-      // настройки режима
-      let useTickets = true;   // снижать подозр партбилетами
-      let useSnickers = true;   // сбрасывать таймер шникерсами
-      let modeFestive = false;  // false = обычный, true = праздничный
-      let normalNeftMin = 1500;  // порог нефти в обычном режиме
+      // защита от повторных кликов по одному и тому же окну патруля
+      let lastAlertId = null;
+      let lastAlertActionTime = 0;
+      const ALERT_COOLDOWN_MS = 5000; // ждём результат перед повторной попыткой
+
+      // двойное прохождение через праздничный бонус
+      let doublePassEnabled = false;
+      let doublePassState = 0;
+      const DOUBLE_PASS_LS_KEY = "neftbot-doublePassEnabled";
+      const DOUBLE_PASS_STATE_LS_KEY = "neftbot-doublePassState";
+
+       // Состояния машины двойного прохождения
+       const DP = { IDLE: 0, FIRST_DONE: 1, WAITING_RESET: 2, SECOND_IN_PROGRESS: 3, DONE: 4 };
+
+       // cooldown после клика по трубе: не ищем элементы, пока страница загружается
+       let pageTransitionAt = 0;
+       const PAGE_TRANSITION_WAIT_MS = 3000;
+
+       // диагностика ожидания возврата (WAITING_RESET)
+       let waitingResetSince = 0;
+       let waitingResetLastDiag = 0;
+
+       // настройки режима
+       let useTickets = true;   // снижать подозр партбилетами
+       let useSnickers = true;   // сбрасывать таймер шникерсами
+       let useNeftyanik = false; // использовать бубу «Нефтяник»
+
+       function syncNeftyanikPick() {
+           const btn = document.getElementById("neft-labubu-neftyanik");
+           if (btn) {
+               btn.classList.toggle("is-on", !!useNeftyanik);
+               btn.setAttribute("aria-pressed", useNeftyanik ? "true" : "false");
+               btn.title = useNeftyanik ? "Буба «Нефтяник»: вкл" : "Буба «Нефтяник»: выкл";
+           }
+           const chk = document.getElementById("neft-use-neftyanik");
+           if (chk) chk.checked = !!useNeftyanik;
+       }
+       let modeFestive = false;  // false = обычный, true = праздничный
+       let normalNeftMin = 1500;  // порог нефти в обычном режиме
 
       // акционный режим
       let neftActionDropType = 'iskr'; // iskr | puli | sneg | meld
@@ -6075,11 +6137,13 @@
           localStorage.setItem("neftbot-paused", botPaused ? "1" : "0");
           localStorage.setItem("neftbot-useTickets", useTickets ? "1" : "0");
           localStorage.setItem("neftbot-useSnickers", useSnickers ? "1" : "0");
+          localStorage.setItem("neftbot-useNeftyanik", useNeftyanik ? "1" : "0");
           localStorage.setItem("neftbot-modeFestive", modeFestive ? "1" : "0");
           localStorage.setItem("neftbot-normalNeftMin", String(normalNeftMin));
           localStorage.setItem("neftbot-actionDropType", neftActionDropType);
           localStorage.setItem("neftbot-actionDropMin", String(neftActionDropMin));
           localStorage.setItem("neftbot-dropPct", String(dropPctFromMax));
+          localStorage.setItem(DOUBLE_PASS_LS_KEY, doublePassEnabled ? "1" : "0");
       }
 
       function restoreFlags() {
@@ -6087,7 +6151,17 @@
           botPaused = localStorage.getItem("neftbot-paused") === "1";
           useTickets = localStorage.getItem("neftbot-useTickets") !== "0";
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
+          useNeftyanik = localStorage.getItem("neftbot-useNeftyanik") === "1";
+          syncNeftyanikPick();
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
+          doublePassEnabled = localStorage.getItem(DOUBLE_PASS_LS_KEY) === "1";
+
+          // Восстановление состояния двойного прохода (переживает перезагрузку)
+          const dps = parseInt(localStorage.getItem(DOUBLE_PASS_STATE_LS_KEY) || "0", 10);
+          doublePassState = (!isNaN(dps) && dps >= 0 && dps <= DP.DONE) ? dps : DP.IDLE;
+          if (doublePassState === DP.WAITING_RESET && waitingResetSince === 0) {
+              waitingResetSince = Date.now(); // при восстановлении — отсчёт с момента загрузки
+          }
 
           const pct = parseInt(localStorage.getItem("neftbot-dropPct") || "100", 10);
           if (!isNaN(pct) && pct >= 1 && pct <= 100) dropPctFromMax = pct;
@@ -6127,39 +6201,51 @@
       Нефть ≥ <input id="neft-normal-min" type="number" min="0" step="100" class="mw-input" style="width:70px;">
     </div>
 
-    <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.04);">
-      <div style="font-weight:700;margin-bottom:6px;">Акционный дроп</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <select id="neft-action-drop-type" class="mw-input" style="flex:1; min-width:165px;">
-          <option value="iskr">✨ Искры</option>
-          <option value="puli">🔫 Пули</option>
-          <option value="sneg">❄ Снежинки</option>
-          <option value="meld">💊 Мельдоний</option>
-        </select>
-        <input id="neft-action-drop-min" type="number" min="0" step="1" class="mw-input" style="width:84px;" placeholder="мин">
+       <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.04);">
+         <div style="font-weight:700;margin-bottom:6px;">Акционный дроп</div>
+         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+           <select id="neft-action-drop-type" class="mw-input" style="flex:1; min-width:165px;">
+             <option value="iskr">✨ Искры</option>
+             <option value="puli">🔫 Пули</option>
+             <option value="sneg">❄ Снежинки</option>
+             <option value="meld">💊 Мельдоний</option>
+           </select>
+           <input id="neft-action-drop-min" type="number" min="0" step="1" class="mw-input" style="width:84px;" placeholder="мин">
+         </div>
+       </div>
+
+        <div style="margin-bottom:10px;">
+          <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
+            <option value="10">10%</option>
+            <option value="20">20%</option>
+            <option value="30">30%</option>
+            <option value="40">40%</option>
+            <option value="50">50%</option>
+            <option value="60">60%</option>
+            <option value="70">70%</option>
+            <option value="80">80%</option>
+            <option value="90">90%</option>
+            <option value="100">100%</option>
+          </select></label><br>
+          <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
+        </div>
+
+       <div style="margin-bottom:10px;">
+         <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
+         <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
+         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+           <button type="button" id="neft-labubu-neftyanik" class="neft-labubu-pick" title="Буба «Нефтяник»: выкл" aria-pressed="false" aria-label="Буба «Нефтяник»">
+             <span class="neft-labubu-pick-icon"><img src="/@/images/loc/buba/bubas/53.png" alt="Нефтяник"></span>
+           </button>
+           <span style="font-size:12px;opacity:0.9;">Буба «Нефтяник» (1ч без партбилетов)</span>
+           <input type="checkbox" id="neft-use-neftyanik" style="display:none;">
+         </div>
+       </div>
+
+      <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,200,0,0.2);">
+        <label><input type="checkbox" id="neft-double-pass"> <img src="/@/images/s/may2014/x2.png" style="width:16px;vertical-align:middle;"> Двойное прохождение нефтепровода</label>
+        <div style="font-size:10px;opacity:0.6;margin-top:4px;">После победы — вернуться в начало и победить Ленина ещё раз (если доступен праздничный бонус)</div>
       </div>
-    </div>
-
-     <div style="margin-bottom:10px;">
-       <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
-         <option value="10">10%</option>
-         <option value="20">20%</option>
-         <option value="30">30%</option>
-         <option value="40">40%</option>
-         <option value="50">50%</option>
-         <option value="60">60%</option>
-         <option value="70">70%</option>
-         <option value="80">80%</option>
-         <option value="90">90%</option>
-         <option value="100">100%</option>
-       </select></label><br>
-       <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
-     </div>
-
-     <div style="margin-bottom:10px;">
-       <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-       <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
-     </div>
 
     <div style="margin-bottom:10px;">
       <b>Статус:</b> <span id="neftbot-status">ожидание…</span><br>
@@ -6201,18 +6287,20 @@
           document.getElementById("neftbot-stop").onclick = stopBot;
 
           /* --- элементы настроек --- */
-          const chkTickets = document.getElementById("neft-use-tickets");
-          const chkSnickers = document.getElementById("neft-use-snickers");
-          const selDropPct = document.getElementById("neft-drop-pct");
+           const chkTickets = document.getElementById("neft-use-tickets");
+           const chkSnickers = document.getElementById("neft-use-snickers");
+           const chkNeftyanik = document.getElementById("neft-use-neftyanik");
+           const selDropPct = document.getElementById("neft-drop-pct");
           const rNormal = document.getElementById("neft-mode-normal");
           const rFestive = document.getElementById("neft-mode-festive");
           const inpNeftMin = document.getElementById("neft-normal-min");
           const selActionDrop = document.getElementById("neft-action-drop-type");
           const inpActionMin = document.getElementById("neft-action-drop-min");
 
-          chkTickets.checked = useTickets;
-          chkSnickers.checked = useSnickers;
-          if (selDropPct) {
+           chkTickets.checked = useTickets;
+           chkSnickers.checked = useSnickers;
+           if (chkNeftyanik) chkNeftyanik.checked = useNeftyanik;
+           if (selDropPct) {
               let pv = dropPctFromMax;
               if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
               selDropPct.value = String(pv);
@@ -6229,11 +6317,39 @@
               saveFlags();
               addLog("Партбилеты: " + (useTickets ? "ON" : "OFF"));
           };
-          chkSnickers.onchange = () => {
-              useSnickers = chkSnickers.checked;
-              saveFlags();
-              addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
-          };
+            chkSnickers.onchange = () => {
+                useSnickers = chkSnickers.checked;
+                saveFlags();
+                addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
+            };
+            const btnNeftyanik = document.getElementById("neft-labubu-neftyanik");
+            syncNeftyanikPick();
+
+            if (btnNeftyanik) {
+                btnNeftyanik.onclick = () => {
+                    useNeftyanik = !useNeftyanik;
+                    syncNeftyanikPick();
+                    saveFlags();
+                    addLog("Буба «Нефтяник»: " + (useNeftyanik ? "ВКЛ" : "ВЫКЛ"));
+                };
+            }
+            if (chkNeftyanik) {
+                chkNeftyanik.onchange = () => {
+                    useNeftyanik = chkNeftyanik.checked;
+                    syncNeftyanikPick();
+                    saveFlags();
+                    addLog("Буба «Нефтяник»: " + (useNeftyanik ? "ВКЛ" : "ВЫКЛ"));
+                };
+            }
+            const chkDoublePass = document.getElementById("neft-double-pass");
+           if (chkDoublePass) {
+               chkDoublePass.checked = doublePassEnabled;
+               chkDoublePass.onchange = () => {
+                   doublePassEnabled = chkDoublePass.checked;
+                   saveFlags();
+                   addLog("Двойное прохождение: " + (doublePassEnabled ? "ВКЛ" : "ВЫКЛ"));
+               };
+           }
           if (selDropPct) selDropPct.onchange = () => {
               const v = parseInt(selDropPct.value, 10);
               dropPctFromMax = isNaN(v) ? 100 : Math.min(100, Math.max(1, v));
@@ -6285,6 +6401,7 @@
       /* ========================= UI ОБНОВЛЕНИЕ ========================= */
 
       function updateButtonsVisual() {
+          syncNeftyanikPick();
           const bStart = document.getElementById("neftbot-start");
           const bPause = document.getElementById("neftbot-pause");
           if (!bStart || !bPause) return;
@@ -6315,16 +6432,18 @@
       /* ========================= УПРАВЛЕНИЕ БОТОМ ========================= */
 
       function startBot() {
-          botEnabled = true;
-          botPaused = false;
-          stopAfterBattle = false;
-          saveFlags();
-          updateButtonsVisual();
-          setStatus("▶ Старт");
-          Utils.reportToCreator('Neft', 'Started');
-          MoswarLib.events.emit('module:status', { id: 'neft', status: 'started' });
-          ModuleSessionRegistry.restartIntervals('neft');
-      }
+           botEnabled = true;
+           botPaused = false;
+           stopAfterBattle = false;
+           lastAlertId = null;
+           lastAlertActionTime = 0;
+           saveFlags();
+           updateButtonsVisual();
+           setStatus("▶ Старт");
+           Utils.reportToCreator('Neft', 'Started');
+           MoswarLib.events.emit('module:status', { id: 'neft', status: 'started' });
+           ModuleSessionRegistry.restartIntervals('neft');
+       }
       function togglePause() {
           if (!botEnabled) return;
           botPaused = !botPaused;
@@ -6334,16 +6453,24 @@
           Utils.reportToCreator('Neft', botPaused ? 'Paused' : 'Resumed');
       }
       function stopBot() {
-          botEnabled = false;
-          botPaused = false;
-          stopAfterBattle = false;
-          saveFlags();
-          updateButtonsVisual();
-          setStatus("⏹ Стоп");
-          ModuleSessionRegistry.clearIntervals('neft');
-          Utils.reportToCreator('Neft', 'Stopped');
-          MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
-      }
+           botEnabled = false;
+           botPaused = false;
+           stopAfterBattle = false;
+           neftyanikActivating = false;
+           // Сбрасываем состояние только если переход не был начат.
+           // Если бот в ожидании подтверждения возврата — сохраняем состояние
+           // для корректного завершения после перезагрузки.
+           if (doublePassState === DP.IDLE || doublePassState === DP.DONE) {
+               doublePassState = DP.IDLE;
+               localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+           }
+           saveFlags();
+           updateButtonsVisual();
+           setStatus("⏹ Стоп");
+           ModuleSessionRegistry.clearIntervals('neft');
+           Utils.reportToCreator('Neft', 'Stopped');
+           MoswarLib.events.emit('module:status', { id: 'neft', status: 'stopped' });
+       }
 
       ModuleSessionRegistry.register('neft', {
           onAbort: () => stopBot(),
@@ -6377,11 +6504,13 @@
           return isNaN(v) ? null : v;
       }
 
-      async function ensureSuspicionForDelta(delta) {
-          if (!useTickets) return;
-          let sus = getGlobalSuspicion();
-          if (sus == null) return;
-          updateSuspicionUI(sus);
+       async function ensureSuspicionForDelta(delta) {
+           if (!useTickets) return;
+           // Если буба «Нефтяник» включена и активна — партбилеты не нужны
+           if (useNeftyanik && isNeftyanikActive()) return;
+           let sus = getGlobalSuspicion();
+           if (sus == null) return;
+           updateSuspicionUI(sus);
 
           let tries = 0;
           while (sus + delta > MAX_SUSPICION && tries < 5) {
@@ -6486,6 +6615,17 @@
       async function handleAttackAlert(alertRoot) {
           if (!alertRoot) return;
 
+          const alertId = alertRoot.id || "unknown";
+
+          // Защита от повторных кликов: если тот же алерт обработан недавно — ждём
+          if (lastAlertId === alertId && (Date.now() - lastAlertActionTime) < ALERT_COOLDOWN_MS) {
+              return; // ждём результат предыдущего действия
+          }
+          // Если алерт тот же, но прошло достаточно времени — сбрасываем и разрешаем повтор
+          if (lastAlertId === alertId) {
+              lastAlertId = null; // новый тик — считаем как новое окно
+          }
+
           const neft = getAwardNeft(alertRoot);
           const countsFest = getFestiveCounts(alertRoot);
 
@@ -6549,17 +6689,29 @@
           if (doAttack) {
               await ensureSuspicionForDelta(ALERT_ATTACK_COST);
               btnAttack.click();
+              lastAlertId = alertId; // фиксируем: это окно уже обработано
+              lastAlertActionTime = Date.now();
               setStatus('Жму "Напасть" (окно патруля)');
               await humanPause(1500, 3000);
 
-              // если это Ленин и обычный режим — остановимся после боя
+              // если это Ленин и обычный режим — определяем поведение после боя
               if (alertRoot.id === "neftlenin_alert_b" && !modeFestive) {
-                  stopAfterBattle = true;
-                  addLog("Финальный бой с Лениным (обычный режим) → после боя бот остановится");
+                  // При двойном прохождении НЕ останавливаемся после боя —
+                  // нужно выйти на страницу нефтепровода и увидеть блок "Миссия выполнена".
+                  // Завершение произойдёт в handleWinAlert.
+                  if (doublePassEnabled) {
+                      addLog("Финальный бой с Лениным (двойной режим, проход " +
+                          (doublePassState === 0 ? "1" : "2") + ") → после боя жду блок победы");
+                  } else {
+                      stopAfterBattle = true;
+                      addLog("Финальный бой с Лениным (обычный режим) → после боя бот остановится");
+                  }
               }
           } else {
               await ensureSuspicionForDelta(ALERT_ESCAPE_COST);
               btnEscape.click();
+              lastAlertId = alertId; // фиксируем: это окно уже обработано
+              lastAlertActionTime = Date.now();
               setStatus('Жму "Другой патруль"');
               await humanPause(1500, 3000);
           }
@@ -6630,71 +6782,78 @@
       }
 
       async function handleNegotiations() {
-          const root = getMissionRoot();
-          if (!root) return;
+           const root = getMissionRoot();
+           if (!root) return;
 
-          const stepInfo = getMissionActiveStep(root);
-          const enemyDice = getMissionEnemyDice(root);
-          const winCost = getMissionWinCost(root);
-          const escapeCost = getMissionEscapeCost(root);
+           const stepInfo = getMissionActiveStep(root);
+           const enemyDice = getMissionEnemyDice(root);
+           const winCost = getMissionWinCost(root);
+           const escapeCost = getMissionEscapeCost(root);
 
-          const btnPlay = root.querySelector(".step-block.active .action button.button") ||
-              (stepInfo ? stepInfo.el.querySelector("button.button") : null);
-          const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
-              root.querySelector(".actions button.button .price_escape")?.closest("button") ||
-              root.querySelector(".actions button.button");
+           const btnPlay = root.querySelector(".step-block.active .action button.button") ||
+               (stepInfo ? stepInfo.el.querySelector("button.button") : null);
+           const btnLeave = root.querySelector(".actions button.button[onclick*='NeftLenin.nextStep']") ||
+               root.querySelector(".actions button.button .price_escape")?.closest("button") ||
+               root.querySelector(".actions button.button");
 
-          const sus = getGlobalSuspicion();
-          updateSuspicionUI(sus);
-          updateTicketsUI(getTicketsCount());
+           const sus = getGlobalSuspicion();
+           updateSuspicionUI(sus);
+           updateTicketsUI(getTicketsCount());
 
-          if (enemyDice == null || !stepInfo) {
-              addLog("Переговоры: кубик охранника или шаг не определены, жду…");
-              return;
-          }
+           if (enemyDice == null || !stepInfo) {
+               // Страница ещё загружается или DOM не обновился после SPA-навигации.
+               // Логируем не чаще раза в 5 секунд, чтобы не засорять лог.
+               const now = Date.now();
+               if (now - (handleNegotiations._lastWaitLog || 0) > 5000) {
+                   addLog("Переговоры: кубик/шаг не определены, жду загрузки…");
+                   handleNegotiations._lastWaitLog = now;
+               }
+               return;
+           }
 
-          const stepNum = stepInfo.num;
+           const stepNum = stepInfo.num;
 
-          // Логика по требованию:
-          // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
-          // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
-          // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
+           // Логика по требованию:
+           // 1) Кубик = 1 → всегда играем (если кнопка Play видна)
+           // 2) Кубик = 2-6 → сбегаем (кнопка "Уйти")
+           // 3) Если кубик=1, но нужно сбежать по условиям (шаг1 или шаг2-3 с winCost>100) → сбегаем
 
-          // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
-          const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
+           // Сначала проверяем, нужно ли сбежать (даже если кубик=1)
+           const shouldLeave = (stepNum === 1) || ((stepNum === 2 || stepNum === 3) && winCost > 100);
 
-          if (shouldLeave) {
-              if (btnLeave && isVisible(btnLeave)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
-                  await ensureSuspicionForDelta(escapeCost);
-                  btnLeave.click();
-                  setStatus("Переговоры: уйти от охраны");
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
-              }
-          } else if (enemyDice === 1) {
-              // Кубик = 1, сбежать не нужно → играем
-              if (btnPlay && isVisible(btnPlay)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
-                  btnPlay.click();
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
-              }
-          } else if (enemyDice >= 2 && enemyDice <= 6) {
-              // Кубик = 2-6 → сбегаем
-              if (btnLeave && isVisible(btnLeave)) {
-                  addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
-                  await ensureSuspicionForDelta(escapeCost);
-                  btnLeave.click();
-                  setStatus("Переговоры: уйти от охраны");
-                  await humanPause(1500, 3000);
-              } else {
-                  addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
-              }
-          }
-      }
+           if (shouldLeave) {
+               if (btnLeave && isVisible(btnLeave)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → ухожу, escapeCost=" + escapeCost);
+                   await ensureSuspicionForDelta(escapeCost);
+                   btnLeave.click();
+                   setStatus("Переговоры: уйти от охраны");
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: нужно уйти, но кнопка побега не найдена/скрыта");
+               }
+           } else if (enemyDice === 1) {
+               // Кубик = 1, сбежать не нужно → играем
+               if (btnPlay && isVisible(btnPlay)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " winCost=" + winCost + " → играю");
+                   btnPlay.click();
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: кубик=1, но кнопка действия не найдена/скрыта");
+               }
+           } else if (enemyDice >= 2 && enemyDice <= 6) {
+               // Кубик = 2-6 → сбегаем
+               if (btnLeave && isVisible(btnLeave)) {
+                   addLog("Переговоры: кубик=" + enemyDice + " шаг=" + stepNum + " → ухожу, escapeCost=" + escapeCost);
+                   await ensureSuspicionForDelta(escapeCost);
+                   btnLeave.click();
+                   setStatus("Переговоры: уйти от охраны");
+                   await humanPause(1500, 3000);
+               } else {
+                   addLog("Переговоры: кубик=" + enemyDice + ", но кнопка побега не найдена/скрыта");
+               }
+           }
+       }
+       handleNegotiations._lastWaitLog = 0;
 
       /* ========================= ПРЕ-МИССИЯ ========================= */
 
@@ -6815,12 +6974,106 @@
           }
       }
 
-      /* ========================= ГЛАВНАЯ СТРАНИЦА НЕФТЕПРОВОДА ========================= */
+       /* ========================= БУБА «НЕФТЯНИК» ========================= */
+
+       // Кэш активности бубы: activeTill (unix сек) и время последней проверки
+       let neftyanikActiveTill = 0;
+       let neftyanikCheckedAt = 0;
+       let neftyanikActivating = false;
+       const NEFTYANIK_CACHE_TTL_MS = 120000; // обновлять кэш каждые 2 минуты
+
+       // Простая синхронная проверка: активна ли буба сейчас (по кэшу)
+       function isNeftyanikActive() {
+           if (!useNeftyanik) return false;
+           if (neftyanikActiveTill === 0) return false;
+           const nowSec = Math.floor(Date.now() / 1000);
+           return neftyanikActiveTill > nowSec;
+       }
+
+       // Активация бубы «Нефтяник» из инвентаря Labubu
+       // По аналогии с Лабуба Летучик: fetch /labubu/, парсим items, ищем по имени
+       async function activateNeftyanikIfReady() {
+           if (!useNeftyanik) return;
+           if (neftyanikActivating) return;
+           // Обновляем кэш не чаще раза в NEFTYANIK_CACHE_TTL_MS
+           const nowMs = Date.now();
+           if (neftyanikCheckedAt > 0 && (nowMs - neftyanikCheckedAt) < NEFTYANIK_CACHE_TTL_MS && isNeftyanikActive()) {
+               return; // буба ещё активна по кэшу — не дёргаем сервер
+           }
+           neftyanikActivating = true;
+           try {
+               const lr = await fetch('/labubu/', { credentials: 'include' });
+               const lhtml = await lr.text();
+               // Получаем serverTime из HTML
+               const timeMatch = lhtml.match(/id="servertime"[^>]*rel="(\d+)"/);
+               const now = timeMatch ? parseInt(timeMatch[1], 10) : Math.floor(Date.now() / 1000);
+               // Парсим items
+               let items = [];
+               const im = lhtml.match(/items\s*:\s*(\[\s*\{[\s\S]+?\}\s*\])/);
+               if (im) { try { items = new Function('return ' + im[1])(); } catch (_) {} }
+               // Ищем «Нефтяник» по имени
+               const pet = (items || []).find(it => {
+                   const n = String(it && it.name || '').toLowerCase();
+                   return n.includes('нефтяник') || (n.includes('нефт') && n.includes('ня'));
+               });
+               if (!pet) {
+                   // Лог один раз за тик, если бубы нет
+                   if (!activateNeftyanikIfReady._logged) {
+                       addLog('Буба «Нефтяник»: предмет не найден в инвентаре Labubu', 'warn');
+                       activateNeftyanikIfReady._logged = true;
+                   }
+                   return;
+               }
+               // Сбрасываем флаг «уже логировал» при каждом новом тике
+               activateNeftyanikIfReady._logged = false;
+               // Проверяем: активна ли уже?
+               if (pet.activeTill && pet.activeTill > now) {
+                   neftyanikActiveTill = pet.activeTill;
+                   neftyanikCheckedAt = nowMs;
+                   addLog('Буба «Нефтяник» уже активна (до ' + new Date(pet.activeTill * 1000).toLocaleTimeString() + ')');
+                   return;
+               }
+               // Нет прочности — буба использована
+               if (Number(pet.durability) <= 0) {
+                   addLog('Буба «Нефтяник»: прочность 0 — буба использована', 'warn');
+                   return;
+               }
+               // Активируем
+               const body = new URLSearchParams({ action: 'activate', code: String(pet.id), ajax: '1', __ajax: '1', standard_ajax: '1' });
+               const ar = await fetch('/labubu/', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+                   body: body.toString(),
+                   credentials: 'include'
+               });
+               if (ar.ok) {
+                   // Устанавливаем кэш: 1 час от текущего времени (по описанию пользователя)
+                   neftyanikActiveTill = now + 3600;
+                   neftyanikCheckedAt = nowMs;
+                   addLog('Буба «Нефтяник»: активирована (id=' + pet.id + ', dur=' + pet.durability + ')');
+                   await humanPause(800, 1400);
+               } else {
+                   addLog('Буба «Нефтяник»: активация отклонена сервером (' + ar.status + ')', 'warn');
+               }
+           } catch (e) {
+               addLog('Буба «Нефтяник»: ошибка проверки/активации — ' + (e && e.message ? e.message : e), 'warn');
+           } finally {
+               neftyanikActivating = false;
+           }
+       }
+       activateNeftyanikIfReady._logged = false;
+
+       /* ========================= ГЛАВНАЯ СТРАНИЦА НЕФТЕПРОВОДА ========================= */
 
       async function handlePipeMainPage() {
-          // сначала обрабатываем возможную ошибку “слишком часто дергаетесь”
+          // сначала обрабатываем возможную ошибку "слишком часто дергаетесь"
           if (handleTooOftenAlert()) {
               return;
+          }
+
+          // Активация бубы «Нефтяник» — проверяем раз в тик, если включена
+          if (useNeftyanik) {
+              await activateNeftyanikIfReady();
           }
 
           // не кликаем, если недавно была такая ошибка
@@ -6852,26 +7105,71 @@
               updateSuspicionUI(sus);
           }
 
-          const btn = document.querySelector(".pipeline-scroll .enemy-place button.button[onclick*='NeftLenin.viewPrize']") ||
-              document.querySelector(".pipeline-scroll .enemy-place .action button.button");
-          if (btn) {
-              btn.click();
-              setStatus('Жму "Атаковать" на трубе');
-              await humanPause(1500, 3000);
-          } else {
-              addLog("На трубе не найдено окно врага для атаки");
-          }
+           const btn = document.querySelector(".pipeline-scroll .enemy-place button.button[onclick*='NeftLenin.viewPrize']") ||
+               document.querySelector(".pipeline-scroll .enemy-place .action button.button");
+           if (btn) {
+               btn.click();
+               pageTransitionAt = Date.now(); // запоминаем момент клика — следующая проверка подождёт
+               setStatus('Жму "Атаковать" на трубе');
+               await humanPause(1500, 3000);
+           } else {
+               addLog("На трубе не найдено окно врага для атаки");
+           }
       }
 
       /* ========================= ОБРАБОТКА СТРАНИЦЫ НЕФТЕПРОВОДА ========================= */
 
       async function handleNeftPage() {
+          // Cooldown: сразу после клика по трубе не проверяем элементы — страница загружается
+          if (pageTransitionAt && (Date.now() - pageTransitionAt < PAGE_TRANSITION_WAIT_MS)) {
+              return;
+          }
+          pageTransitionAt = 0; // сброс cooldown после истечения
+
+          // ─── ПРОВЕРКА: ожидание подтверждения возврата ───
+          if (isDoublePassWaiting()) {
+              // Исправление: проверяем ВИДИМОСТЬ (overlay скрыт CSS), а не существование элемента.
+              // AngryAjax прячет оверлеи через CSS без удаления из DOM.
+              const winEl = document.getElementById("neftlenin_alert_win");
+              const winGone = !winEl || !isVisible(winEl);
+              const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
+              if (winGone && pipeBack) {
+                  doublePassState = DP.SECOND_IN_PROGRESS;
+                  localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+                  waitingResetSince = 0;
+                  addLog("▶️ Переход подтверждён (проверка в тике). Второй проход запущен");
+                  setStatus("▶️ Второй проход нефтепровода");
+                  // НЕ возвращаемся — продолжаем обычный цикл этого тика
+              } else {
+                  // Диагностика: почему ещё не подтверждено
+                  const now = Date.now();
+                  if (waitingResetSince > 0 && (now - waitingResetSince) > 30000 &&
+                      (now - waitingResetLastDiag) > 15000) {
+                      waitingResetLastDiag = now;
+                      const winVisible = winEl && isVisible(winEl);
+                      addLog("⏳ Ожидание возврата: winGone=" + winGone +
+                          ", winVisible=" + !!winVisible +
+                          ", pipeBack=" + !!pipeBack + " — жду изменения DOM");
+                  }
+                  return; // всё ещё ждём подтверждения
+              }
+          }
+
+          // ─── 1. ПОБЕДА — максимальный приоритет, проверяем до любых патрулей ───
+          const winAlert = document.getElementById("neftlenin_alert_win");
+          if (winAlert && isVisible(winAlert)) {
+              await handleWinAlert(winAlert);
+              return;
+          }
+
+          // ─── 2. МИНИ-ИГРА (переговоры) ───
           const missionRoot = getMissionRoot();
           if (missionRoot) {
               await handleNegotiations();
               return;
           }
 
+          // ─── 3. ПРЕ-МИССИЯ ───
           const premFirst = document.getElementById("neftlenin_alert_prem_first");
           const prem = document.getElementById("neftlenin_alert_prem");
           if ((premFirst && isVisible(premFirst)) || (prem && isVisible(prem))) {
@@ -6879,6 +7177,7 @@
               return;
           }
 
+          // ─── 4. ПАТРУЛИ (атака / другой патруль) ───
           const alertD = document.getElementById("neftlenin_alert_d");
           if (alertD && isVisible(alertD)) {
               await handleAttackAlert(alertD);
@@ -6895,13 +7194,112 @@
               return;
           }
 
-          const winAlert = document.getElementById("neftlenin_alert_win");
-          if (winAlert && isVisible(winAlert)) {
-              addLog("Миссия выполнена — жду следующего шага");
+          // ─── 5. ОСНОВНАЯ СТРАНИЦА (труба) ───
+          await handlePipeMainPage();
+      }
+
+      /* ========================= ПОБЕДА И ДВОЙНОЕ ПРОХОЖДЕНИЕ ========================= */
+
+      function isDoublePassWaiting() {
+          return doublePassState === DP.WAITING_RESET;
+      }
+
+      async function handleWinAlert(winRoot) {
+          // Защита: если мы уже на странице праздничного сброса — не сбрасываем повторно
+          if (location.href.includes("/neftlenin/holidayreset/")) {
+              addLog("⚠️ Уже на странице праздничного сброса — пропускаю повторный клик");
               return;
           }
 
-          await handlePipeMainPage();
+          // Защита: если бот в ожидании возврата — не обрабатываем победу повторно
+          if (isDoublePassWaiting()) {
+              addLog("⚠️ Ожидание подтверждения возврата — пропускаю повторную обработку победы");
+              return;
+          }
+
+          // Состояние DONE — второй проход завершён
+          if (doublePassState === DP.DONE) {
+              addLog("🏆 Миссия выполнена — остановка (второй проход завершён)");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — бот остановлен");
+              return;
+          }
+
+          // Второе завершение — второй проход прошёл, бот останавливается
+          if (doublePassState === DP.SECOND_IN_PROGRESS) {
+              addLog("🏆 Второй проход завершён — бот останавливается");
+              doublePassState = DP.DONE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.DONE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — второй проход завершён, бот остановлен");
+              return;
+          }
+
+          // Обычное завершение (двойное не включено)
+          if (!doublePassEnabled) {
+              addLog("🏆 Миссия выполнена — остановка (двойное прохождение: выключено)");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа над Лениным — бот остановлен");
+              return;
+          }
+
+          // ─── ПЕРВЫЙ ПРОХОД ЗАВЕРШЁН ───
+          // Проверяем доступность ссылки возврата
+          const resetBtn = document.querySelector('a[href="/neftlenin/holidayreset/"]');
+
+          if (!resetBtn) {
+              addLog("⚠️ Праздничный бонус недоступен — завершаю после первого прохода");
+              doublePassState = DP.IDLE;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.IDLE));
+              botEnabled = false;
+              botPaused = false;
+              stopAfterBattle = false;
+              saveFlags();
+              updateButtonsVisual();
+              setStatus("🏆 Победа (бонус недоступен) — бот остановлен");
+              return;
+          }
+
+          // Бонус доступен — выполняем сброс
+          doublePassState = DP.WAITING_RESET;
+          waitingResetSince = Date.now();
+          localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.WAITING_RESET));
+          addLog("🔄 Праздничный бонус найден. Возвращаюсь в начало нефтепровода...");
+
+          // Кликаем по кнопке (использует AngryAjax.goToUrl)
+          resetBtn.click();
+          await humanPause(2000, 3500);
+
+          // Подтверждаем переход: победное окно НЕВИДИМО И появилась труба
+          const winEl = document.getElementById("neftlenin_alert_win");
+          const winGone = !winEl || !isVisible(winEl);
+          const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
+          if (winGone && pipeBack) {
+              doublePassState = DP.SECOND_IN_PROGRESS;
+              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+              waitingResetSince = 0;
+              addLog("▶️ Переход подтверждён. Второй проход нефтепровода запущен");
+              setStatus("▶️ Второй проход нефтепровода");
+          } else {
+              addLog("⚠️ Переход не подтверждён (winGone=" + winGone + ", pipeBack=" + !!pipeBack + ") — ждём следующего тика");
+              // Состояние WAITING_RESET сохраняется — следующий тик проверит DOM
+          }
       }
 
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.8
+// @version      3.9
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -1938,8 +1938,8 @@
       white-space: nowrap;
   }
 
-  /* Лабуба Летучик — иконка-тоггл (как DM metro.labubuLetuchik) */
-  .rat-labubu-pick {
+  /* Лабуба Летучик и Буба Нефтяник — иконки-тогглы */
+  .rat-labubu-pick, .neft-labubu-pick {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1950,7 +1950,7 @@
       cursor: pointer;
       vertical-align: middle;
   }
-  .rat-labubu-pick-icon {
+  .rat-labubu-pick-icon, .neft-labubu-pick-icon {
       width: 44px;
       height: 44px;
       border-radius: 50%;
@@ -1964,23 +1964,23 @@
       position: relative;
       overflow: visible;
   }
-  .rat-labubu-pick-icon img {
+  .rat-labubu-pick-icon img, .neft-labubu-pick-icon img {
       width: 70%;
       height: 70%;
       object-fit: contain;
       pointer-events: none;
       filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
   }
-  .rat-labubu-pick:hover .rat-labubu-pick-icon {
+  .rat-labubu-pick:hover .rat-labubu-pick-icon, .neft-labubu-pick:hover .neft-labubu-pick-icon {
       border-color: rgba(255, 255, 255, 0.3);
       background: rgba(255, 255, 255, 0.12);
   }
-  .rat-labubu-pick.is-on .rat-labubu-pick-icon {
+  .rat-labubu-pick.is-on .rat-labubu-pick-icon, .neft-labubu-pick.is-on .neft-labubu-pick-icon {
       background: rgba(255, 236, 200, 0.95);
       border: 2.5px solid #d1945c;
       box-shadow: 0 0 0 3px rgba(209, 148, 92, 0.35), 0 6px 14px rgba(90, 60, 30, 0.2);
   }
-  .rat-labubu-pick.is-on .rat-labubu-pick-icon::before {
+  .rat-labubu-pick.is-on .rat-labubu-pick-icon::before, .neft-labubu-pick.is-on .neft-labubu-pick-icon::before {
       content: '✓';
       position: absolute;
       right: -3px;
@@ -6108,6 +6108,17 @@
        let useTickets = true;   // снижать подозр партбилетами
        let useSnickers = true;   // сбрасывать таймер шникерсами
        let useNeftyanik = false; // использовать бубу «Нефтяник»
+
+       function syncNeftyanikPick() {
+           const btn = document.getElementById("neft-labubu-neftyanik");
+           if (btn) {
+               btn.classList.toggle("is-on", !!useNeftyanik);
+               btn.setAttribute("aria-pressed", useNeftyanik ? "true" : "false");
+               btn.title = useNeftyanik ? "Буба «Нефтяник»: вкл" : "Буба «Нефтяник»: выкл";
+           }
+           const chk = document.getElementById("neft-use-neftyanik");
+           if (chk) chk.checked = !!useNeftyanik;
+       }
        let modeFestive = false;  // false = обычный, true = праздничный
        let normalNeftMin = 1500;  // порог нефти в обычном режиме
 
@@ -6141,6 +6152,7 @@
           useTickets = localStorage.getItem("neftbot-useTickets") !== "0";
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
           useNeftyanik = localStorage.getItem("neftbot-useNeftyanik") === "1";
+          syncNeftyanikPick();
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
           doublePassEnabled = localStorage.getItem(DOUBLE_PASS_LS_KEY) === "1";
 
@@ -6220,8 +6232,14 @@
 
        <div style="margin-bottom:10px;">
          <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-         <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label><br>
-         <label><input type="checkbox" id="neft-use-neftyanik"> Использовать бубу «Нефтяник» (1ч без партбилетов)</label>
+         <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
+         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+           <button type="button" id="neft-labubu-neftyanik" class="neft-labubu-pick" title="Буба «Нефтяник»: выкл" aria-pressed="false" aria-label="Буба «Нефтяник»">
+             <span class="neft-labubu-pick-icon"><img src="/@/images/loc/buba/bubas/53.png" alt="Нефтяник"></span>
+           </button>
+           <span style="font-size:12px;opacity:0.9;">Буба «Нефтяник» (1ч без партбилетов)</span>
+           <input type="checkbox" id="neft-use-neftyanik" style="display:none;">
+         </div>
        </div>
 
       <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,200,0,0.2);">
@@ -6304,9 +6322,21 @@
                 saveFlags();
                 addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
             };
+            const btnNeftyanik = document.getElementById("neft-labubu-neftyanik");
+            syncNeftyanikPick();
+
+            if (btnNeftyanik) {
+                btnNeftyanik.onclick = () => {
+                    useNeftyanik = !useNeftyanik;
+                    syncNeftyanikPick();
+                    saveFlags();
+                    addLog("Буба «Нефтяник»: " + (useNeftyanik ? "ВКЛ" : "ВЫКЛ"));
+                };
+            }
             if (chkNeftyanik) {
                 chkNeftyanik.onchange = () => {
                     useNeftyanik = chkNeftyanik.checked;
+                    syncNeftyanikPick();
                     saveFlags();
                     addLog("Буба «Нефтяник»: " + (useNeftyanik ? "ВКЛ" : "ВЫКЛ"));
                 };
@@ -6371,6 +6401,7 @@
       /* ========================= UI ОБНОВЛЕНИЕ ========================= */
 
       function updateButtonsVisual() {
+          syncNeftyanikPick();
           const bStart = document.getElementById("neftbot-start");
           const bPause = document.getElementById("neftbot-pause");
           if (!bStart || !bPause) return;
@@ -6425,6 +6456,7 @@
            botEnabled = false;
            botPaused = false;
            stopAfterBattle = false;
+           neftyanikActivating = false;
            // Сбрасываем состояние только если переход не был начат.
            // Если бот в ожидании подтверждения возврата — сохраняем состояние
            // для корректного завершения после перезагрузки.
@@ -6947,6 +6979,7 @@
        // Кэш активности бубы: activeTill (unix сек) и время последней проверки
        let neftyanikActiveTill = 0;
        let neftyanikCheckedAt = 0;
+       let neftyanikActivating = false;
        const NEFTYANIK_CACHE_TTL_MS = 120000; // обновлять кэш каждые 2 минуты
 
        // Простая синхронная проверка: активна ли буба сейчас (по кэшу)
@@ -6961,11 +6994,13 @@
        // По аналогии с Лабуба Летучик: fetch /labubu/, парсим items, ищем по имени
        async function activateNeftyanikIfReady() {
            if (!useNeftyanik) return;
+           if (neftyanikActivating) return;
            // Обновляем кэш не чаще раза в NEFTYANIK_CACHE_TTL_MS
            const nowMs = Date.now();
            if (neftyanikCheckedAt > 0 && (nowMs - neftyanikCheckedAt) < NEFTYANIK_CACHE_TTL_MS && isNeftyanikActive()) {
                return; // буба ещё активна по кэшу — не дёргаем сервер
            }
+           neftyanikActivating = true;
            try {
                const lr = await fetch('/labubu/', { credentials: 'include' });
                const lhtml = await lr.text();
@@ -7022,6 +7057,8 @@
                }
            } catch (e) {
                addLog('Буба «Нефтяник»: ошибка проверки/активации — ' + (e && e.message ? e.message : e), 'warn');
+           } finally {
+               neftyanikActivating = false;
            }
        }
        activateNeftyanikIfReady._logged = false;
@@ -7036,7 +7073,7 @@
 
           // Активация бубы «Нефтяник» — проверяем раз в тик, если включена
           if (useNeftyanik) {
-              activateNeftyanikIfReady();
+              await activateNeftyanikIfReady();
           }
 
           // не кликаем, если недавно была такая ошибка
