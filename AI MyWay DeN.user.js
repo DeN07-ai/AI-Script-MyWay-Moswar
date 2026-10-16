@@ -6093,18 +6093,23 @@
       const DOUBLE_PASS_LS_KEY = "neftbot-doublePassEnabled";
       const DOUBLE_PASS_STATE_LS_KEY = "neftbot-doublePassState";
 
-      // Состояния машины двойного прохождения
-      const DP = { IDLE: 0, FIRST_DONE: 1, WAITING_RESET: 2, SECOND_IN_PROGRESS: 3, DONE: 4 };
+       // Состояния машины двойного прохождения
+       const DP = { IDLE: 0, FIRST_DONE: 1, WAITING_RESET: 2, SECOND_IN_PROGRESS: 3, DONE: 4 };
 
-      // cooldown после клика по трубе: не ищем элементы, пока страница загружается
-      let pageTransitionAt = 0;
-      const PAGE_TRANSITION_WAIT_MS = 3000;
+       // cooldown после клика по трубе: не ищем элементы, пока страница загружается
+       let pageTransitionAt = 0;
+       const PAGE_TRANSITION_WAIT_MS = 3000;
 
-      // настройки режима
-      let useTickets = true;   // снижать подозр партбилетами
-      let useSnickers = true;   // сбрасывать таймер шникерсами
-      let modeFestive = false;  // false = обычный, true = праздничный
-      let normalNeftMin = 1500;  // порог нефти в обычном режиме
+       // диагностика ожидания возврата (WAITING_RESET)
+       let waitingResetSince = 0;
+       let waitingResetLastDiag = 0;
+
+       // настройки режима
+       let useTickets = true;   // снижать подозр партбилетами
+       let useSnickers = true;   // сбрасывать таймер шникерсами
+       let useNeftyanik = false; // использовать бубу «Нефтяник»
+       let modeFestive = false;  // false = обычный, true = праздничный
+       let normalNeftMin = 1500;  // порог нефти в обычном режиме
 
       // акционный режим
       let neftActionDropType = 'iskr'; // iskr | puli | sneg | meld
@@ -6121,6 +6126,7 @@
           localStorage.setItem("neftbot-paused", botPaused ? "1" : "0");
           localStorage.setItem("neftbot-useTickets", useTickets ? "1" : "0");
           localStorage.setItem("neftbot-useSnickers", useSnickers ? "1" : "0");
+          localStorage.setItem("neftbot-useNeftyanik", useNeftyanik ? "1" : "0");
           localStorage.setItem("neftbot-modeFestive", modeFestive ? "1" : "0");
           localStorage.setItem("neftbot-normalNeftMin", String(normalNeftMin));
           localStorage.setItem("neftbot-actionDropType", neftActionDropType);
@@ -6134,12 +6140,16 @@
           botPaused = localStorage.getItem("neftbot-paused") === "1";
           useTickets = localStorage.getItem("neftbot-useTickets") !== "0";
           useSnickers = localStorage.getItem("neftbot-useSnickers") !== "0";
+          useNeftyanik = localStorage.getItem("neftbot-useNeftyanik") === "1";
           modeFestive = localStorage.getItem("neftbot-modeFestive") === "1";
           doublePassEnabled = localStorage.getItem(DOUBLE_PASS_LS_KEY) === "1";
 
           // Восстановление состояния двойного прохода (переживает перезагрузку)
           const dps = parseInt(localStorage.getItem(DOUBLE_PASS_STATE_LS_KEY) || "0", 10);
           doublePassState = (!isNaN(dps) && dps >= 0 && dps <= DP.DONE) ? dps : DP.IDLE;
+          if (doublePassState === DP.WAITING_RESET && waitingResetSince === 0) {
+              waitingResetSince = Date.now(); // при восстановлении — отсчёт с момента загрузки
+          }
 
           const pct = parseInt(localStorage.getItem("neftbot-dropPct") || "100", 10);
           if (!isNaN(pct) && pct >= 1 && pct <= 100) dropPctFromMax = pct;
@@ -6179,39 +6189,40 @@
       Нефть ≥ <input id="neft-normal-min" type="number" min="0" step="100" class="mw-input" style="width:70px;">
     </div>
 
-    <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.04);">
-      <div style="font-weight:700;margin-bottom:6px;">Акционный дроп</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <select id="neft-action-drop-type" class="mw-input" style="flex:1; min-width:165px;">
-          <option value="iskr">✨ Искры</option>
-          <option value="puli">🔫 Пули</option>
-          <option value="sneg">❄ Снежинки</option>
-          <option value="meld">💊 Мельдоний</option>
-        </select>
-        <input id="neft-action-drop-min" type="number" min="0" step="1" class="mw-input" style="width:84px;" placeholder="мин">
-      </div>
-    </div>
+       <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.04);">
+         <div style="font-weight:700;margin-bottom:6px;">Акционный дроп</div>
+         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+           <select id="neft-action-drop-type" class="mw-input" style="flex:1; min-width:165px;">
+             <option value="iskr">✨ Искры</option>
+             <option value="puli">🔫 Пули</option>
+             <option value="sneg">❄ Снежинки</option>
+             <option value="meld">💊 Мельдоний</option>
+           </select>
+           <input id="neft-action-drop-min" type="number" min="0" step="1" class="mw-input" style="width:84px;" placeholder="мин">
+         </div>
+       </div>
 
-     <div style="margin-bottom:10px;">
-       <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
-         <option value="10">10%</option>
-         <option value="20">20%</option>
-         <option value="30">30%</option>
-         <option value="40">40%</option>
-         <option value="50">50%</option>
-         <option value="60">60%</option>
-         <option value="70">70%</option>
-         <option value="80">80%</option>
-         <option value="90">90%</option>
-         <option value="100">100%</option>
-       </select></label><br>
-       <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
-     </div>
+        <div style="margin-bottom:10px;">
+          <label>Дроп от максимума, % <select id="neft-drop-pct" class="mw-input" style="width:80px;display:inline-block;">
+            <option value="10">10%</option>
+            <option value="20">20%</option>
+            <option value="30">30%</option>
+            <option value="40">40%</option>
+            <option value="50">50%</option>
+            <option value="60">60%</option>
+            <option value="70">70%</option>
+            <option value="80">80%</option>
+            <option value="90">90%</option>
+            <option value="100">100%</option>
+          </select></label><br>
+          <span style="font-size:11px;opacity:0.7;">Атака, если выбранный дроп ≥ (% от "до N")</span>
+        </div>
 
-      <div style="margin-bottom:10px;">
-        <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
-        <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label>
-      </div>
+       <div style="margin-bottom:10px;">
+         <label><input type="checkbox" id="neft-use-tickets"> Использовать партбилеты</label><br>
+         <label><input type="checkbox" id="neft-use-snickers"> Использовать Шникерсы</label><br>
+         <label><input type="checkbox" id="neft-use-neftyanik"> Использовать бубу «Нефтяник» (1ч без партбилетов)</label>
+       </div>
 
       <div style="margin-bottom:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,200,0,0.2);">
         <label><input type="checkbox" id="neft-double-pass"> <img src="/@/images/s/may2014/x2.png" style="width:16px;vertical-align:middle;"> Двойное прохождение нефтепровода</label>
@@ -6258,18 +6269,20 @@
           document.getElementById("neftbot-stop").onclick = stopBot;
 
           /* --- элементы настроек --- */
-          const chkTickets = document.getElementById("neft-use-tickets");
-          const chkSnickers = document.getElementById("neft-use-snickers");
-          const selDropPct = document.getElementById("neft-drop-pct");
+           const chkTickets = document.getElementById("neft-use-tickets");
+           const chkSnickers = document.getElementById("neft-use-snickers");
+           const chkNeftyanik = document.getElementById("neft-use-neftyanik");
+           const selDropPct = document.getElementById("neft-drop-pct");
           const rNormal = document.getElementById("neft-mode-normal");
           const rFestive = document.getElementById("neft-mode-festive");
           const inpNeftMin = document.getElementById("neft-normal-min");
           const selActionDrop = document.getElementById("neft-action-drop-type");
           const inpActionMin = document.getElementById("neft-action-drop-min");
 
-          chkTickets.checked = useTickets;
-          chkSnickers.checked = useSnickers;
-          if (selDropPct) {
+           chkTickets.checked = useTickets;
+           chkSnickers.checked = useSnickers;
+           if (chkNeftyanik) chkNeftyanik.checked = useNeftyanik;
+           if (selDropPct) {
               let pv = dropPctFromMax;
               if (pv % 10 !== 0 || pv < 10 || pv > 100) pv = Math.min(100, Math.max(10, Math.round(pv / 10) * 10));
               selDropPct.value = String(pv);
@@ -6286,12 +6299,19 @@
               saveFlags();
               addLog("Партбилеты: " + (useTickets ? "ON" : "OFF"));
           };
-           chkSnickers.onchange = () => {
-               useSnickers = chkSnickers.checked;
-               saveFlags();
-               addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
-           };
-           const chkDoublePass = document.getElementById("neft-double-pass");
+            chkSnickers.onchange = () => {
+                useSnickers = chkSnickers.checked;
+                saveFlags();
+                addLog("Шникерсы: " + (useSnickers ? "ON" : "OFF"));
+            };
+            if (chkNeftyanik) {
+                chkNeftyanik.onchange = () => {
+                    useNeftyanik = chkNeftyanik.checked;
+                    saveFlags();
+                    addLog("Буба «Нефтяник»: " + (useNeftyanik ? "ВКЛ" : "ВЫКЛ"));
+                };
+            }
+            const chkDoublePass = document.getElementById("neft-double-pass");
            if (chkDoublePass) {
                chkDoublePass.checked = doublePassEnabled;
                chkDoublePass.onchange = () => {
@@ -6452,11 +6472,13 @@
           return isNaN(v) ? null : v;
       }
 
-      async function ensureSuspicionForDelta(delta) {
-          if (!useTickets) return;
-          let sus = getGlobalSuspicion();
-          if (sus == null) return;
-          updateSuspicionUI(sus);
+       async function ensureSuspicionForDelta(delta) {
+           if (!useTickets) return;
+           // Если буба «Нефтяник» включена и активна — партбилеты не нужны
+           if (useNeftyanik && isNeftyanikActive()) return;
+           let sus = getGlobalSuspicion();
+           if (sus == null) return;
+           updateSuspicionUI(sus);
 
           let tries = 0;
           while (sus + delta > MAX_SUSPICION && tries < 5) {
@@ -6920,12 +6942,101 @@
           }
       }
 
-      /* ========================= ГЛАВНАЯ СТРАНИЦА НЕФТЕПРОВОДА ========================= */
+       /* ========================= БУБА «НЕФТЯНИК» ========================= */
+
+       // Кэш активности бубы: activeTill (unix сек) и время последней проверки
+       let neftyanikActiveTill = 0;
+       let neftyanikCheckedAt = 0;
+       const NEFTYANIK_CACHE_TTL_MS = 120000; // обновлять кэш каждые 2 минуты
+
+       // Простая синхронная проверка: активна ли буба сейчас (по кэшу)
+       function isNeftyanikActive() {
+           if (!useNeftyanik) return false;
+           if (neftyanikActiveTill === 0) return false;
+           const nowSec = Math.floor(Date.now() / 1000);
+           return neftyanikActiveTill > nowSec;
+       }
+
+       // Активация бубы «Нефтяник» из инвентаря Labubu
+       // По аналогии с Лабуба Летучик: fetch /labubu/, парсим items, ищем по имени
+       async function activateNeftyanikIfReady() {
+           if (!useNeftyanik) return;
+           // Обновляем кэш не чаще раза в NEFTYANIK_CACHE_TTL_MS
+           const nowMs = Date.now();
+           if (neftyanikCheckedAt > 0 && (nowMs - neftyanikCheckedAt) < NEFTYANIK_CACHE_TTL_MS && isNeftyanikActive()) {
+               return; // буба ещё активна по кэшу — не дёргаем сервер
+           }
+           try {
+               const lr = await fetch('/labubu/', { credentials: 'include' });
+               const lhtml = await lr.text();
+               // Получаем serverTime из HTML
+               const timeMatch = lhtml.match(/id="servertime"[^>]*rel="(\d+)"/);
+               const now = timeMatch ? parseInt(timeMatch[1], 10) : Math.floor(Date.now() / 1000);
+               // Парсим items
+               let items = [];
+               const im = lhtml.match(/items\s*:\s*(\[\s*\{[\s\S]+?\}\s*\])/);
+               if (im) { try { items = new Function('return ' + im[1])(); } catch (_) {} }
+               // Ищем «Нефтяник» по имени
+               const pet = (items || []).find(it => {
+                   const n = String(it && it.name || '').toLowerCase();
+                   return n.includes('нефтяник') || (n.includes('нефт') && n.includes('ня'));
+               });
+               if (!pet) {
+                   // Лог один раз за тик, если бубы нет
+                   if (!activateNeftyanikIfReady._logged) {
+                       addLog('Буба «Нефтяник»: предмет не найден в инвентаре Labubu', 'warn');
+                       activateNeftyanikIfReady._logged = true;
+                   }
+                   return;
+               }
+               // Сбрасываем флаг «уже логировал» при каждом новом тике
+               activateNeftyanikIfReady._logged = false;
+               // Проверяем: активна ли уже?
+               if (pet.activeTill && pet.activeTill > now) {
+                   neftyanikActiveTill = pet.activeTill;
+                   neftyanikCheckedAt = nowMs;
+                   addLog('Буба «Нефтяник» уже активна (до ' + new Date(pet.activeTill * 1000).toLocaleTimeString() + ')');
+                   return;
+               }
+               // Нет прочности — буба использована
+               if (Number(pet.durability) <= 0) {
+                   addLog('Буба «Нефтяник»: прочность 0 — буба использована', 'warn');
+                   return;
+               }
+               // Активируем
+               const body = new URLSearchParams({ action: 'activate', code: String(pet.id), ajax: '1', __ajax: '1', standard_ajax: '1' });
+               const ar = await fetch('/labubu/', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+                   body: body.toString(),
+                   credentials: 'include'
+               });
+               if (ar.ok) {
+                   // Устанавливаем кэш: 1 час от текущего времени (по описанию пользователя)
+                   neftyanikActiveTill = now + 3600;
+                   neftyanikCheckedAt = nowMs;
+                   addLog('Буба «Нефтяник»: активирована (id=' + pet.id + ', dur=' + pet.durability + ')');
+                   await humanPause(800, 1400);
+               } else {
+                   addLog('Буба «Нефтяник»: активация отклонена сервером (' + ar.status + ')', 'warn');
+               }
+           } catch (e) {
+               addLog('Буба «Нефтяник»: ошибка проверки/активации — ' + (e && e.message ? e.message : e), 'warn');
+           }
+       }
+       activateNeftyanikIfReady._logged = false;
+
+       /* ========================= ГЛАВНАЯ СТРАНИЦА НЕФТЕПРОВОДА ========================= */
 
       async function handlePipeMainPage() {
-          // сначала обрабатываем возможную ошибку “слишком часто дергаетесь”
+          // сначала обрабатываем возможную ошибку "слишком часто дергаетесь"
           if (handleTooOftenAlert()) {
               return;
+          }
+
+          // Активация бубы «Нефтяник» — проверяем раз в тик, если включена
+          if (useNeftyanik) {
+              activateNeftyanikIfReady();
           }
 
           // не кликаем, если недавно была такая ошибка
@@ -6980,15 +7091,31 @@
 
           // ─── ПРОВЕРКА: ожидание подтверждения возврата ───
           if (isDoublePassWaiting()) {
-              const winGone = !document.getElementById("neftlenin_alert_win");
-              const pipeBack = document.querySelector(".pipeline-scroll");
+              // Исправление: проверяем ВИДИМОСТЬ (overlay скрыт CSS), а не существование элемента.
+              // AngryAjax прячет оверлеи через CSS без удаления из DOM.
+              const winEl = document.getElementById("neftlenin_alert_win");
+              const winGone = !winEl || !isVisible(winEl);
+              const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
               if (winGone && pipeBack) {
                   doublePassState = DP.SECOND_IN_PROGRESS;
                   localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+                  waitingResetSince = 0;
                   addLog("▶️ Переход подтверждён (проверка в тике). Второй проход запущен");
                   setStatus("▶️ Второй проход нефтепровода");
+                  // НЕ возвращаемся — продолжаем обычный цикл этого тика
+              } else {
+                  // Диагностика: почему ещё не подтверждено
+                  const now = Date.now();
+                  if (waitingResetSince > 0 && (now - waitingResetSince) > 30000 &&
+                      (now - waitingResetLastDiag) > 15000) {
+                      waitingResetLastDiag = now;
+                      const winVisible = winEl && isVisible(winEl);
+                      addLog("⏳ Ожидание возврата: winGone=" + winGone +
+                          ", winVisible=" + !!winVisible +
+                          ", pipeBack=" + !!pipeBack + " — жду изменения DOM");
+                  }
+                  return; // всё ещё ждём подтверждения
               }
-              return; // не обрабатываем патрули и трубу пока ждём подтверждения
           }
 
           // ─── 1. ПОБЕДА — максимальный приоритет, проверяем до любых патрулей ───
@@ -7114,6 +7241,7 @@
 
           // Бонус доступен — выполняем сброс
           doublePassState = DP.WAITING_RESET;
+          waitingResetSince = Date.now();
           localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.WAITING_RESET));
           addLog("🔄 Праздничный бонус найден. Возвращаюсь в начало нефтепровода...");
 
@@ -7121,12 +7249,14 @@
           resetBtn.click();
           await humanPause(2000, 3500);
 
-          // Подтверждаем переход: победное окно исчезло И появилась труба
-          const winGone = !document.getElementById("neftlenin_alert_win");
-          const pipeBack = document.querySelector(".pipeline-scroll");
+          // Подтверждаем переход: победное окно НЕВИДИМО И появилась труба
+          const winEl = document.getElementById("neftlenin_alert_win");
+          const winGone = !winEl || !isVisible(winEl);
+          const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
           if (winGone && pipeBack) {
               doublePassState = DP.SECOND_IN_PROGRESS;
               localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+              waitingResetSince = 0;
               addLog("▶️ Переход подтверждён. Второй проход нефтепровода запущен");
               setStatus("▶️ Второй проход нефтепровода");
           } else {

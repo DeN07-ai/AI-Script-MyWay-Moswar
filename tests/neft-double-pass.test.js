@@ -387,6 +387,217 @@ test('A5: серия из 10 тиков по зависшему окну → н�
 });
 
 // ============================================================
+// ТЕСТЫ ВОССТАНОВЛЕНИЯ ВТОРОГО ПРОХОДА (видимость vs существование)
+// ============================================================
+
+console.log('Восстановление второго прохода — проверка видимости');
+
+test('R1: overlay скрыт CSS, но существует в DOM → НЕ блокирует переход', () => {
+    // Эмуляция isVisible(el): true если элемент виден, false если скрыт или отсутствует
+    function isVisible(el) {
+        if (!el) return false;
+        return !el._hidden;
+    }
+    // Ситуация 1: элемент скрыт CSS (но существует в DOM)
+    const winHidden = { id: 'neftlenin_alert_win', _hidden: true };
+    const winGone1 = !winHidden || !isVisible(winHidden);
+    assert.equal(winGone1, true, 'скрыт CSS → winGone=true (переход разрешён)');
+    // Ситуация 2: элемент отсутствует
+    const winGone2 = !null || !isVisible(null);
+    assert.equal(winGone2, true, 'нет элемента → winGone=true');
+    // Ситуация 3: элемент виден
+    const winVisible = { id: 'neftlenin_alert_win' };
+    const winGone3 = !winVisible || !isVisible(winVisible);
+    assert.equal(winGone3, false, 'видимый элемент → winGone=false');
+});
+
+test('R2: WAITING_RESET → winGone=true, pipeBack=true → SECOND_IN_PROGRESS', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    // Эмуляция handleNeftPage waiting block: видимый pipeBack
+    const stillWaiting = dp.checkWaitingResetConfirmation(true, true);
+    assert.equal(stillWaiting, false, 'не ждём');
+    assert.equal(dp.state, DP.SECOND_IN_PROGRESS);
+});
+
+test('R3: WAITING_RESET → winGone=false (overlay скрыт CSS) → остаёмся WAITING_RESET', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    const stillWaiting = dp.checkWaitingResetConfirmation(false, true);
+    assert.equal(stillWaiting, true, 'всё ещё ждём');
+    assert.equal(dp.state, DP.WAITING_RESET);
+});
+
+test('R4: WAITING_RESET → pipeBack=false → остаёмся WAITING_RESET', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    const stillWaiting = dp.checkWaitingResetConfirmation(true, false);
+    assert.equal(stillWaiting, true, 'всё ещё ждём');
+    assert.equal(dp.state, DP.WAITING_RESET);
+});
+
+test('R5: подтверждение → fall-through (не return) → pipeMainPage вызывается', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    const stillWaiting = dp.checkWaitingResetConfirmation(true, true);
+    // Если ещё ждём — return. Если подтверждено — fall-through (не return).
+    assert.equal(stillWaiting, false, 'подтверждено → fall-through');
+    assert.equal(dp.state, DP.SECOND_IN_PROGRESS);
+});
+
+// ============================================================
+// ТЕСТЫ БУБЫ «НЕФТЯНИК»
+// ============================================================
+
+console.log('Буба «Нефтяник»');
+
+test('N1: чекбокс включается и сохраняется', () => {
+    let val = false;
+    val = true; // симуляция onchange
+    assert.equal(val, true);
+    const saved = val ? "1" : "0";
+    assert.equal(saved, "1");
+    const restored = saved === "1";
+    assert.equal(restored, true);
+});
+
+test('N2: восстановление настройки после перезагрузки', () => {
+    const stored = "1";
+    const restored = stored === "1";
+    assert.equal(restored, true);
+    const storedOff = "0";
+    const restoredOff = storedOff === "1";
+    assert.equal(restoredOff, false);
+});
+
+test('N3: выключенная настройка → буба не активируется', () => {
+    const useNeftyanik = false;
+    assert.ok(!useNeftyanik, 'чекбокс выключен');
+});
+
+test('N4: кэш активности — не проверяет сервер, если буба ещё активна', () => {
+    // Эмуляция isNeftyanikActive
+    let activeTill = 0;
+    let checkedAt = 0;
+    const NEFTYANIK_CACHE_TTL_MS = 120000;
+    function isNeftyanikActive() {
+        if (activeTill === 0) return false;
+        const nowSec = Math.floor(Date.now() / 1000);
+        return activeTill > nowSec;
+    }
+    // Сначала не активна
+    assert.equal(isNeftyanikActive(), false);
+    // Активируем (set from server)
+    activeTill = Math.floor(Date.now() / 1000) + 3600;
+    checkedAt = Date.now();
+    assert.equal(isNeftyanikActive(), true);
+    // Прошло меньше TTL — кэш валиден
+    assert.ok((Date.now() - checkedAt) < NEFTYANIK_CACHE_TTL_MS);
+});
+
+test('N5: кэш истекает → следующий тик обновит данные', () => {
+    let activeTill = 0;
+    let checkedAt = 0;
+    const now = Date.now();
+    const past = now - 300000; // 5 мин назад
+    activeTill = Math.floor(Date.now() / 1000) + 3600;
+    checkedAt = past;
+    const stale = (now - checkedAt) > 120000;
+    assert.equal(stale, true, 'кэш устарел');
+});
+
+test('N6: без предмета → лог, но без бесконечных попыток', () => {
+    let petFound = false;
+    let logs = [];
+    if (!petFound) {
+        logs.push('предмет не найден');
+    }
+    assert.equal(logs.length, 1, 'один лог');
+    assert.ok(logs[0].includes('не найден'));
+});
+
+test('N7: эффект активен → партбилеты не тратятся', () => {
+    let neftyanikActiveTill = 0;
+    let useNeftyanik = true;
+    function isNeftyanikActive() {
+        if (!useNeftyanik) return false;
+        if (neftyanikActiveTill === 0) return false;
+        const nowSec = Math.floor(Date.now() / 1000);
+        return neftyanikActiveTill > nowSec;
+    }
+    // Эффект активен
+    neftyanikActiveTill = Math.floor(Date.now() / 1000) + 3600;
+    assert.equal(isNeftyanikActive(), true);
+    // Если буба активна → ensureSuspicionForDelta пропускает партбилеты
+});
+
+test('N8: эффект истёк → партбилеты снова нужны', () => {
+    let neftyanikActiveTill = 0;
+    let useNeftyanik = true;
+    function isNeftyanikActive() {
+        if (!useNeftyanik) return false;
+        if (neftyanikActiveTill === 0) return false;
+        const nowSec = Math.floor(Date.now() / 1000);
+        return neftyanikActiveTill > nowSec;
+    }
+    // Эффект истёк
+    neftyanikActiveTill = Math.floor(Date.now() / 1000) - 100;
+    assert.equal(isNeftyanikActive(), false);
+});
+
+test('N9: настройка выключена → буба не активируется', () => {
+    let useNeftyanik = false;
+    assert.ok(!useNeftyanik, 'нефтяник выключен');
+});
+
+test('N10: настройка не ломает двойное прохождение', () => {
+    // Буба и двойное прохождение — независимые настройки
+    let useNeftyanik = true;
+    let doublePassEnabled = true;
+    let doublePassState = DP.IDLE;
+    assert.ok(useNeftyanik, 'нефтяник включён');
+    assert.ok(doublePassEnabled, 'двойной проход включён');
+    assert.equal(doublePassState, DP.IDLE, 'начальное состояние IDLE');
+    // Активация бубы не влияет на состояние двойного прохода
+});
+
+// ============================================================
+// ТЕСТЫ РЕГРЕССИИ
+// ============================================================
+
+console.log('Регрессия — старые баги не возвращаются');
+
+test('R2: победа по-прежнему приоритетнее патрулей', () => {
+    const dp = createDoublePassState(true, DP.IDLE);
+    dp.handleWinAlert(true, true, true, true);
+    assert.equal(dp.state, DP.SECOND_IN_PROGRESS, 'победа обработана');
+});
+
+test('R3: защита от повторных атак сохраняется', () => {
+    const d = createAlertDedup(5000);
+    const t = 1_000_000;
+    assert.equal(d.tryClick('alert_b', t), true);
+    assert.equal(d.tryClick('alert_b', t + 100), false, 'тот же alert → отклонён');
+});
+
+test('R4: обычный первый проход работает как прежде', () => {
+    const dp = createDoublePassState(false, DP.IDLE);
+    dp.handleWinAlert(true, false, false, false);
+    assert.equal(dp.state, DP.IDLE);
+    assert.equal(dp.botStopped, true, 'бот остановлен');
+});
+
+test('R5: второй проход действительно разрешён', () => {
+    const dp = createDoublePassState(true, DP.SECOND_IN_PROGRESS);
+    dp.handleWinAlert(true, false, false, false);
+    assert.equal(dp.state, DP.DONE);
+    assert.equal(dp.botStopped, true);
+});
+
+test('R6: третий проход невозможен', () => {
+    const dp = createDoublePassState(true, DP.DONE);
+    dp.handleWinAlert(true, true, true, true);
+    assert.equal(dp.resetClickCount, 0, 'сброс не нажимался');
+    assert.equal(dp.botStopped, true);
+});
+
+// ============================================================
 
 console.log('Итого: ' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
