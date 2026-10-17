@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.9
+// @version      3.10
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -19864,7 +19864,8 @@ body.mw-helper-tip-on .simple-tooltip {
       SYNC_HOT_MS: 5000,         // последние ~2 минуты до старта
       SYNC_FAIL_BACKOFF_MS: 120000,
       JOIN_CONFIRM_MS: 20000,    // окно подтверждения записи по entry.status
-      JOIN_MAX_TRIES: 3          // попыток записи на один раунд (дальше ждём следующий раунд)
+      JOIN_MAX_TRIES: 3,         // попыток записи на один раунд (дальше ждём следующий раунд)
+      OP_STALE_MS: 15000         // long-stale: разблокировка неподтверждённой игровой операции
   };
 
   // Настройки: новый JSON + обратная совместимость со старым булевым ключом.
@@ -20018,6 +20019,215 @@ body.mw-helper-tip-on .simple-tooltip {
           }
       });
   }
+
+  /* ─── Decision Engine v1: чистые функции (идентичность операций, классификация, выбор) ─── */
+
+  // Идентичность игровой операции: одна операция = тип + игра + фаза + деталь.
+  function squidOpId(type, gameId, phaseId, detail) {
+      return type + ':' + (gameId || '') + ':' + (phaseId || '') + ':' + (detail != null ? String(detail) : '');
+  }
+
+  // Можно ли отправлять новое действие при незавершённой операции lastOp.
+  // phaseChanged — игра перешла в новую фазу/phaseId относительно момента решения.
+  // Повтор разрешён ТОЛЬКО после подтверждённой смены состояния (phaseChanged/verified),
+  // после подтверждённого отказа (verified===false) или после long-stale таймаута.
+  function squidShouldSend(lastOp, now, phaseChanged, timeoutMs) {
+      if (!lastOp) return { allow: true, reason: 'no_pending' };
+      if (lastOp.verified === true) return { allow: true, reason: 'verified' };
+      if (lastOp.verified === false) return { allow: true, reason: 'rejected', rejectedOp: lastOp };
+      if (phaseChanged) return { allow: true, reason: 'phase_changed', staleOp: lastOp };
+      var sentAt = Number(lastOp.sentAt) || Number(lastOp.decidedAt) || 0;
+      if (sentAt && now - sentAt > (timeoutMs || 15000)) return { allow: true, reason: 'stale_timeout', staleOp: lastOp };
+      return { allow: false, reason: 'pending', op: lastOp };
+  }
+
+  // Классификация клетки. kind ∈ glass|piggy|prize|ambulance|recruiter|unknown.
+  // confirmedHint — src изображения-подсказки (hintImage/isHintCell) или null.
+  // Нераскрытая клетка = unknown, НЕ safe. Стекло подтверждается только признаком подсказки.
+  function squidClassifyCell(index, confirmedHint) {
+      var src = String(confirmedHint || '').toLowerCase();
+      if (!src) return { index: index, kind: 'unknown', confirmed: false };
+      if (/glass|стекло/.test(src)) return { index: index, kind: 'glass', confirmed: true };
+      if (/piggy|bank|gold|копилка/.test(src)) return { index: index, kind: 'piggy', confirmed: true };
+      if (/ambulance|скорая/.test(src)) return { index: index, kind: 'ambulance', confirmed: true };
+      if (/recruiter|вербов/.test(src)) return { index: index, kind: 'recruiter', confirmed: true };
+      if (/prize|приз/.test(src)) return { index: index, kind: 'prize', confirmed: true };
+      return { index: index, kind: 'unknown', confirmed: false };
+  }
+
+  // Выбор клетки из классифицированных кандидатов.
+  // glass исключается; unknown не считается безопасным и не имеет предпочтений по индексу.
+  // hints — сохранённые подсказки текущей игры { [cellIndex]: hintSrc }.
+  // Возвращает объект кандидата или null. При отсутствии доказанных различий —
+  // детерминированный нейтральный выбор (минимальный индекс среди unknown).
+  function squidPickCellTarget(classified, hints) {
+      var usable = (classified || []).filter(function (c) { return c && c.kind !== 'glass'; });
+      if (!usable.length) return null;
+      var t = usable.find(function (c) { return c.confirmed && c.kind === 'piggy'; });
+      if (t) return t;
+      t = usable.find(function (c) { return c.confirmed && (c.kind === 'prize' || c.kind === 'ambulance' || c.kind === 'recruiter'); });
+      if (t) return t;
+      if (hints) {
+          var hp = null, hu = null;
+          usable.forEach(function (c) {
+              var h = hints[c.index];
+              if (!h || c.confirmed) return;
+              var hs = String(h).toLowerCase();
+              if (!hp && /piggy|bank|gold|копилка/.test(hs)) hp = c;
+              if (!hu && /prize|приз|ambulance|скорая|recruiter|вербов/.test(hs)) hu = c;
+          });
+          if (hp) return hp;
+          if (hu) return hu;
+      }
+      var unknowns = usable.filter(function (c) { return c.kind === 'unknown'; });
+      if (unknowns.length) {
+          unknowns.sort(function (a, b) { return a.index - b.index; });
+          return unknowns[0];
+      }
+      return usable[0];
+  }
+
+  // Безопасное извлечение вариантов действия из реального API игры: actionChoices().
+  // Нормализует к [{value, label, player, index}]; значения без value отбрасываются.
+  function squidExtractChoices(s) {
+      try {
+          if (s && typeof s.actionChoices === 'function') {
+              var raw = s.actionChoices();
+              if (Array.isArray(raw)) {
+                  var out = [];
+                  for (var i = 0; i < raw.length; i++) {
+                      var ch = raw[i];
+                      if (!ch || typeof ch !== 'object') continue;
+                      var v = (typeof ch.value === 'string' || typeof ch.value === 'number') ? ch.value : null;
+                      if (v === null) continue;
+                      var p = (ch.player && typeof ch.player === 'object') ? ch.player : null;
+                      var lbl = typeof ch.label === 'string' && ch.label ? ch.label :
+                          (p && typeof p.name === 'string' ? p.name : '');
+                      out.push({
+                          value: v,
+                          label: lbl,
+                          player: p,
+                          index: i
+                      });
+                  }
+                  return out;
+              }
+          }
+      } catch (e) { }
+      return [];
+  }
+
+  // Выбор варианта действия по реальному actionKind и вариантам API.
+  // frontman — эвристика cash-out (aliveCount<=3);
+  // dalgona — эвристика выбора фигуры (круг -> треугольник);
+  // fight / marbles / ambulance — выбор цели среди игроков choice.player с проверкой состояния;
+  // fight (текст) — семантика кражи Скорой / сжечь / уйти;
+  // прочие kinds — если вариант ровно один, иначе null (без произвольных догадок).
+  function squidPickActionTarget(choices, actionKind, aliveCount, myPlayerId, allyIds) {
+      var list = choices || [];
+      if (!list.length) return null;
+      var kind = String(actionKind || '').toLowerCase();
+      var myId = (myPlayerId !== undefined && myPlayerId !== null) ? String(myPlayerId) : '';
+      var allies = Array.isArray(allyIds) ? allyIds.map(String) : [];
+
+      // 1. Frontman
+      if (/frontman/i.test(kind)) {
+          var take = (typeof aliveCount === 'number' && aliveCount >= 0) ? aliveCount <= 3 : false;
+          var wantRe = take ? /забрать|take|собрать/i : /остать|stay|продолж/i;
+          var m = list.find(function (c) { return wantRe.test(c.label || '') || wantRe.test(String(c.value || '')); });
+          return m || null;
+      }
+
+      // 2. Dalgona
+      if (/dalgona/i.test(kind)) {
+          var circle = list.find(function (c) { return /круг|circle/i.test(c.label || '') || /circle/i.test(String(c.value || '')); });
+          if (circle) return circle;
+          var tri = list.find(function (c) { return /треуголь|triangle/i.test(c.label || '') || /triangle/i.test(String(c.value || '')); });
+          return tri || null;
+      }
+
+      // 3. Выбор цели среди игроков (choice.player):
+      // Реализует проверенную механику для:
+      // - fight («Драка в спальне»: кража/сжигание Скорой у противника);
+      // - marbles («Шарики»: дуэль);
+      // - ambulance (передача Скорой);
+      // - любых actionKind, где варианты содержат choice.player.
+      var hasPlayerChoices = list.some(function (c) { return c && c.player && typeof c.player === 'object'; });
+      if (hasPlayerChoices) {
+          // Отсеиваем недопустимых: нет объекта игрока, сам игрок, выбывшие/мёртвые
+          var eligible = list.filter(function (c) {
+              if (!c || !c.player || typeof c.player !== 'object') return false;
+              var pid = String(c.player.id || c.value || '');
+              if (myId && pid === myId) return false; // никогда не выбираем себя
+              var status = String(c.player.status || '').toLowerCase();
+              if (status === 'dead' || status === 'left') return false;
+              if (c.player.alive === false) return false;
+              return true;
+          });
+          if (!eligible.length) return null;
+
+          // Для fight («Драка в спальне»):
+          // Цель драки — Скорая. Приоритет игрокам, у которых подтверждено hasAmbulance===true.
+          if (/fight/i.test(kind)) {
+              var withAmb = eligible.filter(function (c) { return c.player.hasAmbulance === true; });
+              var pool = withAmb.length ? withAmb : eligible;
+              // Приоритет активным незамороженным противникам
+              var unfrozen = pool.filter(function (c) { return !c.player.frozen; });
+              pool = unfrozen.length ? unfrozen : pool;
+              // Защита союзников по whitelist
+              if (allies.length) {
+                  var nonAllies = pool.filter(function (c) { return allies.indexOf(String(c.player.id || c.value)) === -1; });
+                  if (nonAllies.length) pool = nonAllies;
+              }
+              // Детерминированный выбор: наименьший player.id среди лучших кандидатов
+              pool.sort(function (a, b) {
+                  var idA = Number(a.player.id || a.value) || 0;
+                  var idB = Number(b.player.id || b.value) || 0;
+                  return idA - idB;
+              });
+              return pool[0];
+          }
+
+          // Для прочих player-выборов (marbles, ambulance, generic):
+          var poolGeneral = eligible;
+          // Защита союзников по whitelist
+          if (allies.length) {
+              var nonAlliesGeneral = poolGeneral.filter(function (c) { return allies.indexOf(String(c.player.id || c.value)) === -1; });
+              if (nonAlliesGeneral.length) poolGeneral = nonAlliesGeneral;
+          }
+          // Приоритет незамороженным
+          var unfrozenGeneral = poolGeneral.filter(function (c) { return !c.player.frozen; });
+          if (unfrozenGeneral.length) poolGeneral = unfrozenGeneral;
+          poolGeneral.sort(function (a, b) {
+              var idA = Number(a.player.id || a.value) || 0;
+              var idB = Number(b.player.id || b.value) || 0;
+              return idA - idB;
+          });
+          return poolGeneral[0];
+      }
+
+      // 4. Текстовые семантические варианты без choice.player для fight:
+      if (/fight/i.test(kind)) {
+          var steal = list.find(function (c) { return /забрать|steal|take/i.test(c.label || '') || /steal|take/i.test(String(c.value || '')); });
+          if (steal) return steal;
+          var burn = list.find(function (c) { return /сжечь|сжёг|сжег|burn|destroy/i.test(c.label || '') || /burn/i.test(String(c.value || '')); });
+          if (burn) return burn;
+          var quiet = list.find(function (c) { return /тихая|тихо|тихий|quiet|leave|stay/i.test(c.label || '') || /quiet/i.test(String(c.value || '')); });
+          if (quiet) return quiet;
+      }
+
+      // 5. Единственный вариант
+      if (list.length === 1) return list[0];
+
+      return null;
+  }
+
+  // Един ли gameId (для сброса подсказок между матчами).
+  function squidHintsForGame(state, gameId) {
+      if (!state || !gameId) return {};
+      if (state.hintsGameId !== gameId) return {};
+      return state.hintsByGame && typeof state.hintsByGame === 'object' ? state.hintsByGame : {};
+  }
   /* __SQUID_PURE_END__ */
 
   var _squid = {
@@ -20047,7 +20257,13 @@ body.mw-helper-tip-on .simple-tooltip {
       scope: null,
       scopeEl: null,
       scopeAt: 0,
-      panelPaintTimer: null
+      panelPaintTimer: null,
+      // Decision Engine v1: отслеживание незавершённой операции и подсказок игры
+      lastOp: null,          // {type,opId,gameId,phaseBefore,phaseIdBefore,detail,decidedAt,sentAt,verified,retries}
+      hintsGameId: '',       // gameId, к которому относятся hintsByGame (сброс при смене игры)
+      hintsByGame: {},       // { [cellIndex]: hintSrc } — только открытые подсказки, без секретов
+      lastDiagKey: '',
+      lastDiagAt: 0
   };
 
   // Восстанавливаем пользовательские настройки при загрузке скрипта.
@@ -20120,6 +20336,243 @@ body.mw-helper-tip-on .simple-tooltip {
           } catch (e2) { }
           return false;
       }
+  }
+
+  // ─── Decision Engine v1: помощники исполнения (DOM/Alpine) ───
+
+  // Компактная диагностика с дедупликацией: одинаковое сообщение не чаще раза в ms мс.
+  function squidDiag(key, msg, ms) {
+      var now = Date.now();
+      if (key === _squid.lastDiagKey && now - (_squid.lastDiagAt || 0) < (ms || 5000)) return;
+      _squid.lastDiagKey = key;
+      _squid.lastDiagAt = now;
+      sqLog(msg);
+  }
+
+  // Есть ли незавершённая (неподтверждённая) операция — блокировка повторной отправки.
+  // Использует squidShouldSend для фазовой разблокировки и long-stale таймаута.
+  function squidOpBusy(s) {
+      if (s) {
+          try {
+              if (s.actionPending) return true;
+              if (s.connection && s.connection !== 'online') return true;
+              if (s.game && s.game.pendingTurn) return true;
+          } catch (e) { }
+      }
+      var changed = false;
+      if (_squid.lastOp && s) {
+          var snap = squidPhaseSnap(s);
+          changed = !!((snap.phase && _squid.lastOp.phaseBefore && snap.phase !== _squid.lastOp.phaseBefore) ||
+              (snap.phaseId && _squid.lastOp.phaseIdBefore && snap.phaseId !== _squid.lastOp.phaseIdBefore));
+      }
+      return !squidShouldSend(_squid.lastOp, Date.now(), changed, SQUID_TIMING.OP_STALE_MS).allow;
+  }
+
+  // Снимок фазы игры для проверки актуальности решения.
+  function squidPhaseSnap(s) {
+      var g = null;
+      try { g = s && s.game ? s.game : null; } catch (e) { }
+      var endsAt = 0;
+      try { endsAt = Number(g && g.phaseEndsAt) || 0; } catch (e) { }
+      return {
+          gameId: squidCurrentGameId(s),
+          phase: g ? String(g.phase || '') : '',
+          phaseId: g ? String(g.phaseId || '') : '',
+          turnPlayerId: g ? String(g.turnPlayerId || '') : '',
+          endsAt: endsAt
+      };
+  }
+
+  // Идентификатор текущей игры. Берём из entry.gameId / entry.roundId (не из секретных ключей).
+  function squidCurrentGameId(s) {
+      try {
+          var e = s && s.entry;
+          if (e && e.gameId != null) return String(e.gameId);
+          if (e && e.roundId != null) return String(e.roundId);
+          var st = _squid.serverState;
+          if (st && st.entry && st.entry.gameId != null) return String(st.entry.gameId);
+          if (st && st.entry && st.entry.roundId != null) return String(st.entry.roundId);
+      } catch (e) { }
+      return '';
+  }
+
+  // Осталось ли до конца фазы (мс). phaseEndsAt используется только если это ms-метка
+  // эпохи (тот же порядок, что startsAt/serverTime); при неизвестных единицах — null.
+  function squidPhaseRemainingMs(s) {
+      var snap = squidPhaseSnap(s);
+      if (!snap.endsAt || snap.endsAt < 1e12 || snap.endsAt > 4e12) return null;
+      var rem = snap.endsAt - Date.now();
+      return rem > 0 ? rem : 0;
+  }
+
+  // Живая кнопка клетки по её индексу (0-based). Сохранённая DOM-ссылка НЕ доверяется.
+  function squidCellBtnByIndex(idx) {
+      var btns = document.querySelectorAll('button.squid-field-cell');
+      for (var i = 0; i < btns.length; i++) {
+          var n = NaN;
+          try {
+              var numEl = btns[i].querySelector('.squid-minigame__cell-number');
+              if (numEl) n = parseInt(numEl.textContent.trim(), 10);
+          } catch (e) { }
+          var cellIdx = (isNaN(n) || n < 1) ? i : n - 1;
+          if (cellIdx === idx) return btns[i];
+      }
+      return null;
+  }
+
+  // Актуальна ли клетка для клика: существует, не отключена, всё ещё открыта (status closed).
+  function squidCellStillOpenable(s, idx) {
+      var btn = squidCellBtnByIndex(idx);
+      if (!btn) return false;
+      if (btn.disabled || btn.classList.contains('disabled')) return false;
+      try {
+          var cell = s && s.game && s.game.cells ? s.game.cells[idx] : null;
+          if (cell && cell.status != null && String(cell.status) !== 'closed') return false;
+      } catch (e) { }
+      return true;
+  }
+
+  // Живая кнопка варианта действия: сопоставление choice из API с DOM-кнопкой.
+  // Совпадение — по label/значению/имени игрока; при единственном варианте — единственная кнопка.
+  function squidActionBtnByChoice(choice) {
+      var btns = Array.prototype.slice.call(
+          document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)'));
+      if (!btns.length) return null;
+      var label = String((choice && choice.label) || '').trim().toLowerCase();
+      var val = String((choice && choice.value) || '').trim().toLowerCase();
+      var playerName = '';
+      try {
+          if (choice && choice.player && choice.player.name) {
+              playerName = String(choice.player.name).trim().toLowerCase();
+          }
+      } catch (e) { }
+      if (label || val || playerName) {
+          for (var i = 0; i < btns.length; i++) {
+              var t = (btns[i].textContent || '').trim().toLowerCase();
+              if (playerName && (t === playerName || t.indexOf(playerName) !== -1)) return btns[i];
+              if (label && (t === label || t.indexOf(label) !== -1)) return btns[i];
+              if (val && t === val) return btns[i];
+          }
+      }
+      if (choice && choice.index != null && btns[choice.index]) {
+          return btns[choice.index];
+      }
+      if (btns.length === 1) return btns[0];
+      return null;
+  }
+
+  // Подтверждение незавершённой операции по актуальному состоянию игры.
+  // Успех = фаза/phaseId изменились относительно момента решения, либо ход уже не наш.
+  function squidVerifyLastOp(s) {
+      var op = _squid.lastOp;
+      if (!op || op.verified !== null) return;
+      var now = Date.now();
+      if (!op.sentAt) return; // клик ещё не выполнен (в окне задержки)
+      var snap = squidPhaseSnap(s);
+      var phaseChanged = (snap.phase && op.phaseBefore && snap.phase !== op.phaseBefore) ||
+          (op.phaseIdBefore && snap.phaseId && snap.phaseId !== op.phaseIdBefore);
+      if (phaseChanged) {
+          op.verified = true;
+          squidDiag('vfy:' + op.opId, '✔ Подтверждено: ' + op.type + ' принят, фаза ' + op.phaseBefore + ' → ' + snap.phase, 3000);
+          if (op.type === 'cell') squidForgetHint(op.detail);
+          return;
+      }
+      // Дополнительно: если это клетка, проверяем её реальный статус в игре
+      if (op.type === 'cell' && s && s.game && s.game.cells && s.game.cells[op.detail]) {
+          var cellStatus = String(s.game.cells[op.detail].status || '');
+          if (cellStatus && cellStatus !== 'closed') {
+              op.verified = true;
+              squidDiag('vfyCell:' + op.opId, '✔ Клетка #' + (op.detail + 1) + ' открыта (status: ' + cellStatus + ') — операция подтверждена', 3000);
+              squidForgetHint(op.detail);
+              return;
+          }
+      }
+      // Дополнительно: если это действие, проверяем оверлей/фазу
+      if (op.type === 'action') {
+          var actBtns = document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)');
+          if (actBtns.length === 0 && (!s || !s.game || s.game.phase !== 'choose_action')) {
+              op.verified = true;
+              squidDiag('vfyAct:' + op.opId, '✔ Действие принято — оверлей выбора закрыт', 3000);
+              return;
+          }
+      }
+      // Если сервер в процессе обработки (actionPending или pendingTurn), не объявляем stale!
+      var isServerProcessing = false;
+      try {
+          if (s && (s.actionPending || (s.game && s.game.pendingTurn))) isServerProcessing = true;
+      } catch (e) { }
+      if (isServerProcessing) {
+          squidDiag('vfyProc:' + op.opId, '⏳ Сервер обрабатывает ' + op.type + ' (actionPending/pendingTurn), ожидаем', 5000);
+          return;
+      }
+
+      var age = now - op.sentAt;
+      if (age > SQUID_TIMING.OP_STALE_MS) {
+          // Тот же порог, что и в squidShouldSend. Не более 1 повторной попытки на одну операцию:
+          if ((op.retries || 0) >= 1) {
+              op.verified = false;
+              squidDiag('vfyMaxRetry:' + op.opId, '⚠️ Операция ' + op.type + ' зависла и исчерпала лимит повторов (1) — отклонена до смены фазы/игры', 10000);
+              return;
+          }
+          op.verified = false;
+          op.retries = (op.retries || 0) + 1;
+          squidDiag('vfyT:' + op.opId, '⚠️ Результат ' + op.type + ' не подтверждён за ' +
+              Math.round(SQUID_TIMING.OP_STALE_MS / 1000) + ' с — блокировка снята, решение будет пересмотрено', 10000);
+          return;
+      }
+      if (age > 8000) {
+          // Состояние не изменилось — отличаем «ещё идёт» от «не приняли» по правам хода
+          var stillMyTurn = (op.type === 'cell' && isMyCellTurn(s)) || (op.type === 'action' && isMyActionTurn(s));
+          if (!stillMyTurn) {
+              op.verified = true;
+              squidDiag('vfyN:' + op.opId, '✔ ' + op.type + ': ход уже не наш — считаем операцию выполненной', 3000);
+          } else {
+              squidDiag('vfyWait:' + op.opId, '⏳ ' + op.type + ' ожидает подтверждения (' + Math.round(age / 1000) + ' с), повторной отправки нет', 8000);
+          }
+      }
+  }
+
+  // Очистка следа операции при смене игры (новый матч).
+  function squidResetOp(reason) {
+      if (_squid.lastOp && _squid.lastOp.verified === null) {
+          squidDiag('opRst', 'ℹ️ Операция ' + _squid.lastOp.type + ' снята: ' + reason, 5000);
+      }
+      _squid.lastOp = null;
+  }
+
+  // Забыть подсказку клетки после её открытия.
+  function squidForgetHint(idx) {
+      try {
+          if (_squid.hintsByGame && _squid.hintsByGame[idx] !== undefined) {
+              delete _squid.hintsByGame[idx];
+          }
+      } catch (e) { }
+  }
+
+  // Обновление сохранённых подсказок текущей игры из реального API (isHintCell/hintImage).
+  // Хранятся только src подсказки, без приватных токенов. Сброс — при смене gameId.
+  function squidSyncHints(s) {
+      var gid = squidCurrentGameId(s);
+      if (!gid) return;
+      if (_squid.hintsGameId !== gid) {
+          _squid.hintsGameId = gid;
+          _squid.hintsByGame = {};
+      }
+      try {
+          var cells = s && s.game && s.game.cells ? s.game.cells : null;
+          if (!cells) return;
+          for (var i = 0; i < cells.length; i++) {
+              var c = cells[i];
+              if (!c) continue;
+              if (String(c.status) !== 'closed') { squidForgetHint(i); continue; }
+              var isHint = false;
+              try { isHint = (typeof s.isHintCell === 'function') && !!s.isHintCell(i); } catch (e) { }
+              if (!isHint) continue;
+              var img = '';
+              try { img = (typeof s.hintImage === 'function') ? String(s.hintImage(i) || '') : ''; } catch (e) { }
+              if (img) _squid.hintsByGame[i] = img;
+          }
+      } catch (e) { }
   }
 
   // Find live Alpine scope safely across sandbox
@@ -20226,180 +20679,194 @@ body.mw-helper-tip-on .simple-tooltip {
       return false;
   }
 
-  // Decision logic for cells (incorporates Moswar 2026 rules)
+  // Decision Engine v1: выбор и ОДНОКРАТНОЕ открытие клетки.
+  // Единственный механизм отправки — клик по живой кнопке: обработчик игры
+  // @click="openCell(cell)" сам вызывает метод Alpine. Повторный прямой openCell() убран.
   function pickAndOpenCell(s) {
-      if (_squid.actionPending) return false;
+      if (squidOpBusy(s)) return false;
 
-      var btns = Array.from(document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)'));
+      var snap = squidPhaseSnap(s);
+      squidSyncHints(s); // подсказки текущей игры из реального API (isHintCell/hintImage)
+      var hints = squidHintsForGame(_squid, snap.gameId);
+
+      // Кандидаты: живые доступные кнопки + классификация по подтверждённым признакам
+      var btns = Array.prototype.slice.call(
+          document.querySelectorAll('button.squid-field-cell:not([disabled]):not(.disabled)'));
       if (!btns.length) return false;
 
-      var allCellBtns = Array.from(document.querySelectorAll('button.squid-field-cell'));
-      var candidates = [];
-
+      var allBtns = document.querySelectorAll('button.squid-field-cell');
+      var classified = [];
       for (var i = 0; i < btns.length; i++) {
           var btn = btns[i];
-          var numEl = btn.querySelector('.squid-minigame__cell-number');
           var idx = -1;
-          if (numEl) {
-              var n = parseInt(numEl.textContent.trim(), 10);
-              if (!isNaN(n)) idx = n - 1;
-          }
-          if (idx === -1) {
-              idx = allCellBtns.indexOf(btn);
-          }
-          if (idx === -1) idx = i;
-
-          var hintEl = btn.querySelector('.squid-minigame__hint-img, img, .squid-field-cell__figure');
-          var hintSrc = hintEl ? (hintEl.getAttribute('src') || hintEl.className || '') : '';
-          var isGlass = /glass|стекло/i.test(hintSrc);
-          var isMine = /mine|мина/i.test(hintSrc);
-          var isPiggy = /piggy|bank|gold|копилка/i.test(hintSrc);
-          var isPrize = /prize|gift|приз/i.test(hintSrc);
-          var isAmbulance = /ambulance|скорая/i.test(hintSrc);
-          var isRecruiter = /recruiter|вербов/i.test(hintSrc);
-
-          if (s && s.game && s.game.privateHints && s.game.privateHints[idx]) {
-              var ph = String(s.game.privateHints[idx]).toLowerCase();
-              if (/piggy|bank|gold/.test(ph)) isPiggy = true;
-              if (/prize|gift/.test(ph)) isPrize = true;
-              if (/ambulance/.test(ph)) isAmbulance = true;
-              if (/recruiter/.test(ph)) isRecruiter = true;
-              if (/glass/.test(ph)) isGlass = true;
-              if (/mine/.test(ph)) isMine = true;
-          }
-
-          candidates.push({
-              btn: btn,
-              index: idx,
-              isGlass: isGlass,
-              isMine: isMine,
-              isPiggy: isPiggy,
-              isPrize: isPrize,
-              isAmbulance: isAmbulance,
-              isRecruiter: isRecruiter
-          });
-      }
-
-      // Filter dangerous cells
-      var safeCandidates = candidates.filter(function (c) { return !c.isGlass && !c.isMine; });
-      if (!safeCandidates.length) safeCandidates = candidates;
-
-      // Priority 1: Piggy Bank (wins the bank!)
-      var target = safeCandidates.find(function (c) { return c.isPiggy; });
-
-      // Priority 2: Valued items (prizes, extra life ambulance, recruiter)
-      if (!target) {
-          target = safeCandidates.find(function (c) { return c.isPrize || c.isAmbulance || c.isRecruiter; });
-      }
-
-      // Priority 3: Unknown safe cells. Avoid the last 10 cells (idx >= 54) per 2026 rules
-      if (!target) {
-          var earlyCells = safeCandidates.filter(function (c) { return c.index < 54; });
-          if (earlyCells.length > 0 && safeCandidates.length > 12) {
-              target = earlyCells[Math.floor(Math.random() * earlyCells.length)];
-          } else {
-              target = safeCandidates[Math.floor(Math.random() * safeCandidates.length)];
-          }
-      }
-
-      if (!target) return false;
-
-      _squid.actionPending = true;
-      var cellNum = target.index + 1;
-      sqLog('🎯 Ход игрока! Выбираем ячейку #' + cellNum + (target.isPiggy ? ' (🏆 Золотая Копилка!)' : target.isPrize ? ' (🎁 Приз)' : ''));
-
-      // Natural human reaction 1200-2200ms within 20s limit
-      var delay = 1200 + Math.floor(Math.random() * 800);
-      setTimeout(function () {
           try {
-              sqNativeClick(target.btn);
-              if (s && typeof s.openCell === 'function') {
-                  var cellObj = null;
-                  if (s.game && s.game.cells && s.game.cells[target.index]) {
-                      cellObj = s.game.cells[target.index];
-                  } else if (s.cells && s.cells[target.index]) {
-                      cellObj = s.cells[target.index];
-                  }
-                  if (cellObj) {
-                      try { s.openCell(cellObj); } catch (e) { }
-                  }
-              }
-          } finally {
-              setTimeout(function () { _squid.actionPending = false; }, 800);
+              var numEl = btn.querySelector('.squid-minigame__cell-number');
+              if (numEl) { var n = parseInt(numEl.textContent.trim(), 10); if (!isNaN(n) && n >= 1) idx = n - 1; }
+          } catch (e) { }
+          if (idx === -1) idx = Array.prototype.indexOf.call(allBtns, btn);
+          if (idx < 0) idx = i;
+          var hintText = null;
+          try { if (hints[idx] != null) hintText = hints[idx]; } catch (e) { }
+          classified.push(squidClassifyCell(idx, hintText));
+      }
+
+      var target = squidPickCellTarget(classified, hints);
+      if (!target) {
+          squidDiag('cellNone', '⚠️ Ход клетки: все доступные клетки — подтверждённое стекло. Безопасного варианта нет — не ходим.', 15000);
+          return false;
+      }
+
+      var op = {
+          type: 'cell',
+          opId: squidOpId('cell', snap.gameId, snap.phaseId, target.index),
+          gameId: snap.gameId,
+          phaseBefore: snap.phase,
+          phaseIdBefore: snap.phaseId,
+          detail: target.index,
+          decidedAt: Date.now(),
+          sentAt: 0,
+          verified: null,
+          retries: 0
+      };
+      _squid.lastOp = op;
+
+      squidDiag('cellDec:' + op.opId, '🎯 Решение: клетка #' + (target.index + 1) +
+          ' [' + (target.confirmed ? target.kind : 'unknown') + ']', 3000);
+
+      // Задержка «как человек»; при малом остатке фазы (если единицы phaseEndsAt подтверждены) — без лишней паузы
+      var rem = squidPhaseRemainingMs(s);
+      var delay = (rem !== null && rem < 6000) ? 150 + Math.floor(Math.random() * 250)
+          : 1200 + Math.floor(Math.random() * 800);
+
+      setTimeout(function () {
+          // ── Проверка актуальности НЕПОСРЕДСТВЕННО перед отправкой ──
+          var s2 = findSquidScope() || s;
+          var snap2 = squidPhaseSnap(s2);
+          if ((snap2.phase && op.phaseBefore && snap2.phase !== op.phaseBefore) ||
+              (op.phaseIdBefore && snap2.phaseId && snap2.phaseId !== op.phaseIdBefore)) {
+              op.verified = true; // фаза ушла — устаревшее действие не отправляем
+              squidDiag('cellStale:' + op.opId, '⏭ Клетка #' + (op.detail + 1) + ' не отправлена: фаза уже ' + (snap2.phase || '?'), 3000);
+              return;
           }
+          if (!squidCellStillOpenable(s2, op.detail)) {
+              op.verified = false;
+              squidDiag('cellGone:' + op.opId, '⚠️ Клетка #' + (op.detail + 1) + ' стала недоступна — отправка отменена', 5000);
+              return;
+          }
+          var liveBtn = squidCellBtnByIndex(op.detail); // живая ссылка, не сохранённая
+          if (!liveBtn) {
+              op.verified = false;
+              squidDiag('cellBtnGone:' + op.opId, '⚠️ Кнопка клетки #' + (op.detail + 1) + ' не найдена — отправка отменена', 5000);
+              return;
+          }
+          op.sentAt = Date.now();
+          sqNativeClick(liveBtn);
+          squidDiag('cellSent:' + op.opId, '→ Клик по клетке #' + (op.detail + 1) + ' отправлен', 3000);
       }, delay);
 
       return true;
   }
 
-  // Decision logic for actions (Frontman, Dalgona, Ambulance)
+  // Decision Engine v1: выбор и ОДНОКРАТНОЕ исполнение специального действия.
+  // Источник истины — реальный API s.actionChoices() (choice.value/label/player).
+  // Единственный механизм отправки — клик по живой кнопке (@click="chooseAction(choice.value)").
+  // Прямой chooseAction(текстКнопки) убран: атрибута data-value в игре нет, а текст ≠ значение API.
   function pickAndExecuteAction(s) {
-      if (_squid.actionPending) return false;
+      if (squidOpBusy(s)) return false;
 
-      var actionBtns = Array.from(document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)'));
-      if (!actionBtns.length) return false;
-
-      var chosenBtn = null;
-      var chosenVal = null;
-
-      var actionKind = (s && s.game && s.game.actionKind) || '';
-      var promptText = (document.querySelector('.squid-minigame__action-prompt') || {}).textContent || '';
-
-      for (var i = 0; i < actionBtns.length; i++) {
-          var b = actionBtns[i];
-          var text = (b.textContent || '').trim().toLowerCase();
-          var val = b.getAttribute('data-value') || b.value || text;
-
-          // 1. Ambulance (Скорая помощь) - always use to save life
-          if (/скорая|помощь|ambulance|спасти|revive/i.test(text) || /ambulance/i.test(val)) {
-              chosenBtn = b; chosenVal = val; break;
-          }
-
-          // 2. Frontman: cash out or stay
-          if (/frontman/i.test(actionKind) || /забрать|остать|куш|банк/i.test(promptText)) {
-              var aliveCount = 10;
-              if (s && typeof s.aliveCount === 'function') {
-                  try { aliveCount = s.aliveCount(); } catch (e) { }
-              }
-              var shouldTake = aliveCount <= 3;
-              if (shouldTake && /забрать|take/i.test(text)) {
-                  chosenBtn = b; chosenVal = val; break;
-              } else if (!shouldTake && /остать|stay/i.test(text)) {
-                  chosenBtn = b; chosenVal = val; break;
-              }
-          }
-
-          // 3. Dalgona (sugar shapes): prefer circle or triangle
-          if (/dalgona/i.test(actionKind) || b.classList.contains('squid-minigame__action-choice--shape')) {
-              if (/круг|circle/i.test(text) || /circle/i.test(val)) {
-                  chosenBtn = b; chosenVal = val; break;
-              }
-              if (/треуголь|triangle/i.test(text) || /triangle/i.test(val)) {
-                  chosenBtn = b; chosenVal = val; break;
-              }
-          }
+      var snap = squidPhaseSnap(s);
+      var choices = squidExtractChoices(s);
+      if (!choices.length) {
+          squidDiag('actNoApi', '⚠️ choose_action: actionChoices() не вернул допустимых вариантов — действие не отправляем (без догадок по тексту кнопок)', 10000);
+          return false;
       }
 
-      if (!chosenBtn && actionBtns.length > 0) {
-          chosenBtn = actionBtns[0];
-          chosenVal = chosenBtn.getAttribute('data-value') || chosenBtn.value || chosenBtn.textContent.trim();
+      var actionKind = '';
+      try { actionKind = (s && s.game && s.game.actionKind) ? String(s.game.actionKind) : ''; } catch (e) { }
+      var aliveCount = -1;
+      try { if (s && typeof s.aliveCount === 'function') aliveCount = Number(s.aliveCount()); } catch (e) { }
+
+      var myPlayerId = '';
+      try {
+          if (s) {
+              if (s.playerId != null) myPlayerId = String(s.playerId);
+              else if (s.entry && s.entry.playerId != null) myPlayerId = String(s.entry.playerId);
+          }
+      } catch (e) { }
+      var allies = [];
+      try {
+          if (typeof _squid !== 'undefined' && Array.isArray(_squid.allies)) allies = _squid.allies;
+      } catch (e) { }
+
+      var choice = squidPickActionTarget(choices, actionKind, aliveCount, myPlayerId, allies);
+      if (!choice) {
+          squidDiag('actNoTarget:' + actionKind + ':' + choices.length,
+              '⚠️ Действие [' + (actionKind || 'без actionKind') + ']: ' + choices.length +
+              ' вариантов, правило выбора не подтверждено — отправка отклонена, требуется ручная проверка', 10000);
+          return false;
       }
 
-      if (!chosenBtn) return false;
+      var op = {
+          type: 'action',
+          opId: squidOpId('action', snap.gameId, snap.phaseId, choice.value),
+          gameId: snap.gameId,
+          phaseBefore: snap.phase,
+          phaseIdBefore: snap.phaseId,
+          detail: choice.value,
+          decidedAt: Date.now(),
+          sentAt: 0,
+          verified: null,
+          retries: 0
+      };
+      _squid.lastOp = op;
 
-      _squid.actionPending = true;
-      sqLog('⚡ Выбор действия: ' + (chosenBtn.textContent.trim() || chosenVal));
+      squidDiag('actDec:' + op.opId, '⚡ Решение: действие [' + (actionKind || '?') + '] = ' +
+          JSON.stringify(choice.value) + (choice.player ? ' → цель #' + choice.player.id : ''), 3000);
 
-      var delay = 1200 + Math.floor(Math.random() * 600);
+      var rem = squidPhaseRemainingMs(s);
+      var delay = (rem !== null && rem < 4000) ? 150 + Math.floor(Math.random() * 250)
+          : 1200 + Math.floor(Math.random() * 600);
+
       setTimeout(function () {
-          try {
-              sqNativeClick(chosenBtn);
-              if (s && typeof s.chooseAction === 'function' && chosenVal) {
-                  try { s.chooseAction(chosenVal); } catch (e) { }
-              }
-          } finally {
-              setTimeout(function () { _squid.actionPending = false; }, 800);
+          // ── Проверка актуальности НЕПОСРЕДСТВЕННО перед отправкой ──
+          var s2 = findSquidScope() || s;
+          var snap2 = squidPhaseSnap(s2);
+          if ((snap2.phase && op.phaseBefore && snap2.phase !== op.phaseBefore) ||
+              (op.phaseIdBefore && snap2.phaseId && snap2.phaseId !== op.phaseIdBefore)) {
+              op.verified = true; // фаза ушла — устаревшее значение не отправляем
+              squidDiag('actStale:' + op.opId, '⏭ Действие не отправлено: фаза уже ' + (snap2.phase || '?'), 3000);
+              return;
           }
+          // Вариант всё ещё среди актуальных choices игры?
+          var live = squidExtractChoices(s2);
+          var still = live.find(function (c) { return String(c.value) === String(op.detail); });
+          if (!still) {
+              op.verified = false;
+              squidDiag('actGone:' + op.opId, '⚠️ Вариант ' + JSON.stringify(op.detail) + ' больше не доступен — отправка отменена', 5000);
+              return;
+          }
+          // Цель действия жива и доступна? (для player-выборов)
+          if (still.player) {
+              var alive = true;
+              try {
+                  var st = String(still.player.status || '').toLowerCase();
+                  alive = st !== 'dead' && st !== 'left';
+              } catch (e) { }
+              if (!alive) {
+                  op.verified = false;
+                  squidDiag('actDeadGoal:' + op.opId, '⚠️ Цель действия недоступна (' + still.player.status + ') — отправка отменена', 5000);
+                  return;
+              }
+          }
+          var liveBtn = squidActionBtnByChoice(still);
+          if (!liveBtn) {
+              op.verified = false;
+              squidDiag('actBtnGone:' + op.opId, '⚠️ Кнопка варианта ' + JSON.stringify(op.detail) + ' не найдена/отключена — отправка отменена', 5000);
+              return;
+          }
+          op.sentAt = Date.now();
+          sqNativeClick(liveBtn); // клик сам вызывает chooseAction(choice.value) в игре
+          squidDiag('actSent:' + op.opId, '→ Клик по действию ' + JSON.stringify(op.detail) + ' отправлен', 3000);
       }, delay);
 
       return true;
@@ -20421,9 +20888,9 @@ body.mw-helper-tip-on .simple-tooltip {
   // В лобби .squid-minigame__reward-overlay скрыт через x-show="result && resultOpen".
   // .squid-minigame__header-finale есть в статичном HTML всегда — НЕ используем его.
   function checkAndCloseResult(s) {
-      if (_squid.actionPending) return false;
+       if (squidOpBusy(s)) return false;
 
-      // Ищем видимый оверлей награды
+       // Ищем видимый оверлей награды
       var overlay = null;
       var overlays = document.querySelectorAll('.squid-minigame__reward-overlay');
       for (var i = 0; i < overlays.length; i++) {
@@ -20450,16 +20917,25 @@ body.mw-helper-tip-on .simple-tooltip {
           : document.querySelector('button.squid-minigame__reward-close');
 
       _squid.actionPending = true;
-      sqLog('\ud83c\udfc6 \u041c\u0430\u0442\u0447 \u043e\u043a\u043e\u043d\u0447\u0435\u043d. \u0417\u0430\u043a\u0440\u044b\u0432\u0430\u044e \u043e\u043a\u043d\u043e...');
+      sqLog('🏆 Матч окончен. Закрываю окно...');
+      // Единственный механизм: клик реальной кнопки оверлея (путь пользователя).
+      // Дублирующий вызов Alpine closeResult() убран — он закрывал то же окно повторно.
+      _squid.lastOp = {
+          type: 'close',
+          opId: squidOpId('close'),
+          sentAt: Date.now(),
+          expected: {},
+          verified: null,
+      };
 
       setTimeout(function () {
           try {
-              if (closeBtn) sqNativeClick(closeBtn);
-              if (s && typeof s.closeResult === 'function') {
-                  try { s.closeResult(); } catch (e) { }
-              }
+              sqNativeClick(closeBtn);
           } finally {
-              setTimeout(function () { _squid.actionPending = false; }, 1500);
+              setTimeout(function () {
+                  _squid.actionPending = false;
+                  squidResetOp('close dispatched');
+              }, 1500);
               // Завершение матча: освобождение персонажа, возобновление модулей,
               // учёт сыгранных игр, план следующего раунда или отложенный стоп.
               squidOnMatchEnded();
@@ -20613,6 +21089,9 @@ body.mw-helper-tip-on .simple-tooltip {
       _squid.joinTries = 0;
       _squid.joinNextAt = 0;
       _squid.pageTask = '';
+      squidResetOp('match ended');
+      squidForgetHint(_squid.hintsGameId);
+      _squid.hintsGameId = '';
       squidSaveSettings();
       sqLog('🏁 Матч завершён (сыграно сегодня: ' + _squid.gamesPlayed + ')');
       if (_squid.stopAfterMatch) {
@@ -20738,6 +21217,12 @@ body.mw-helper-tip-on .simple-tooltip {
 
       // ── PLAYING: боевая логика без изменений (результат → действие → клетка) ──
       if (_squid.phase === SQUID_PHASE.PLAYING) {
+          // Проверка актуальности последней операции (отсроченная верификация)
+          var s = findSquidScope();
+          if (s) {
+              squidVerifyLastOp(s);
+              squidSyncHints(s);
+          }
           // Watchdog: матч давно идёт, но оверлей результата не пойман (сбой/разрыв) —
           // завершаем сессию штатно, чтобы не удерживать персонажа вечно
           if (_squid.phaseStartAt && now - _squid.phaseStartAt > 20 * 60000) {
