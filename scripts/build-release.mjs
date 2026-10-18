@@ -56,7 +56,12 @@ export function getBackupDir(customRoot = projectRoot) {
   if (customRoot && path.resolve(customRoot) !== path.resolve(projectRoot)) {
     return path.join(path.resolve(customRoot), 'backups');
   }
-  return path.join(os.homedir(), 'Desktop', 'MyWay-Moswar-release-backups');
+  return path.join(
+    os.homedir(),
+    'Мосвар',
+    'локальные рабочие файлы',
+    'Резервные копии'
+  );
 }
 
 // ─── Разбор и валидация userscript ───────────────────────────────────────────
