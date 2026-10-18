@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.10
+// @version      3.11
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -2921,17 +2921,24 @@
       let logBuffer = [];
       const LOG_LIMIT = 60;
 
-      function botLog(msg) {
-          const t = new Date();
-          const stamp =
-              `${t.getHours()}`.padStart(2, "0") + ":" +
-              `${t.getMinutes()}`.padStart(2, "0") + ":" +
-              `${t.getSeconds()}`.padStart(2, "0");
-          logBuffer.push(`[${stamp}] ${msg}`);
-          if (logBuffer.length > LOG_LIMIT) logBuffer.shift();
-          const box = document.getElementById("bot-log");
-          if (box) box.textContent = logBuffer.join("\n");
-      }
+        function botLog(msg) {
+            const t = new Date();
+            const stamp =
+                `${t.getHours()}`.padStart(2, "0") + ":" +
+                `${t.getMinutes()}`.padStart(2, "0") + ":" +
+                `${t.getSeconds()}`.padStart(2, "0");
+            logBuffer.unshift(`[${stamp}] ${msg}`);
+            if (logBuffer.length > LOG_LIMIT) logBuffer.pop();
+            const box = document.getElementById("bot-log");
+            if (box) {
+                const prevTop = box.scrollTop;
+                const wasAtTop = prevTop <= 2;
+                const prevH = box.scrollHeight;
+                box.textContent = logBuffer.join("\n");
+                if (wasAtTop) { box.scrollTop = 0; }
+                else { box.scrollTop = prevTop + Math.max(0, box.scrollHeight - prevH); }
+            }
+        }
 
       /* ---------------- ГЛОБАЛЬНОЕ СОСТОЯНИЕ ---------------- */
 
@@ -4448,22 +4455,26 @@
       let logBuffer = [];
       const LOG_LIMIT = 160;
 
-      function addLog(msg) {
-          const t = new Date();
-          const stamp =
-              `${t.getHours()}`.padStart(2, "0") + ":" +
-              `${t.getMinutes()}`.padStart(2, "0") + ":" +
-              `${t.getSeconds()}`.padStart(2, "0");
-          const line = `[${stamp}] ${msg}`;
-          console.log("[RatBot]", line);
-          logBuffer.push(line);
-          if (logBuffer.length > LOG_LIMIT) logBuffer.shift();
-          const box = document.getElementById("ratbot-log");
-          if (box) {
-              box.textContent = logBuffer.join("\n");
-              box.scrollTop = box.scrollHeight;
-          }
-      }
+       function addLog(msg) {
+           const t = new Date();
+           const stamp =
+               `${t.getHours()}`.padStart(2, "0") + ":" +
+               `${t.getMinutes()}`.padStart(2, "0") + ":" +
+               `${t.getSeconds()}`.padStart(2, "0");
+           const line = `[${stamp}] ${msg}`;
+           console.log("[RatBot]", line);
+           logBuffer.unshift(line);
+           if (logBuffer.length > LOG_LIMIT) logBuffer.pop();
+           const box = document.getElementById("ratbot-log");
+           if (box) {
+               const prevTop = box.scrollTop;
+               const wasAtTop = prevTop <= 2;
+               const prevH = box.scrollHeight;
+               box.textContent = logBuffer.join("\n");
+               if (wasAtTop) { box.scrollTop = 0; }
+               else { box.scrollTop = prevTop + Math.max(0, box.scrollHeight - prevH); }
+           }
+       }
 
       function setStatus(text) {
           const s = document.getElementById("ratbot-status");
@@ -6056,10 +6067,17 @@
               `${t.getSeconds()}`.padStart(2, "0");
           const line = `[${stamp}] ${msg}`;
           console.log("[NeftBot]", line);
-          logBuffer.push(line);
-          if (logBuffer.length > LOG_LIMIT) logBuffer.shift();
+          logBuffer.unshift(line);
+          if (logBuffer.length > LOG_LIMIT) logBuffer.pop();
           const box = document.getElementById("neftbot-log");
-          if (box) box.textContent = logBuffer.join("\n");
+          if (box) {
+              const prevTop = box.scrollTop;
+              const wasAtTop = prevTop <= 2;
+              const prevH = box.scrollHeight;
+              box.textContent = logBuffer.join("\n");
+              if (wasAtTop) { box.scrollTop = 0; }
+              else { box.scrollTop = prevTop + Math.max(0, box.scrollHeight - prevH); }
+          }
       }
 
       function setStatus(text) {
@@ -7126,34 +7144,40 @@
           }
           pageTransitionAt = 0; // сброс cooldown после истечения
 
-          // ─── ПРОВЕРКА: ожидание подтверждения возврата ───
-          if (isDoublePassWaiting()) {
-              // Исправление: проверяем ВИДИМОСТЬ (overlay скрыт CSS), а не существование элемента.
-              // AngryAjax прячет оверлеи через CSS без удаления из DOM.
-              const winEl = document.getElementById("neftlenin_alert_win");
-              const winGone = !winEl || !isVisible(winEl);
-              const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
-              if (winGone && pipeBack) {
-                  doublePassState = DP.SECOND_IN_PROGRESS;
-                  localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
-                  waitingResetSince = 0;
-                  addLog("▶️ Переход подтверждён (проверка в тике). Второй проход запущен");
-                  setStatus("▶️ Второй проход нефтепровода");
-                  // НЕ возвращаемся — продолжаем обычный цикл этого тика
-              } else {
-                  // Диагностика: почему ещё не подтверждено
-                  const now = Date.now();
-                  if (waitingResetSince > 0 && (now - waitingResetSince) > 30000 &&
-                      (now - waitingResetLastDiag) > 15000) {
-                      waitingResetLastDiag = now;
-                      const winVisible = winEl && isVisible(winEl);
-                      addLog("⏳ Ожидание возврата: winGone=" + winGone +
-                          ", winVisible=" + !!winVisible +
-                          ", pipeBack=" + !!pipeBack + " — жду изменения DOM");
-                  }
-                  return; // всё ещё ждём подтверждения
-              }
-          }
+           // ─── ПРОВЕРКА: ожидание подтверждения возврата ───
+           if (isDoublePassWaiting()) {
+               // Сначала проверяем, не появилась ли снова победа (окно могло остаться видимым)
+               const winEl = document.getElementById("neftlenin_alert_win");
+               if (winEl && isVisible(winEl)) {
+                   addLog("⚠️ Окно победы снова видимо при ожидании возврата — обрабатываю");
+                   await handleWinAlert(winEl);
+                   return;
+               }
+               // Исправление: проверяем ВИДИМОСТЬ (overlay скрыт CSS), а не существование элемента.
+               // AngryAjax прячет оверлеи через CSS без удаления из DOM.
+               const winGone = !winEl || !isVisible(winEl);
+               const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
+               if (winGone && pipeBack) {
+                   doublePassState = DP.SECOND_IN_PROGRESS;
+                   localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
+                   waitingResetSince = 0;
+                   addLog("▶️ Переход подтверждён (проверка в тике). Второй проход запущен");
+                   setStatus("▶️ Второй проход нефтепровода");
+                   // НЕ возвращаемся — продолжаем обычный цикл этого тика
+               } else {
+                   // Диагностика: почему ещё не подтверждено
+                   const now = Date.now();
+                   if (waitingResetSince > 0 && (now - waitingResetSince) > 30000 &&
+                       (now - waitingResetLastDiag) > 15000) {
+                       waitingResetLastDiag = now;
+                       const winVisible = winEl && isVisible(winEl);
+                       addLog("⏳ Ожидание возврата: winGone=" + winGone +
+                           ", winVisible=" + !!winVisible +
+                           ", pipeBack=" + !!pipeBack + " — жду изменения DOM");
+                   }
+                   return; // всё ещё ждём подтверждения
+               }
+           }
 
           // ─── 1. ПОБЕДА — максимальный приоритет, проверяем до любых патрулей ───
           const winAlert = document.getElementById("neftlenin_alert_win");
@@ -7282,25 +7306,11 @@
           localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.WAITING_RESET));
           addLog("🔄 Праздничный бонус найден. Возвращаюсь в начало нефтепровода...");
 
-          // Кликаем по кнопке (использует AngryAjax.goToUrl)
-          resetBtn.click();
-          await humanPause(2000, 3500);
-
-          // Подтверждаем переход: победное окно НЕВИДИМО И появилась труба
-          const winEl = document.getElementById("neftlenin_alert_win");
-          const winGone = !winEl || !isVisible(winEl);
-          const pipeBack = document.querySelector(".pipeline-scroll") || document.querySelector(".pipeline-actions");
-          if (winGone && pipeBack) {
-              doublePassState = DP.SECOND_IN_PROGRESS;
-              localStorage.setItem(DOUBLE_PASS_STATE_LS_KEY, String(DP.SECOND_IN_PROGRESS));
-              waitingResetSince = 0;
-              addLog("▶️ Переход подтверждён. Второй проход нефтепровода запущен");
-              setStatus("▶️ Второй проход нефтепровода");
-          } else {
-              addLog("⚠️ Переход не подтверждён (winGone=" + winGone + ", pipeBack=" + !!pipeBack + ") — ждём следующего тика");
-              // Состояние WAITING_RESET сохраняется — следующий тик проверит DOM
-          }
-      }
+           // Кликаем по кнопке (использует AngryAjax.goToUrl)
+           resetBtn.click();
+           addLog("🔄 Жму «Вернуться в начало» — жду подтверждения перехода на следующем тике");
+           // Подтверждение перехода НЕ здесь — оно в handleNeftPage, где проверяется реальный DOM
+       }
 
 
       /* ========================= MAIN LOOP ========================= */
@@ -13661,18 +13671,22 @@ ${ticketsBlockHtml()}
           return spend;
       }
 
-      function addLog(msg) {
-          const t = new Date();
-          const stamp = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
-          console.log(`[Satellite] ${msg}`);
-          logBuffer.push(`[${stamp}] ${msg}`);
-          if (logBuffer.length > 120) logBuffer.shift();
-          const el = document.getElementById('sat-log');
-          if (el) {
-              el.textContent = logBuffer.join('\n');
-              el.scrollTop = el.scrollHeight;
-          }
-      }
+       function addLog(msg) {
+           const t = new Date();
+           const stamp = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+           console.log(`[Satellite] ${msg}`);
+           logBuffer.unshift(`[${stamp}] ${msg}`);
+           if (logBuffer.length > 120) logBuffer.pop();
+           const el = document.getElementById('sat-log');
+           if (el) {
+               const prevTop = el.scrollTop;
+               const wasAtTop = prevTop <= 2;
+               const prevH = el.scrollHeight;
+               el.textContent = logBuffer.join('\n');
+               if (wasAtTop) { el.scrollTop = 0; }
+               else { el.scrollTop = prevTop + Math.max(0, el.scrollHeight - prevH); }
+           }
+       }
 
       function setStatus(text) {
           const el = document.getElementById('sat-status');
@@ -17323,21 +17337,25 @@ body.mw-helper-tip-on .simple-tooltip {
       } catch (e) {}
       const body = ui.body;
 
-      function paintLog() {
-          const box = document.getElementById('tcshop-log');
-          if (!box) return;
-          box.innerHTML = logEntries.map((l) => '<div>' + String(l).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</div>').join('');
-          box.scrollTop = box.scrollHeight;
-      }
+       function paintLog() {
+           const box = document.getElementById('tcshop-log');
+           if (!box) return;
+           const prevTop = box.scrollTop;
+           const wasAtTop = prevTop <= 2;
+           const prevH = box.scrollHeight;
+           box.innerHTML = logEntries.map((l) => '<div>' + String(l).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</div>').join('');
+           if (wasAtTop) { box.scrollTop = 0; }
+           else { box.scrollTop = prevTop + Math.max(0, box.scrollHeight - prevH); }
+       }
 
-      function logLine(msg) {
-          const t = new Date().toLocaleTimeString();
-          logEntries.push('[' + t + '] ' + msg);
-          if (logEntries.length > 60) logEntries.splice(0, logEntries.length - 60);
-          saveJson(LS_LOG, logEntries);
-          paintLog();
-          console.log('[tcshop]', msg);
-      }
+       function logLine(msg) {
+           const t = new Date().toLocaleTimeString();
+           logEntries.unshift('[' + t + '] ' + msg);
+           if (logEntries.length > 60) logEntries.splice(60);
+           saveJson(LS_LOG, logEntries);
+           paintLog();
+           console.log('[tcshop]', msg);
+       }
 
       function saveCfg() { saveJson(LS_CFG, cfg); }
       function saveQty() { saveJson(LS_QTY, qtyMap); }
@@ -18236,12 +18254,12 @@ body.mw-helper-tip-on .simple-tooltip {
               return targets;
           }
 
-          function addLog(msg){
-              const time = new Date().toLocaleTimeString();
-              logEntries.push(`[${time}] ${msg}`);
-              if(logEntries.length>7) logEntries.shift();
-              updatePanel();
-          }
+           function addLog(msg){
+               const time = new Date().toLocaleTimeString();
+               logEntries.unshift(`[${time}] ${msg}`);
+               if(logEntries.length>7) logEntries.pop();
+               updatePanel();
+           }
 
           function updateBoxCounter(el){
               if(!el) return;
@@ -18360,40 +18378,49 @@ body.mw-helper-tip-on .simple-tooltip {
               }
           }
 
-          function updatePanel(currentBug=null, currentRound=null) {
-              const progress = getBugProgress().map((n,i) => {
-                  const blocks = [];
-                  for (let r=1;r<=MAX_ROUND;r++){
-                      let color = '#555';
-                      if(r<=n) color='#9fe39f';
-                      if(currentBug===i+1 && currentRound===r) color='#fffb66';
-                      blocks.push(`<span style="display:inline-block;width:8px;height:8px;margin:0 1px;background:${color};border-radius:2px;"></span>`);
-                  }
-                  return `<div style="margin:1px 0;">Bug${i+1}: ${blocks.join('')}</div>`;
-              }).join('');
+           function updatePanel(currentBug=null, currentRound=null) {
+               const progress = getBugProgress().map((n,i) => {
+                   const blocks = [];
+                   for (let r=1;r<=MAX_ROUND;r++){
+                       let color = '#555';
+                       if(r<=n) color='#9fe39f';
+                       if(currentBug===i+1 && currentRound===r) color='#fffb66';
+                       blocks.push(`<span style="display:inline-block;width:8px;height:8px;margin:0 1px;background:${color};border-radius:2px;"></span>`);
+                   }
+                   return `<div style="margin:1px 0;">Bug${i+1}: ${blocks.join('')}</div>`;
+               }).join('');
 
-              const roundsIndicator = Array.from({length: MAX_ROUND}, (_, i)=>{
-                  const r=i+1;
-                  const bg = (currentRound===r) ? '#ff9900' : 'rgba(255,255,255,0.3)';
-                  return `<span style="display:inline-block;width:14px;height:14px;margin:0 2px;background:${bg};border-radius:50%;text-align:center;line-height:14px;font-size:10px;color:#000;font-weight:700;">${r}</span>`;
-              }).join('');
+               const roundsIndicator = Array.from({length: MAX_ROUND}, (_, i)=>{
+                   const r=i+1;
+                   const bg = (currentRound===r) ? '#ff9900' : 'rgba(255,255,255,0.3)';
+                   return `<span style="display:inline-block;width:14px;height:14px;margin:0 2px;background:${bg};border-radius:50%;text-align:center;line-height:14px;font-size:10px;color:#000;font-weight:700;">${r}</span>`;
+               }).join('');
 
-              const logHtml = logEntries.map(l=>`<div style="font-size:11px;margin:1px 0;opacity:0.9;">${l}</div>`).join('');
+               const logHtml = logEntries.map(l=>`<div style="font-size:11px;margin:1px 0;opacity:0.9;">${l}</div>`).join('');
 
-              panel.innerHTML = `
-                <div style="font-weight:700; margin-bottom:4px; font-size:14px; display:flex; justify-content:space-between; align-items:center;">
-                  <span>AUTO: <span style="color:${isRunning?'#a6f3a6':'#ffb3b3'}">${isRunning?'ON':'OFF'}</span></span>
-                  <button style="cursor:pointer; font-size:11px; padding:2px 6px; border:1px solid #fff; background:rgba(0,0,0,0.5); color:#fff; border-radius:4px;">${isRunning ? 'Остановить' : 'Запустить'}</button>
-                </div>
-                <div style="font-size:13px; opacity:0.95; margin-bottom:4px">Открыто: ${openCount} (Рюкзаков: ${bagCount})</div>
-                <div style="font-size:12px; opacity:0.95; margin-bottom:4px">${progress}</div>
-                <div style="margin-top:4px;margin-bottom:4px;">Раунды: ${roundsIndicator}</div>
-                <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:4px;max-height:80px;overflow-y:auto;">
-                  ${logHtml}
-                </div>
-              `;
+               const logDiv = panel.lastElementChild;
+               const prevTop = logDiv ? logDiv.scrollTop : 0;
+               const prevH = logDiv ? logDiv.scrollHeight : 0;
 
-              const btn = panel.querySelector('button');
+               panel.innerHTML = `
+                 <div style="font-weight:700; margin-bottom:4px; font-size:14px; display:flex; justify-content:space-between; align-items:center;">
+                   <span>AUTO: <span style="color:${isRunning?'#a6f3a6':'#ffb3b3'}">${isRunning?'ON':'OFF'}</span></span>
+                   <button style="cursor:pointer; font-size:11px; padding:2px 6px; border:1px solid #fff; background:rgba(0,0,0,0.5); color:#fff; border-radius:4px;">${isRunning ? 'Остановить' : 'Запустить'}</button>
+                 </div>
+                 <div style="font-size:13px; opacity:0.95; margin-bottom:4px">Открыто: ${openCount} (Рюкзаков: ${bagCount})</div>
+                 <div style="font-size:12px; opacity:0.95; margin-bottom:4px">${progress}</div>
+                 <div style="margin-top:4px;margin-bottom:4px;">Раунды: ${roundsIndicator}</div>
+                 <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:4px;max-height:80px;overflow-y:auto;">
+                   ${logHtml}
+                 </div>
+                `;
+
+               if (prevH > 0) {
+                   const newH = panel.lastElementChild.scrollHeight;
+                   panel.lastElementChild.scrollTop = prevTop + Math.max(0, newH - prevH);
+               }
+
+               const btn = panel.querySelector('button');
               if(btn) {
                   btn.onclick = (e) => {
                       e.stopPropagation();
@@ -18588,18 +18615,24 @@ body.mw-helper-tip-on .simple-tooltip {
                   if (this.statusEl) this.statusEl.textContent = txt;
               },
 
-              addLog: function(txt) {
-                  const ts = new Date();
-                  const t = ts.toLocaleTimeString();
-                  const full = `[${t}] ${txt}`;
-                  console.log('OMON:', full);
-                  if (this.logEl) {
-                      const div = document.createElement('div');
-                      div.textContent = full;
-                      this.logEl.appendChild(div);
-                      this.logEl.scrollTop = this.logEl.scrollHeight;
-                  }
-              },
+               addLog: function(txt) {
+                   const ts = new Date();
+                   const t = ts.toLocaleTimeString();
+                   const full = `[${t}] ${txt}`;
+                   console.log('OMON:', full);
+                    if (this.logEl) {
+                        const wasAtTop = this.logEl.scrollTop <= 2;
+                        const prevH = this.logEl.scrollHeight;
+                        const div = document.createElement('div');
+                        div.textContent = full;
+                        this.logEl.prepend(div);
+                        while (this.logEl.children.length > 100) {
+                            this.logEl.removeChild(this.logEl.lastChild);
+                        }
+                        if (wasAtTop) { this.logEl.scrollTop = 0; }
+                        else { this.logEl.scrollTop += Math.max(0, this.logEl.scrollHeight - prevH); }
+                    }
+               },
 
               updateFallbackLabel: function() {
                   if (!this.fallbackLabelEl) return;
@@ -20296,20 +20329,24 @@ body.mw-helper-tip-on .simple-tooltip {
       return s;
   }
 
-  function sqLog(msg) {
-      var time = new Date().toLocaleTimeString();
-      var full = '[' + time + '] ' + msg;
-      console.log('[🦑 Squid] ' + full);
-      var logBox = document.getElementById('mw-squid-log');
-      if (logBox) {
-          logBox.textContent = (logBox.textContent + String.fromCharCode(10) + full).split(String.fromCharCode(10)).slice(-100).join(String.fromCharCode(10));
-          logBox.scrollTop = logBox.scrollHeight;
-      }
-      var statusEl = document.getElementById('mw-squid-status-text');
-      if (statusEl) {
-          statusEl.textContent = msg;
-      }
-  }
+    function sqLog(msg) {
+        var time = new Date().toLocaleTimeString();
+        var full = '[' + time + '] ' + msg;
+        console.log('[🦑 Squid] ' + full);
+        var logBox = document.getElementById('mw-squid-log');
+        if (logBox) {
+            var prevTop = logBox.scrollTop;
+            var wasAtTop = prevTop <= 2;
+            var prevH = logBox.scrollHeight;
+            logBox.textContent = (full + '\n' + logBox.textContent).split(String.fromCharCode(10)).slice(0, 100).join(String.fromCharCode(10));
+            if (wasAtTop) { logBox.scrollTop = 0; }
+            else { logBox.scrollTop = prevTop + Math.max(0, logBox.scrollHeight - prevH); }
+        }
+       var statusEl = document.getElementById('mw-squid-status-text');
+       if (statusEl) {
+           statusEl.textContent = msg;
+       }
+   }
 
   // Safe native click dispatching full pointer & mouse events
   function sqNativeClick(el) {

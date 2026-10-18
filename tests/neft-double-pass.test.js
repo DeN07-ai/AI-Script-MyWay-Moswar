@@ -693,6 +693,56 @@ test('R6: третий проход невозможен', () => {
     assert.equal(dp.botStopped, true);
 });
 
+console.log('Новый путь: WAITING_RESET + win visible → guard в handleWinAlert');
+
+test('W1: WAITING_RESET + видимое окно победы → handleWinAlert вызван, guard сработал, повторного клика нет', () => {
+    const dp = createDoublePassState(true, DP.IDLE);
+    // Первый клик — переход в WAITING_RESET
+    dp.handleWinAlert(true, true, false, false);
+    assert.equal(dp.state, DP.WAITING_RESET);
+    assert.equal(dp.resetClickCount, 1);
+    // Новый путь: handleNeftPage видит win visible при WAITING_RESET → вызывает handleWinAlert
+    // Внутри handleWinAlert: guard isDoublePassWaiting() → return. Повторного клика нет.
+    dp.handleWinAlert(true, true, false, false);
+    assert.equal(dp.resetClickCount, 1, 'повторного клика не было');
+    assert.equal(dp.state, DP.WAITING_RESET, 'состояние сохранено');
+});
+
+test('W2: WAITING_RESET + win gone + pipe absent → остаёмся WAITING_RESET, без клика', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    const stillWaiting = dp.checkWaitingResetConfirmation(true, false);
+    assert.equal(stillWaiting, true, 'ждём дальше');
+    assert.equal(dp.state, DP.WAITING_RESET);
+    assert.equal(dp.resetClickCount, 0, 'сброс не нажимался');
+});
+
+test('W3: WAITING_RESET + win visible + pipeBack → guard, не переходим в SECOND_IN_PROGRESS', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    // handleWinAlert вызывается, но guard блокирует — состояние не меняется
+    dp.handleWinAlert(true, true, true, true);
+    assert.equal(dp.state, DP.WAITING_RESET, 'guard не дал обработать победу');
+    assert.equal(dp.resetClickCount, 0, 'сброс не нажимался');
+});
+
+test('W4: WAITING_RESET → win gone + pipeBack → SECOND_IN_PROGRESS (нормальный переход)', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    const stillWaiting = dp.checkWaitingResetConfirmation(true, true);
+    assert.equal(stillWaiting, false);
+    assert.equal(dp.state, DP.SECOND_IN_PROGRESS);
+});
+
+test('W5: WAITING_RESET → переход → победа → DONE → остановка (полный цикл без третьего прохода)', () => {
+    const dp = createDoublePassState(true, DP.WAITING_RESET);
+    dp.checkWaitingResetConfirmation(true, true);
+    assert.equal(dp.state, DP.SECOND_IN_PROGRESS);
+    dp.handleWinAlert(true, true, false, false);
+    assert.equal(dp.state, DP.DONE);
+    assert.equal(dp.botStopped, true);
+    // Третий проход невозможен
+    dp.handleWinAlert(true, true, true, true);
+    assert.equal(dp.resetClickCount, 0, 'сброс не нажимался после DONE');
+});
+
 // ============================================================
 
 console.log('Итого: ' + passed + ' passed, ' + failed + ' failed');
