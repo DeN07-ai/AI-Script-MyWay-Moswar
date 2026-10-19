@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.11
+// @version      3.12
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -12903,8 +12903,14 @@ ${ticketsBlockHtml()}
                           const count = Math.max(1, parseInt(countInp ? countInp.value : '1', 10) || 1);
                           let done = 0;
 
-                          // Переходим на страницу москвополии если ещё не там
-                          if (location.pathname !== '/home/' || !location.href.includes('moscowpoly')) {
+                          const MP_BTN_SEL = '.moscowpoly-home__button, [onclick*="Moscowpoly.show"], [onclick*="Moscowpoly"]';
+                          const MP_PANEL_SEL = '#moscowpoly, .moscowpoly-panel__table, .moscowpoly-panel__td-center';
+                          const isPanelOpen = () => !!document.querySelector(MP_PANEL_SEL);
+                          // Moscowpoly живёт в контексте страницы (unsafeWindow), а не в sandbox скрипта
+                          const getMP = () => (pw.Moscowpoly && typeof pw.Moscowpoly.dropDices === 'function') ? pw.Moscowpoly : null;
+
+                          // 1. Переход на страницу хаты, если ещё не там
+                          if (location.pathname !== '/home/') {
                               if (isAborted()) return false;
                               console.log('[FullDope] Moscowpoly: Navigating to /home/');
                               MoswarLib.Navigation.goToUrl('/home/');
@@ -12912,63 +12918,155 @@ ${ticketsBlockHtml()}
                               if (isAborted()) return false;
                           }
 
-                          // Ждём инициализации window.Moscowpoly
-                          const mp = await new Promise(function(resolve) {
-                              let tries = 0;
-                              const interval = trackInterval(function() {
-                                  if (fdSession.aborted) {
-                                      untrackInterval(interval);
-                                      resolve(null);
-                                      return;
-                                  }
-                                  tries++;
-                                  if (window.Moscowpoly && typeof window.Moscowpoly.dropDices === 'function') {
-                                      untrackInterval(interval);
-                                      console.log('[FullDope] Moscowpoly: Initialized after ' + tries + ' tries');
-                                      resolve(window.Moscowpoly);
-                                  }
-                                  if (tries > 100) {
-                                      untrackInterval(interval);
-                                      console.warn('[FullDope] Moscowpoly: Timeout, using AJAX fallback');
-                                      resolve(null);
-                                  }
-                              }, 100);
-                          });
-                          if (isAborted()) return false;
+                          // 2. Ждём объект игры Moscowpoly из контекста страницы
+                          let MP = null;
+                          for (let t = 0; t < 80 && !MP; t++) {
+                              if (isAborted()) return false;
+                              MP = getMP();
+                              if (!MP) await sleep(100);
+                          }
 
-                          for (let i = 0; i < count; i++) {
-                              if (isAborted()) break;
-                              await waitWhilePaused();
-                              if (isAborted()) break;
-                              // Быстрый бросок: прямой вызов функции игры (без анимации)
-                              if (mp && typeof mp.dropDices === 'function' && !mp.inAction) {
-                                  console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via API');
-                                  mp.dropDices();
-                                  // Ждём завершения анимации (~1-1.5 сек)
-                                  await sleep(1500);
+                          // 3. Ускоренные переопределения методов игры (как в Ассистенте):
+                          //    кубики крутятся ~0.01-0.02 сек, фигурка телепортируется, бонус активируется сразу
+                          if (MP && !MP.__fdFast) {
+                              const tw = pw.TweenLite, steppedEase = pw.SteppedEase, rnd = pw.mt_rand;
+                              const mpPost = (url, data, cb) => {
+                                  if (typeof pw.postUrl === 'function') { pw.postUrl(url, data, 'post', cb); return; }
+                                  if (pw.$ && pw.$.ajax) { pw.$.ajax({ url: url, type: 'POST', data: data, dataType: 'json', success: cb }); return; }
+                                  fetch(url, { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: new URLSearchParams(data).toString() }).then(r => r.json()).then(cb).catch(() => {});
+                              };
+                              MP.__fdFast = true;
+                              MP.animateDices = function (roll) {
+                                  const d1 = this.$dice1, d2 = this.$dice2;
+                                  try { d1.unbind('click'); d2.unbind('click'); } catch (_) {}
+                                  d1.removeAttr('style').css({ 'background-position': '0 0' }).show(0);
+                                  d2.removeAttr('style').css({ 'background-position': '0 -65px' }).show(0);
+                                  const finish = () => {
+                                      d1.css('background-position', '').removeClass('i-1 i-2 i-3 i-4 i-5 i-6').addClass('i-' + roll[0]);
+                                      d2.css('background-position', '').removeClass('i-1 i-2 i-3 i-4 i-5 i-6').addClass('i-' + roll[1]);
+                                      if (typeof this.onAnimateDicesComplete === 'function') { try { this.onAnimateDicesComplete(); } catch (_) {} }
+                                  };
+                                  if (tw && steppedEase && rnd) {
+                                      const f1 = rnd(10, 20), t1 = rnd(1, 2) * f1 / 1e3;
+                                      const f2 = rnd(10, 20), t2 = rnd(1, 2) * f2 / 1e3;
+                                      tw.to(d1, t1, { backgroundPosition: (-65 * f1) + 'px 0', ease: steppedEase.config(f1), paused: false });
+                                      tw.to(d2, t2, { backgroundPosition: (-65 * f2) + 'px -65px', ease: steppedEase.config(f2), paused: false });
+                                      setTimeout(finish, Math.max(t1, t2) * 1000 + 60);
+                                  } else {
+                                      finish();
+                                  }
+                              };
+                              MP.animateFigureRoute = function (route) {
+                                  if (route && route.length > 0) {
+                                      const pos = MP.getFigurePositionByCell(route[route.length - 1]);
+                                      if (pos) { try { this.$figure.css({ top: pos.top, left: pos.left }); } catch (_) {} }
+                                  }
+                                  this.setInAction(false);
+                                  this.setCellActive(this.data.current);
+                                  this.updateInfoHTML();
+                                  this.initState();
+                              };
+                              MP.dropDices = function () {
+                                  this.setInAction(true);
+                                  const self = this;
+                                  mpPost('/home/moscowpoly_roll/', { action: 'moscowpoly_roll', ajax: 1 }, (t) => {
+                                      if (!t) return;
+                                      self.lastMove = t;
+                                      self.state = t.state;
+                                      if (t.rollResult) self.animateDices(t.rollResult);
+                                      if (t.text_m) {
+                                          const txt = (t.text_m && t.text_m.text) ? t.text_m.text : '';
+                                          if (txt.includes('За прохождение Клетки старт')) return;
+                                          self.addAlert(t.text_m);
+                                      }
+                                  });
+                                  // Как в Ассистенте: не ждём анимацию — активируем бонус сразу
+                                  setTimeout(() => {
+                                      try { MP.setInAction(false); MP.doActivate(); } catch (_) {}
+                                  }, 500);
+                              };
+                              MP.doActivate = function () {
+                                  if (this.inAction) return;
+                                  this.setInAction(true);
+                                  const self = this;
+                                  mpPost('/home/moscowpoly_activate/', { action: 'moscowpoly_activate', ajax: 1 }, (t) => {
+                                      if (!t) return;
+                                      self.state = t.state;
+                                      self.setInAction(false);
+                                      if (t.text_m) {
+                                          const txt = (t.text_m && t.text_m.text) ? t.text_m.text : '';
+                                          if (!txt.includes('Бонус уже активирован')) self.addAlert(t.text_m);
+                                      }
+                                      self.updateInfoHTML();
+                                      self.initState();
+                                  });
+                              };
+                              console.log('[FullDope] Moscowpoly: speed-up overrides applied');
+                          }
+
+                          // 4. Открываем окно Москвополии кнопкой «К Москвополии»
+                          if (!isPanelOpen()) {
+                              let openBtn = null;
+                              for (let t = 0; t < 30 && !openBtn && !isPanelOpen(); t++) {
+                                  if (isAborted()) return false;
+                                  openBtn = document.querySelector(MP_BTN_SEL);
+                                  if (!openBtn) await sleep(200);
+                              }
+                              if (openBtn) {
+                                  console.log('[FullDope] Moscowpoly: Clicking "К Москвополии"');
+                                  openBtn.click();
+                              } else if (MP && typeof MP.show === 'function') {
+                                  console.log('[FullDope] Moscowpoly: Button not found, calling Moscowpoly.show()');
+                                  MP.show();
                               } else {
-                                  // Fallback: AJAX
-                                  console.log('[FullDope] Moscowpoly: Roll ' + (i+1) + '/' + count + ' via AJAX');
+                                  console.warn('[FullDope] Moscowpoly: Cannot open window, will use AJAX fallback');
+                              }
+                              for (let t = 0; t < 30 && !isPanelOpen(); t++) {
+                                  if (isAborted()) return false;
+                                  await sleep(200);
+                              }
+                              console.log(isPanelOpen() ? '[FullDope] Moscowpoly: Window opened' : '[FullDope] Moscowpoly: Window not opened, using AJAX fallback');
+                          }
+
+                          // 5. Ожидание завершения текущего действия игры (флаг inAction в контексте страницы)
+                          const waitMpIdle = async (maxMs) => {
+                              let waited = 0;
+                              while (pw.Moscowpoly && pw.Moscowpoly.inAction && waited < maxMs) {
+                                  if (isAborted()) return;
+                                  await sleep(60);
+                                  waited += 60;
+                              }
+                          };
+
+                          // 6. Цикл бросков
+                          if (MP) {
+                              for (let i = 0; i < count; i++) {
+                                  if (isAborted()) break;
+                                  await waitWhilePaused();
+                                  if (isAborted()) break;
+                                  console.log('[FullDope] Moscowpoly: Roll ' + (i + 1) + '/' + count + ' (fast)');
+                                  await waitMpIdle(10000);
+                                  if (isAborted()) break;
+                                  try { MP.dropDices(); } catch (e) { console.warn('[FullDope] Moscowpoly: dropDices error', e); break; }
+                                  await waitMpIdle(10000);
+                                  done++;
+                              }
+                          } else {
+                              for (let i = 0; i < count; i++) {
+                                  if (isAborted()) break;
+                                  await waitWhilePaused();
+                                  if (isAborted()) break;
+                                  console.log('[FullDope] Moscowpoly: Roll ' + (i + 1) + '/' + count + ' via AJAX');
                                   const r = await request('/home/moscowpoly_roll/', { action: 'moscowpoly_roll' });
                                   if (isAborted()) break;
                                   if (!r || r.result === 0) {
                                       console.warn('[FullDope] Moscowpoly: Roll failed');
                                       break;
                                   }
-                                  await sleep(1000);
-                              }
-                              if (isAborted()) break;
-                              await waitWhilePaused();
-                              if (isAborted()) break;
-                              // Активация бонуса
-                              if (mp && typeof mp.doActivate === 'function' && !mp.inAction) {
-                                  mp.doActivate();
-                                  await sleep(500);
-                              } else {
                                   await request('/home/moscowpoly_activate/', { action: 'moscowpoly_activate' });
-                                  await sleep(500);
+                                  await sleep(300);
+                                  done++;
                               }
-                              done++;
                           }
                           logs.push('🎲 Москвополия: ' + done);
                       } else if (task.id === 'fd-stash') {
