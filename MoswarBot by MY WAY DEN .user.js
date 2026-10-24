@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.12
+// @version      3.13
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -20250,7 +20250,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
   // Выбор варианта действия по реальному actionKind и вариантам API.
   // frontman — эвристика cash-out (aliveCount<=3);
-  // dalgona — эвристика выбора фигуры (круг -> треугольник);
+  // dalgona — круг -> треугольник -> зонтик -> любая фигура (fallback);
   // fight / marbles / ambulance — выбор цели среди игроков choice.player с проверкой состояния;
   // fight (текст) — семантика кражи Скорой / сжечь / уйти;
   // прочие kinds — если вариант ровно один, иначе null (без произвольных догадок).
@@ -20269,12 +20269,17 @@ body.mw-helper-tip-on .simple-tooltip {
           return m || null;
       }
 
-      // 2. Dalgona
+      // 2. Dalgona — распознавание фигур; fallback на любую фигуру при неизвестном варианте
       if (/dalgona/i.test(kind)) {
           var circle = list.find(function (c) { return /круг|circle/i.test(c.label || '') || /circle/i.test(String(c.value || '')); });
           if (circle) return circle;
           var tri = list.find(function (c) { return /треуголь|triangle/i.test(c.label || '') || /triangle/i.test(String(c.value || '')); });
-          return tri || null;
+          if (tri) return tri;
+          // Зонтик и другие возможные фигуры (пока не подтверждены дампами, но возможны в будущих обновлениях)
+          var umbrella = list.find(function (c) { return /зонтик|umbrella/i.test(c.label || '') || /umbrella/i.test(String(c.value || '')); });
+          if (umbrella) return umbrella;
+          // Любая фигура — безопаснее, чем null (который приводит к пропуску действия)
+          return list[0] || null;
       }
 
       // 3. Выбор цели среди игроков (choice.player):
@@ -20356,12 +20361,550 @@ body.mw-helper-tip-on .simple-tooltip {
   // Един ли gameId (для сброса подсказок между матчами).
   function squidHintsForGame(state, gameId) {
       if (!state || !gameId) return {};
-      if (state.hintsGameId !== gameId) return {};
-      return state.hintsByGame && typeof state.hintsByGame === 'object' ? state.hintsByGame : {};
-  }
-  /* __SQUID_PURE_END__ */
+       if (state.hintsGameId !== gameId) return {};
+       return state.hintsByGame && typeof state.hintsByGame === 'object' ? state.hintsByGame : {};
+   }
 
-  var _squid = {
+   // ── Аналитика сессий (чистая функция, без DOM) ──
+   function squidTelemComputeStats(sessions) {
+       try {
+           if (!Array.isArray(sessions) || !sessions.length) {
+               return { total: 0, completed: 0, abandoned: 0, active: 0, error: 'no_data' };
+           }
+           var stats = {
+               total: sessions.length,
+               completed: 0,
+               abandoned: 0,
+               active: 0,
+               causes: {},
+               cells: {},
+               actions: {},
+               errors: {},
+               dalgona: {},
+               hints: {},
+               unknownDecisions: 0,
+               totalEvents: 0
+           };
+           sessions.forEach(function (s) {
+               if (!s || !s.events) return;
+               stats.totalEvents += s.events.length;
+               if (s.status === 'completed') {
+                   stats.completed++;
+                   if (s.meta && s.meta.cause) {
+                       var c = s.meta.cause;
+                       stats.causes[c] = (stats.causes[c] || 0) + 1;
+                   }
+               } else if (s.status === 'abandoned') {
+                   stats.abandoned++;
+               } else if (s.status === 'active') {
+                   stats.active++;
+               }
+               s.events.forEach(function (ev) {
+                   if (!ev || !ev.type) return;
+                   if (ev.type === 'cell_pick' || ev.type === 'cell_send' || ev.type === 'cell_confirmed' || ev.type === 'cell_result') {
+                       var idx = ev.data && ev.data.index != null ? ev.data.index : '?';
+                       if (!stats.cells[idx]) stats.cells[idx] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                       if (ev.type === 'cell_pick') stats.cells[idx].pick++;
+                       else if (ev.type === 'cell_send') stats.cells[idx].send++;
+                       else if (ev.type === 'cell_confirmed') stats.cells[idx].confirmed++;
+                       else if (ev.type === 'cell_result') stats.cells[idx].result++;
+                   }
+                   if (ev.type === 'action_pick' || ev.type === 'action_send' || ev.type === 'action_confirmed' || ev.type === 'action_result') {
+                       var kind = ev.data && ev.data.actionKind || '?';
+                       if (!stats.actions[kind]) stats.actions[kind] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                       if (ev.type === 'action_pick') stats.actions[kind].pick++;
+                       else if (ev.type === 'action_send') stats.actions[kind].send++;
+                       else if (ev.type === 'action_confirmed') stats.actions[kind].confirmed++;
+                       else if (ev.type === 'action_result') stats.actions[kind].result++;
+                    }
+                    if (ev.type === 'error') {
+                        var eKey = (ev.phase || '?') + '/' + (ev.data && ev.data.kind || '?');
+                        stats.errors[eKey] = (stats.errors[eKey] || 0) + 1;
+                    }
+
+                    if (ev.type === 'action_pick' && ev.data && ev.data.actionKind === 'dalgona') {
+                        var shape = ev.data && ev.data.chosenShape || 'unknown';
+                        if (!stats.dalgona[shape]) stats.dalgona[shape] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                        if (ev.type === 'action_pick') stats.dalgona[shape].pick++;
+                    }
+
+                    if (ev.type === 'cell_pick' && ev.data && ev.data.hinted) {
+                        stats.hints.used = (stats.hints.used || 0) + 1;
+                        if (ev.data && ev.data.hintKind) {
+                            stats.hints[ev.data.hintKind] = (stats.hints[ev.data.hintKind] || 0) + 1;
+                        }
+                    }
+                });
+            });
+            return stats;
+        } catch (e) {
+            return { total: sessions ? sessions.length : 0, error: e && e.message || String(e) };
+        }
+    }
+
+    /* __SQUID_PURE_END__ */
+
+   /* ═══════════════════════════════════════════════════════════════
+      TELEMETRY — «Игра на вылет»
+      Запись, хранение, анализ и экспорт игровых сессий.
+      Все операции обёрнуты в try/catch — не влияют на игру.
+      ═══════════════════════════════════════════════════════════════ */
+
+   // ── Константы хранилища ──
+   var SQUID_TELEM_SESSIONS_KEY = 'mw_squid_sessions_v1';
+   var SQUID_TELEM_META_KEY = 'mw_squid_meta_v1';
+   var SQUID_TELEM_MAX_SESSIONS = 50;
+   var SQUID_TELEM_MAX_BYTES = 2 * 1024 * 1024; // 2 МБ
+
+   // ── Генератор уникальных ID ──
+   var _squidTelemSeq = 0;
+   function squidTelemId(prefix) {
+       _squidTelemSeq++;
+       return prefix + ':' + Date.now() + ':' + _squidTelemSeq + ':' + Math.random().toString(36).slice(2, 8);
+   }
+
+   // ── Хранилище сессий (localStorage) ──
+   function squidTelemLoadSessions() {
+       try {
+           var raw = localStorage.getItem(SQUID_TELEM_SESSIONS_KEY);
+           if (typeof raw === 'string' && raw.length > 0) {
+               var parsed = JSON.parse(raw);
+               if (Array.isArray(parsed)) return parsed;
+           }
+       } catch (e) { }
+       return [];
+   }
+
+   function squidTelemSaveSessions(sessions) {
+       try {
+           var raw = JSON.stringify(sessions);
+           // Проверка: если запись заняла больше ожидаемого — вероятно, переполнение
+           if (raw.length > SQUID_TELEM_MAX_BYTES * 1.2) {
+               squidTelemWarn('Теория сессий ~' + Math.round(raw.length / 1024) + ' КБ — проверяем место');
+           }
+           localStorage.setItem(SQUID_TELEM_SESSIONS_KEY, raw);
+           return true;
+       } catch (e) {
+           // Переполнение localStorage — пробуем освободить место
+           if (e.name === 'QuotaExceededError' || e.code === 22) {
+               squidTelemEvictOldSessions();
+               try {
+                   var raw2 = JSON.stringify(sessions);
+                   localStorage.setItem(SQUID_TELEM_SESSIONS_KEY, raw2);
+                   squidTelemWarn('⚠️ Хранилище заполнено — удалены старые сессии, но запись всё ещё не удалась');
+               } catch (e2) {
+                   squidTelemWarn('⚠️ Не удалось сохранить сессии: ' + (e2 && e2.message || e2));
+               }
+           } else {
+               squidTelemWarn('⚠️ Не удалось сохранить сессии: ' + (e && e.message || e));
+           }
+           return false;
+       }
+   }
+
+   function squidTelemEvictOldSessions() {
+       try {
+           var sessions = squidTelemLoadSessions();
+           var completed = sessions.filter(function (s) { return s && s.status === 'completed'; });
+           // Удаляем самые старые завершённые, оставляем минимум 5
+           var toRemove = Math.max(0, completed.length - 5);
+           if (toRemove === 0) return;
+           completed.sort(function (a, b) {
+               return (a.startedAt || 0) - (b.startedAt || 0);
+           });
+           var idsToRemove = new Set(completed.slice(0, toRemove).map(function (s) { return s.sessionId; }));
+           var before = sessions.length;
+           sessions = sessions.filter(function (s) { return !idsToRemove.has(s.sessionId); });
+           var after = sessions.length;
+           if (after < before) {
+               squidTelemSaveSessions(sessions);
+               squidTelemWarn('🗑 Удалено ' + (before - after) + ' старых сессий (освобождение места)');
+           }
+       } catch (e) {
+           squidTelemWarn('⚠️ Ошибка очистки старых сессий: ' + (e && e.message || e));
+       }
+   }
+
+   // ── Завершённая сессия — чистая функция (без DOM) ──
+   function squidTelemComputeStats(sessions) {
+       try {
+           if (!Array.isArray(sessions) || !sessions.length) {
+               return { total: 0, completed: 0, abandoned: 0, active: 0, error: 'no_data' };
+           }
+           var stats = {
+               total: sessions.length,
+               completed: 0,
+               abandoned: 0,
+               active: 0,
+               causes: {},
+               cells: {},
+               actions: {},
+               errors: {},
+               dalgona: {},
+               hints: {},
+               unknownDecisions: 0,
+               totalEvents: 0
+           };
+           sessions.forEach(function (s) {
+               if (!s || !s.events) return;
+               stats.totalEvents += s.events.length;
+               if (s.status === 'completed') {
+                   stats.completed++;
+                   if (s.meta && s.meta.cause) {
+                       var c = s.meta.cause;
+                       stats.causes[c] = (stats.causes[c] || 0) + 1;
+                   }
+               } else if (s.status === 'abandoned') {
+                   stats.abandoned++;
+               } else if (s.status === 'active') {
+                   stats.active++;
+               }
+               s.events.forEach(function (ev) {
+                   if (!ev || !ev.type) return;
+                   // События выбора клетки
+                   if (ev.type === 'cell_pick' || ev.type === 'cell_send' || ev.type === 'cell_confirmed' || ev.type === 'cell_result') {
+                       var idx = ev.data && ev.data.index != null ? ev.data.index : '?';
+                       if (!stats.cells[idx]) stats.cells[idx] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                       if (ev.type === 'cell_pick') stats.cells[idx].pick++;
+                       else if (ev.type === 'cell_send') stats.cells[idx].send++;
+                       else if (ev.type === 'cell_confirmed') stats.cells[idx].confirmed++;
+                       else if (ev.type === 'cell_result') stats.cells[idx].result++;
+                   }
+                   // События действий
+                   if (ev.type === 'action_pick' || ev.type === 'action_send' || ev.type === 'action_confirmed' || ev.type === 'action_result') {
+                       var kind = ev.data && ev.data.actionKind || '?';
+                       if (!stats.actions[kind]) stats.actions[kind] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                       if (ev.type === 'action_pick') stats.actions[kind].pick++;
+                       else if (ev.type === 'action_send') stats.actions[kind].send++;
+                       else if (ev.type === 'action_confirmed') stats.actions[kind].confirmed++;
+                       else if (ev.type === 'action_result') stats.actions[kind].result++;
+                   }
+                   // Ошибки
+                   if (ev.type === 'error') {
+                       var eKey = (ev.data && ev.data.phase || '?') + '/' + (ev.data && ev.data.kind || '?');
+                       stats.errors[eKey] = (stats.errors[eKey] || 0) + 1;
+                   }
+                   // Дальгона
+                   if (ev.type === 'action_pick' && ev.data && ev.data.actionKind === 'dalgona') {
+                       var shape = ev.data && ev.data.chosenShape || 'unknown';
+                       if (!stats.dalgona[shape]) stats.dalgona[shape] = { pick: 0, send: 0, confirmed: 0, result: 0 };
+                       if (ev.type === 'action_pick') stats.dalgona[shape].pick++;
+                   }
+                   // Подсказки
+                   if (ev.type === 'cell_pick' && ev.data && ev.data.hinted) {
+                       stats.hints.used = (stats.hints.used || 0) + 1;
+                       if (ev.data && ev.data.hintKind) {
+                           stats.hints[ev.data.hintKind] = (stats.hints[ev.data.hintKind] || 0) + 1;
+                       }
+                   }
+               });
+           });
+           return stats;
+       } catch (e) {
+           return { total: sessions ? sessions.length : 0, error: e && e.message || String(e) };
+       }
+   }
+
+   // ── Предупреждение телеметрии (не блокирует игру) ──
+   function squidTelemWarn(msg) {
+       try {
+           var t = new Date().toLocaleTimeString();
+           console.log('[🦑 Squid Telemetry] [' + t + '] ' + msg);
+       } catch (e) { }
+   }
+
+   // ── Коллекторы событий (вызываются из игрового кода) ──
+   function squidCollectEvent(event) {
+       try {
+           var sessions = squidTelemLoadSessions();
+           var current = sessions.find(function (s) { return s && s.status === 'active'; });
+           if (!current) return;
+           // Дедупликация по eventId
+           if (event.eventId) {
+               var exists = current.events.find(function (e) { return e.eventId === event.eventId; });
+               if (exists) return; // дубль — пропускаем
+           }
+           current.events.push(event);
+           squidTelemSaveSessions(sessions);
+       } catch (e) {
+           squidTelemWarn('Ошибка записи события: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectSessionStart(gameId) {
+       try {
+           var now = Date.now();
+           var sessionId = squidTelemId('session');
+           var sessions = squidTelemLoadSessions();
+           // Если есть active сессия — завершаем как abandoned (защита от дублей)
+           var oldActive = sessions.find(function (s) { return s && s.status === 'active'; });
+           if (oldActive) {
+               oldActive.status = 'abandoned';
+               oldActive.endedAt = now;
+           }
+           var newSession = {
+               sessionId: sessionId,
+               matchId: gameId || null,
+               startedAt: now,
+               endedAt: null,
+               status: 'active',
+               events: [],
+               meta: {}
+           };
+           sessions.push(newSession);
+           // Ограничиваем количество сессий
+           if (sessions.length > SQUID_TELEM_MAX_SESSIONS) {
+               var excess = sessions.length - SQUID_TELEM_MAX_SESSIONS;
+               var completed = sessions.filter(function (s) { return s && s.status === 'completed'; });
+               completed.sort(function (a, b) { return (a.startedAt || 0) - (b.startedAt || 0); });
+               for (var i = 0; i < excess && i < completed.length; i++) {
+                   sessions = sessions.filter(function (s) { return s.sessionId !== completed[i].sessionId; });
+               }
+           }
+           squidTelemSaveSessions(sessions);
+           // Возвращаем sessionId для дальнейшего использования
+           _squid.telemSessionId = sessionId;
+       } catch (e) {
+           squidTelemWarn('Ошибка создания сессии: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectPhaseChange(newPhase, note) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('phase'),
+               type: 'phase_change',
+               ts: Date.now(),
+               phase: newPhase,
+               data: { from: note || '', to: newPhase }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи фазы: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectCellPicked(index, hintSrc, actionKind) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           var hinted = !!(hintSrc && hintSrc.length > 0);
+           var hintKind = hinted ? squidTelemHintKind(hintSrc) : null;
+           squidCollectEvent({
+               eventId: squidTelemId('cpick'),
+               type: 'cell_pick',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { index: index, hinted: hinted, hintKind: hintKind, actionKind: actionKind || null }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи выбора клетки: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectCellSent(cellIndex, opId) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('csend'),
+               type: 'cell_send',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { index: cellIndex, opId: opId }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи отправки клетки: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectCellConfirmed(cellIndex, cellStatus) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('cconf'),
+               type: 'cell_confirmed',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { index: cellIndex, status: cellStatus }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка подтверждения клетки: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectCellResult(cellIndex, kind, confirmed) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('cres'),
+               type: 'cell_result',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { index: cellIndex, kind: kind || null, confirmed: !!confirmed }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи результата клетки: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectActionPicked(actionKind, value, label, player, shape) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('apick'),
+               type: 'action_pick',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { actionKind: actionKind || null, value: value, label: label || '', player: player ? (player.name || player.id) : null, chosenShape: shape || null }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи выбора действия: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectActionSent(actionKind, value, opId) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('asend'),
+               type: 'action_send',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { actionKind: actionKind || null, value: value, opId: opId }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи отправки действия: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectActionConfirmed(actionKind) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('aconf'),
+               type: 'action_confirmed',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { actionKind: actionKind || null }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка подтверждения действия: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectActionResult(actionKind, result, confirmed) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('ares'),
+               type: 'action_result',
+               ts: Date.now(),
+               phase: _squid.phase,
+               data: { actionKind: actionKind || null, result: result || null, confirmed: !!confirmed }
+           });
+       } catch (e) {
+           squidTelemWarn('Ошибка записи результата действия: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectMatchEnd(winnerName, fund) {
+       try {
+           var sessions = squidTelemLoadSessions();
+           var current = sessions.find(function (s) { return s && s.status === 'active'; });
+           if (!current) return;
+           current.status = 'completed';
+           current.endedAt = Date.now();
+           current.meta.winnerName = winnerName || null;
+           current.meta.fund = fund != null ? fund : null;
+           squidTelemSaveSessions(sessions);
+       } catch (e) {
+           squidTelemWarn('Ошибка записи завершения матча: ' + (e && e.message || e));
+       }
+   }
+
+   function squidCollectError(phase, kind, message) {
+       try {
+           var current = squidTelemCurrentSession();
+           if (!current) return;
+           squidCollectEvent({
+               eventId: squidTelemId('err'),
+               type: 'error',
+               ts: Date.now(),
+               phase: phase || _squid.phase,
+               data: { kind: kind || 'unknown', message: (message || '').slice(0, 500) }
+           });
+       } catch (e) {
+           try { console.warn('[🦑 Squid Telemetry] Ошибка записи события ошибки: ' + (e && e.message || e)); } catch (e2) { }
+       }
+   }
+
+   // ── Вспомогательные функции ──
+   function squidTelemCurrentSession() {
+       try {
+           var sessions = squidTelemLoadSessions();
+           return sessions.find(function (s) { return s && s.status === 'active'; });
+       } catch (e) { return null; }
+   }
+
+   function squidTelemHintKind(hintSrc) {
+       try {
+           var s = String(hintSrc || '').toLowerCase();
+           if (/glass|стекло/.test(s)) return 'glass';
+           if (/piggy|bank|gold|копилка/.test(s)) return 'piggy';
+           if (/ambulance|скорая/.test(s)) return 'ambulance';
+           if (/recruiter|вербов/.test(s)) return 'recruiter';
+           if (/prize|приз/.test(s)) return 'prize';
+           return 'other';
+       } catch (e) { return 'unknown'; }
+   }
+
+   // ── Восстановление сессии при перезагрузке ──
+   function squidTelemRecoverSession() {
+       try {
+           var sessions = squidTelemLoadSessions();
+           var active = sessions.find(function (s) { return s && s.status === 'active'; });
+           if (!active) {
+               _squid.telemSessionId = null;
+               return null;
+           }
+           // Проверяем, что matchId ещё актуален
+           var gameId = _squid.serverState && _squid.serverState.game && _squid.serverState.game.status
+               ? (_squid.serverState.gameId || '') : '';
+           // Если matchId совпадает — восстанавливаем
+           if (active.matchId && gameId && active.matchId === gameId) {
+               _squid.telemSessionId = active.sessionId;
+               return active;
+           }
+           // Если matchId отсутствует или не совпадает — помечаем как прерванную
+           active.status = 'abandoned';
+           active.endedAt = Date.now();
+           if (active.matchId) {
+               active.meta.abandonReason = 'gameId_mismatch';
+               active.meta.originalMatchId = active.matchId;
+           } else {
+               active.meta.abandonReason = 'no_gameId_available';
+           }
+           squidTelemSaveSessions(sessions);
+           _squid.telemSessionId = null;
+           return null;
+       } catch (e) {
+           squidTelemWarn('Ошибка восстановления сессии: ' + (e && e.message || e));
+           _squid.telemSessionId = null;
+           return null;
+       }
+   }
+
+   /* ═══════════════════════════════════════════════════════════════ */
+
+   var _squid = {
       running: false,          // enabled — пользователь включил автоматизацию
       allowHoney: false,       // разрешение на участие в играх с расходом мёда (независимая настройка)
       stopAfterMatch: false,   // выключить после завершения текущего матча (безопасный стоп во время игры)
@@ -20606,31 +21149,55 @@ body.mw-helper-tip-on .simple-tooltip {
       var snap = squidPhaseSnap(s);
       var phaseChanged = (snap.phase && op.phaseBefore && snap.phase !== op.phaseBefore) ||
           (op.phaseIdBefore && snap.phaseId && snap.phaseId !== op.phaseIdBefore);
-      if (phaseChanged) {
-          op.verified = true;
-          squidDiag('vfy:' + op.opId, '✔ Подтверждено: ' + op.type + ' принят, фаза ' + op.phaseBefore + ' → ' + snap.phase, 3000);
-          if (op.type === 'cell') squidForgetHint(op.detail);
-          return;
-      }
-      // Дополнительно: если это клетка, проверяем её реальный статус в игре
-      if (op.type === 'cell' && s && s.game && s.game.cells && s.game.cells[op.detail]) {
-          var cellStatus = String(s.game.cells[op.detail].status || '');
-          if (cellStatus && cellStatus !== 'closed') {
-              op.verified = true;
-              squidDiag('vfyCell:' + op.opId, '✔ Клетка #' + (op.detail + 1) + ' открыта (status: ' + cellStatus + ') — операция подтверждена', 3000);
-              squidForgetHint(op.detail);
-              return;
-          }
-      }
-      // Дополнительно: если это действие, проверяем оверлей/фазу
-      if (op.type === 'action') {
-          var actBtns = document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)');
-          if (actBtns.length === 0 && (!s || !s.game || s.game.phase !== 'choose_action')) {
-              op.verified = true;
-              squidDiag('vfyAct:' + op.opId, '✔ Действие принято — оверлей выбора закрыт', 3000);
-              return;
-          }
-      }
+       if (phaseChanged) {
+           op.verified = true;
+           squidDiag('vfy:' + op.opId, '✔ Подтверждено: ' + op.type + ' принят, фаза ' + op.phaseBefore + ' → ' + snap.phase, 3000);
+           // Телеметрия: подтверждение операции
+           if (op.type === 'cell') {
+               squidForgetHint(op.detail);
+               squidCollectCellConfirmed(op.detail, 'phase_changed');
+           } else if (op.type === 'action') {
+               squidCollectActionConfirmed(op.actionKind || null);
+           }
+           return;
+       }
+       // Дополнительно: если это клетка, проверяем её реальный статус в игре
+       if (op.type === 'cell' && s && s.game && s.game.cells && s.game.cells[op.detail]) {
+           var cellStatus = String(s.game.cells[op.detail].status || '');
+           if (cellStatus && cellStatus !== 'closed') {
+               op.verified = true;
+               squidDiag('vfyCell:' + op.opId, '✔ Клетка #' + (op.detail + 1) + ' открыта (status: ' + cellStatus + ') — операция подтверждена', 3000);
+               // Телеметрия: подтверждение + результат клетки
+               squidCollectCellConfirmed(op.detail, cellStatus);
+               // Пытаемся узнать содержимое клетки из DOM
+               var cellEl = document.querySelector('.squid-minigame__cell-' + cellStatus + '[data-index="' + op.detail + '"]');
+               var cellKind = 'unknown';
+               if (cellEl) {
+                   try {
+                       var cls = (cellEl.className || '').toLowerCase();
+                       if (/glass/.test(cls)) cellKind = 'glass';
+                       else if (/piggy/.test(cls)) cellKind = 'piggy';
+                       else if (/prize|reward/.test(cls)) cellKind = 'prize';
+                       else if (/ambulance/.test(cls)) cellKind = 'ambulance';
+                       else if (/recruiter/.test(cls)) cellKind = 'recruiter';
+                   } catch (e) { }
+               }
+               squidCollectCellResult(op.detail, cellKind, true);
+               squidForgetHint(op.detail);
+               return;
+           }
+       }
+       // Дополнительно: если это действие, проверяем оверлей/фазу
+       if (op.type === 'action') {
+           var actBtns = document.querySelectorAll('button.squid-minigame__action-choice:not([disabled]):not(.disabled)');
+           if (actBtns.length === 0 && (!s || !s.game || s.game.phase !== 'choose_action')) {
+               op.verified = true;
+               squidDiag('vfyAct:' + op.opId, '✔ Действие принято — оверлей выбора закрыт', 3000);
+               // Телеметрия: подтверждение действия
+               squidCollectActionConfirmed(op.actionKind || null);
+               return;
+           }
+       }
       // Если сервер в процессе обработки (actionPending или pendingTurn), не объявляем stale!
       var isServerProcessing = false;
       try {
@@ -20642,19 +21209,21 @@ body.mw-helper-tip-on .simple-tooltip {
       }
 
       var age = now - op.sentAt;
-      if (age > SQUID_TIMING.OP_STALE_MS) {
-          // Тот же порог, что и в squidShouldSend. Не более 1 повторной попытки на одну операцию:
-          if ((op.retries || 0) >= 1) {
-              op.verified = false;
-              squidDiag('vfyMaxRetry:' + op.opId, '⚠️ Операция ' + op.type + ' зависла и исчерпала лимит повторов (1) — отклонена до смены фазы/игры', 10000);
-              return;
-          }
-          op.verified = false;
-          op.retries = (op.retries || 0) + 1;
-          squidDiag('vfyT:' + op.opId, '⚠️ Результат ' + op.type + ' не подтверждён за ' +
-              Math.round(SQUID_TIMING.OP_STALE_MS / 1000) + ' с — блокировка снята, решение будет пересмотрено', 10000);
-          return;
-      }
+       if (age > SQUID_TIMING.OP_STALE_MS) {
+           // Тот же порог, что и в squidShouldSend. Не более 1 повторной попытки на одну операцию:
+           if ((op.retries || 0) >= 1) {
+               op.verified = false;
+               squidDiag('vfyMaxRetry:' + op.opId, '⚠️ Операция ' + op.type + ' зависла и исчерпала лимит повторов (1) — отклонена до смены фазы/игры', 10000);
+               // Телеметрия: ошибка — операция зависла
+               squidCollectError(_squid.phase, 'stale_max_retries', op.type + ' ' + op.opId);
+               return;
+           }
+           op.verified = false;
+           op.retries = (op.retries || 0) + 1;
+           squidDiag('vfyT:' + op.opId, '⚠️ Результат ' + op.type + ' не подтверждён за ' +
+               Math.round(SQUID_TIMING.OP_STALE_MS / 1000) + ' с — блокировка снята, решение будет пересмотрено', 10000);
+           return;
+       }
       if (age > 8000) {
           // Состояние не изменилось — отличаем «ещё идёт» от «не приняли» по правам хода
           var stillMyTurn = (op.type === 'cell' && isMyCellTurn(s)) || (op.type === 'action' && isMyActionTurn(s));
@@ -20863,10 +21432,13 @@ body.mw-helper-tip-on .simple-tooltip {
           verified: null,
           retries: 0
       };
-      _squid.lastOp = op;
+       _squid.lastOp = op;
 
-      squidDiag('cellDec:' + op.opId, '🎯 Решение: клетка #' + (target.index + 1) +
-          ' [' + (target.confirmed ? target.kind : 'unknown') + ']', 3000);
+       squidDiag('cellDec:' + op.opId, '🎯 Решение: клетка #' + (target.index + 1) +
+           ' [' + (target.confirmed ? target.kind : 'unknown') + ']', 3000);
+       // Телеметрия: фиксация выбора клетки (до отправки)
+       var hintSrc = _squid.hintsByGame && _squid.hintsByGame[target.index] ? _squid.hintsByGame[target.index] : '';
+       squidCollectCellPicked(target.index, hintSrc, null);
 
       // Задержка «как человек»; при малом остатке фазы (если единицы phaseEndsAt подтверждены) — без лишней паузы
       var rem = squidPhaseRemainingMs(s);
@@ -20894,9 +21466,11 @@ body.mw-helper-tip-on .simple-tooltip {
               squidDiag('cellBtnGone:' + op.opId, '⚠️ Кнопка клетки #' + (op.detail + 1) + ' не найдена — отправка отменена', 5000);
               return;
           }
-          op.sentAt = Date.now();
-          sqNativeClick(liveBtn);
-          squidDiag('cellSent:' + op.opId, '→ Клик по клетке #' + (op.detail + 1) + ' отправлен', 3000);
+           op.sentAt = Date.now();
+           sqNativeClick(liveBtn);
+           // Телеметрия: фиксация отправки клетки
+           squidCollectCellSent(op.detail, op.opId);
+           squidDiag('cellSent:' + op.opId, '→ Клик по клетке #' + (op.detail + 1) + ' отправлен', 3000);
       }, delay);
 
       return true;
@@ -20953,10 +21527,12 @@ body.mw-helper-tip-on .simple-tooltip {
           verified: null,
           retries: 0
       };
-      _squid.lastOp = op;
+       _squid.lastOp = op;
 
-      squidDiag('actDec:' + op.opId, '⚡ Решение: действие [' + (actionKind || '?') + '] = ' +
-          JSON.stringify(choice.value) + (choice.player ? ' → цель #' + choice.player.id : ''), 3000);
+       squidDiag('actDec:' + op.opId, '⚡ Решение: действие [' + (actionKind || '?') + '] = ' +
+           JSON.stringify(choice.value) + (choice.player ? ' → цель #' + choice.player.id : ''), 3000);
+       // Телеметрия: фиксация выбора действия (до отправки)
+       squidCollectActionPicked(actionKind, choice.value, choice.label || '', choice.player, null);
 
       var rem = squidPhaseRemainingMs(s);
       var delay = (rem !== null && rem < 4000) ? 150 + Math.floor(Math.random() * 250)
@@ -20999,9 +21575,11 @@ body.mw-helper-tip-on .simple-tooltip {
               squidDiag('actBtnGone:' + op.opId, '⚠️ Кнопка варианта ' + JSON.stringify(op.detail) + ' не найдена/отключена — отправка отменена', 5000);
               return;
           }
-          op.sentAt = Date.now();
-          sqNativeClick(liveBtn); // клик сам вызывает chooseAction(choice.value) в игре
-          squidDiag('actSent:' + op.opId, '→ Клик по действию ' + JSON.stringify(op.detail) + ' отправлен', 3000);
+           op.sentAt = Date.now();
+           sqNativeClick(liveBtn); // клик сам вызывает chooseAction(choice.value) в игре
+           // Телеметрия: фиксация отправки действия
+           squidCollectActionSent(actionKind, choice.value, op.opId);
+           squidDiag('actSent:' + op.opId, '→ Клик по действию ' + JSON.stringify(op.detail) + ' отправлен', 3000);
       }, delay);
 
       return true;
@@ -21189,8 +21767,10 @@ body.mw-helper-tip-on .simple-tooltip {
           _squid.pausedOthers = [];
           squidResumeModulesCore(ModuleSessionRegistry, list, sqLog);
       }
-      sqLog('ℹ️ Фаза: ' + prev + ' → ' + p + (note ? ' (' + note + ')' : ''));
-      squidPaintUi();
+       sqLog('ℹ️ Фаза: ' + prev + ' → ' + p + (note ? ' (' + note + ')' : ''));
+       // Телеметрия: запись смены фазы
+       squidCollectPhaseChange(p, note);
+       squidPaintUi();
   }
 
   function squidEnterPlaying(note) {
@@ -21218,17 +21798,30 @@ body.mw-helper-tip-on .simple-tooltip {
 
   // Завершение матча: освобожаем ресурсы, возобновляем модули, планируем следующий цикл
   // (или окончательно останавливаемся, если пользователь просил стоп во время матча).
-  function squidOnMatchEnded() {
-      _squid.gamesPlayed = (_squid.gamesPlayed || 0) + 1;
-      _squid.joinRoundKey = '';
-      _squid.joinTries = 0;
-      _squid.joinNextAt = 0;
-      _squid.pageTask = '';
-      squidResetOp('match ended');
-      squidForgetHint(_squid.hintsGameId);
-      _squid.hintsGameId = '';
-      squidSaveSettings();
-      sqLog('🏁 Матч завершён (сыграно сегодня: ' + _squid.gamesPlayed + ')');
+   function squidOnMatchEnded() {
+       // Телеметрия: фиксируем результат матча ДО очистки состояния
+       try {
+           var scope = findSquidScope();
+           var winnerName = null;
+           var fund = null;
+           if (scope && scope.result) {
+               try { winnerName = scope.result.winnerName || scope.result.winnerRendered || null; } catch (e) { }
+               try { fund = scope.result.fund != null ? Number(scope.result.fund) : null; } catch (e) { }
+           }
+           squidCollectMatchEnd(winnerName, fund);
+       } catch (e) {
+           squidTelemWarn('Ошибка записи результата матча: ' + (e && e.message || e));
+       }
+       _squid.gamesPlayed = (_squid.gamesPlayed || 0) + 1;
+       _squid.joinRoundKey = '';
+       _squid.joinTries = 0;
+       _squid.joinNextAt = 0;
+       _squid.pageTask = '';
+       squidResetOp('match ended');
+       squidForgetHint(_squid.hintsGameId);
+       _squid.hintsGameId = '';
+       squidSaveSettings();
+       sqLog('🏁 Матч завершён (сыграно сегодня: ' + _squid.gamesPlayed + ')');
       if (_squid.stopAfterMatch) {
           _squid.stopAfterMatch = false;
           _squid.running = false;
@@ -21521,19 +22114,28 @@ body.mw-helper-tip-on .simple-tooltip {
       squidResumeModulesCore(ModuleSessionRegistry, list, sqLog);
   }
 
-  function squidStart() {
-      if (_squid.running) return true;
-      _squid.running = true;
-      _squid.stopAfterMatch = false;
-      _squid.serverState = null;
-      _squid.stateAt = 0;
-      _squid.nextSyncAt = 0;
-      _squid.joinRoundKey = '';
-      _squid.joinTries = 0;
-      _squid.joinNextAt = 0;
-      _squid.pageTask = '';
-      _squid.phase = SQUID_PHASE.SYNC;
-      // Таймер через реестр: trackInterval сам защищает от дублей
+   function squidStart() {
+       if (_squid.running) return true;
+       _squid.running = true;
+       _squid.stopAfterMatch = false;
+       _squid.serverState = null;
+       _squid.stateAt = 0;
+       _squid.nextSyncAt = 0;
+       _squid.joinRoundKey = '';
+       _squid.joinTries = 0;
+       _squid.joinNextAt = 0;
+       _squid.pageTask = '';
+       _squid.phase = SQUID_PHASE.SYNC;
+       // ── Восстановление телеметрической сессии ──
+       var recovered = squidTelemRecoverSession();
+       var gameId = (_squid.serverState && _squid.serverState.game && _squid.serverState.gameId) || '';
+       if (recovered && recovered.matchId) {
+           squidTelemWarn('♻️ Восстановлена сессия #' + recovered.matchId);
+       } else if (!recovered && gameId) {
+           squidTelemWarn('🆕 Начата новая сессия #' + gameId);
+       }
+       squidCollectSessionStart(gameId);
+       // Таймер через реестр: trackInterval сам защищает от дублей
       ModuleSessionRegistry.trackInterval('squid', squidTick, SQUID_TIMING.TICK_MS, 'main');
       squidSaveSettings();
       sqLog('🔄 Автопилот «Игра на вылет» включён. Читаем расписание в фоне, персонаж свободен.');
@@ -21599,6 +22201,76 @@ body.mw-helper-tip-on .simple-tooltip {
       return window.__mwSquidSetHoney(!_squid.allowHoney);
   };
   window.__mwSquidPhase = function () { return _squid.phase; };
+
+  /* ─── Export & Analytics ─── */
+  window.__mwSquidExportSession = function (id) {
+      try {
+          var sessions = squidTelemLoadSessions();
+          var s = sessions.find(function (x) { return x && x.sessionId === id; });
+          return s ? JSON.stringify(s, null, 2) : null;
+      } catch (e) { return null; }
+  };
+
+  window.__mwSquidExportStats = function () {
+      try {
+          var sessions = squidTelemLoadSessions();
+          var stats = squidTelemComputeStats(sessions);
+          return JSON.stringify(stats, null, 2);
+      } catch (e) { return null; }
+  };
+
+  window.__mwSquidExportDiag = function () {
+      try {
+          var sessions = squidTelemLoadSessions();
+          var last = null;
+          sessions.forEach(function (s) {
+              if (!last || (s.startedAt || 0) > (last.startedAt || 0)) last = s;
+          });
+          if (!last) return JSON.stringify({ error: 'no_sessions' });
+          var result = {
+              sessionId: last.sessionId,
+              matchId: last.matchId,
+              status: last.status,
+              startedAt: last.startedAt,
+              endedAt: last.endedAt,
+              eventCount: last.events ? last.events.length : 0,
+              events: last.events || [],
+              meta: last.meta || {}
+          };
+          return JSON.stringify(result, null, 2);
+      } catch (e) { return null; }
+  };
+
+  window.__mwSquidSessionCount = function () {
+      try {
+          var sessions = squidTelemLoadSessions();
+          var active = 0, completed = 0, abandoned = 0;
+          sessions.forEach(function (s) {
+              if (!s) return;
+              if (s.status === 'active') active++;
+              else if (s.status === 'completed') completed++;
+              else if (s.status === 'abandoned') abandoned++;
+          });
+          var raw = localStorage.getItem(SQUID_TELEM_SESSIONS_KEY) || '';
+          return { total: sessions.length, active: active, completed: completed, abandoned: abandoned, bytes: raw.length };
+      } catch (e) { return { total: 0, active: 0, completed: 0, abandoned: 0, error: e && e.message || '' }; }
+  };
+
+  // Безопасная очистка завершённых сессий — требует явного подтверждения
+  window.__mwSquidClearCompleted = function (confirm) {
+      try {
+          if (confirm !== 'clear_completed_sessions') {
+              console.warn('[🦑 Squid Telemetry] Очистка завершённых сессий требует подтверждения. Передайте "clear_completed_sessions".');
+              return { error: 'needs_confirmation' };
+          }
+          var sessions = squidTelemLoadSessions();
+          var before = sessions.length;
+          sessions = sessions.filter(function (s) { return s && s.status !== 'completed'; });
+          var removed = before - sessions.length;
+          squidTelemSaveSessions(sessions);
+          return { removed: removed, remaining: sessions.length };
+      } catch (e) { return { error: e && e.message || String(e) }; }
+  };
 
   /* ─── UI Panel ─── */
 
