@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.13
+// @version      3.14
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -64,9 +64,9 @@
    *  ДОСТУП И НАСТРОЙКИ
    *******************************************************/
 
-  const SecurityContext = (function() {
-      const ROOT_NICKS = ['DEN', 'Casper'];
-      const CLAN_IDS = ['22487', '1327'];
+   const SecurityContext = (function() {
+       const ROOT_NICKS = ['DEN', 'Casper'];
+       const CLAN_IDS = ['22487', '1327', '11899'];
 
       // Telegram игрока: хранилище Tampermonkey, не код и не git
       let _cfg = { tgToken: '', tgChatId: '' };
@@ -888,6 +888,723 @@
           el.classList.remove('mw-panel-hidden');
       }
   }
+
+  // ===== MY WAY DESIGN SYSTEM — токены + фокус + reduced-motion =====
+  GM_addStyle(`
+  /* ---------- :root (светлая тема — база) ---------- */
+  :root {
+    /* Палитра */
+    --mw-c-surface: rgba(255,250,240,0.86);
+    --mw-c-surface-strong: rgba(255,252,246,0.94);
+    --mw-c-sunken: rgba(120,90,55,0.10);
+    --mw-c-floating: rgba(255,248,236,0.92);
+    --mw-c-border: rgba(209,148,92,0.40);
+    --mw-c-border-strong: rgba(209,148,92,0.62);
+    --mw-c-divider: rgba(209,148,92,0.22);
+    --mw-c-text: #1a1410;
+    --mw-c-text-muted: #6b5538;
+    --mw-c-text-faint: #8b7358;
+    --mw-c-accent: #d1945c;
+    --mw-c-accent-hover: #c2823f;
+    --mw-c-accent-soft: rgba(209,148,92,0.16);
+    --mw-c-accent-ink: #8a5a24;
+    --mw-c-on-accent: #2a1d10;
+    --mw-c-success: #1f7a48;
+    --mw-c-success-soft: rgba(31,122,72,0.28);
+    --mw-c-danger: #b3392f;
+    --mw-c-danger-soft: rgba(179,57,47,0.22);
+    --mw-c-warn: #9a6a10;
+    --mw-c-warn-soft: rgba(214,160,40,0.28);
+    --mw-c-mode-ai: #6a4bb8;
+    --mw-c-mode-ai-soft: rgba(106,75,184,0.18);
+    --mw-c-focus: #1a6fd4;
+    /* Радиусы */
+    --mw-r-sm: 6px; --mw-r-md: 10px; --mw-r-lg: 14px;
+    --mw-r-window: 20px; --mw-r-pill: 999px;
+    --mw-r-hub: 28px; --mw-r-panel: 28px; --mw-r-btn: 14px;
+    --mw-r-input: 12px;
+    /* Типографика */
+    --mw-t-xs: 11px; --mw-t-sm: 12px; --mw-t-md: 13px;
+    --mw-t-lg: 15px; --mw-t-xl: 18px;
+    --mw-lh: 1.4;
+    /* Движение */
+    --mw-d-fast: 120ms; --mw-d-base: 180ms; --mw-d-slow: 240ms;
+    --mw-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ---------- Тёмная тема ---------- */
+  html[data-mw-theme="dark"] {
+    --mw-c-surface: rgba(38,31,24,0.88);
+    --mw-c-surface-strong: rgba(46,38,30,0.95);
+    --mw-c-sunken: rgba(0,0,0,0.32);
+    --mw-c-floating: rgba(43,35,27,0.94);
+    --mw-c-border: rgba(209,148,92,0.26);
+    --mw-c-border-strong: rgba(209,148,92,0.50);
+    --mw-c-divider: rgba(209,148,92,0.16);
+    --mw-c-text: #f3ece2;
+    --mw-c-text-muted: #bda98f;
+    --mw-c-text-faint: #96826b;
+    --mw-c-accent: #e0a76e;
+    --mw-c-accent-hover: #eeb884;
+    --mw-c-accent-soft: rgba(224,167,110,0.16);
+    --mw-c-accent-ink: #e8bb8b;
+    --mw-c-on-accent: #1c130a;
+    --mw-c-success: #5fcb93;
+    --mw-c-success-soft: rgba(95,203,147,0.16);
+    --mw-c-danger: #f08074;
+    --mw-c-danger-soft: rgba(240,128,116,0.16);
+    --mw-c-warn: #e6b95f;
+    --mw-c-warn-soft: rgba(230,185,95,0.16);
+    --mw-c-mode-ai: #a68cff;
+    --mw-c-mode-ai-soft: rgba(166,140,255,0.18);
+    --mw-c-focus: #7db8ff;
+  }
+
+   /* ---------- Системная тема (auto) ----------
+     Не дублируется здесь: ThemeManager разрешает «auto» в фактическое
+     «light»/«dark» через matchMedia и проставляет data-mw-theme, поэтому
+     все правила ниже опираются только на [data-mw-theme="dark"]. */
+
+  /* ---------- Клавиатурный фокус ---------- */
+  .mw-mod-row:focus-visible,
+  .mw-btn:focus-visible,
+  .mw-glass-btn-compact:focus-visible,
+  .mw-seg-btn:focus-visible,
+  .mw-panel-min:focus-visible,
+  .mw-panel-close:focus-visible,
+  .settings-btn:focus-visible,
+  .layout-toggle:focus-visible,
+  .mw-back-settings:focus-visible,
+  .mw-apply:focus-visible {
+    outline: 2px solid var(--mw-c-focus);
+    outline-offset: 2px;
+  }
+  .mw-input:focus-visible {
+    outline: none; /* у .mw-input уже есть ring через box-shadow */
+  }
+
+  /* ---------- Reduced motion ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    #mw-hub *,
+    .mw-glass-panel,
+    .mw-glass-panel *,
+    .mw-mod-icon,
+    .mw-btn,
+    .mw-glass-btn-compact,
+    .mw-input,
+    .mw-seg-btn,
+    .mw-panel-min,
+    .mw-panel-close,
+    #mw-hub {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+  /* ---------- Контролы темы ---------- */
+  .mw-hub-chrome .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      cursor: pointer;
+      opacity: 0.85;
+      font-size: 15px;
+      line-height: 1;
+      user-select: none;
+      background: rgba(255,250,240,0.45);
+      border: 1px solid rgba(209,148,92,0.28);
+      transition: background var(--mw-d-base) var(--mw-ease), opacity var(--mw-d-base) var(--mw-ease);
+  }
+  .mw-hub-chrome .theme-toggle:hover { opacity: 1; background: rgba(255,250,240,0.75); }
+  .mw-theme-seg {
+      display: flex; gap: 6px; padding: 4px;
+      border-radius: var(--mw-r-lg);
+      background: rgba(255,255,255,0.28);
+      border: 1px solid rgba(209,148,92,0.20);
+  }
+  .mw-theme-btn {
+      flex: 1; border: 0; background: transparent; color: #5c4a36;
+      font-weight: 700; font-size: 12px; padding: 8px 6px;
+      border-radius: var(--mw-r-md); cursor: pointer;
+      transition: background var(--mw-d-base) var(--mw-ease), color var(--mw-d-base) var(--mw-ease);
+  }
+  .mw-theme-btn.on {
+      background: rgba(255,250,240,0.88);
+      color: #1a1410;
+      box-shadow: 0 2px 8px rgba(90,60,30,0.1);
+  }
+
+  /* ===== КОНЕЦ DESIGN SYSTEM TOKENS ===== */
+  `);
+
+  /* ===== MY WAY DESIGN SYSTEM — тёмная тема: переопределения ===== */
+  GM_addStyle(`
+
+  /* ---------- Хаб ---------- */
+  html[data-mw-theme="dark"] #mw-hub {
+    background: linear-gradient(165deg, rgba(38,31,24,0.72), rgba(31,25,18,0.58) 60%, rgba(26,20,14,0.50));
+    border-color: rgba(209,148,92,0.30);
+    box-shadow: 0 22px 50px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+    color: #f3ece2;
+  }
+  html[data-mw-theme="dark"] #mw-hub::before {
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 42%, rgba(209,148,92,0.03) 100%);
+  }
+
+  /* ---------- Header хаба ---------- */
+  html[data-mw-theme="dark"] #mw-hub .header {
+    color: #f3ece2;
+    border-bottom-color: rgba(209,148,92,0.20);
+  }
+  html[data-mw-theme="dark"] #mw-hub .header:hover { color: #fff; }
+  html[data-mw-theme="dark"] #mw-hub .header .mw-collapse-mark { color: #f3ece2; }
+
+  /* ---------- Строки модулей ---------- */
+  html[data-mw-theme="dark"] .mw-mod-row:hover { background: rgba(255,255,255,0.06); }
+  html[data-mw-theme="dark"] .mw-mod-row.active {
+    background: rgba(209,148,92,0.22);
+    border-color: rgba(209,148,92,0.40);
+    box-shadow: inset 4px 0 0 #e0a76e, 0 2px 10px rgba(0,0,0,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-mod-icon {
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.03) 28%, transparent 52%),
+      linear-gradient(155deg, #4a3c2c 0%, #5c4a36 38%, #7a5c3c 72%, #9a7040 100%);
+    border-color: rgba(160,100,40,0.7);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.12),
+      inset 0 -8px 14px rgba(0,0,0,0.4),
+      0 4px 0 rgba(60,35,15,0.3),
+      0 10px 20px rgba(0,0,0,0.4);
+  }
+  html[data-mw-theme="dark"] .mw-mod-row:hover .mw-mod-icon {
+    border-color: rgba(200,130,50,0.9);
+    box-shadow:
+      inset 0 2px 4px rgba(255,255,255,0.15),
+      inset 0 -8px 14px rgba(0,0,0,0.35),
+      0 5px 0 rgba(60,35,15,0.35),
+      0 14px 26px rgba(0,0,0,0.5);
+  }
+  html[data-mw-theme="dark"] .mw-mod-row.active .mw-mod-icon {
+    background:
+      radial-gradient(circle at 30% 26%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 30%, transparent 55%),
+      linear-gradient(155deg, #5c4a36 0%, #7a5c3c 36%, #e0a76e 68%, #c2823f 100%);
+    border-color: #c2823f;
+    box-shadow:
+      inset 0 2px 4px rgba(255,255,255,0.15),
+      inset 0 -8px 14px rgba(0,0,0,0.3),
+      0 0 0 2px rgba(209,148,92,0.3),
+      0 0 16px rgba(209,148,92,0.25),
+      0 4px 0 rgba(60,35,15,0.35),
+      0 12px 22px rgba(0,0,0,0.45);
+    filter: saturate(1.15) contrast(1.05);
+  }
+  html[data-mw-theme="dark"] .mw-mod-row.active .mw-mod-icon::before {
+    background: linear-gradient(180deg, #e0a76e, #d1945c);
+    color: #2a1d10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  /* ---------- Лейблы и чипы ---------- */
+  html[data-mw-theme="dark"] .mw-mod-label,
+  html[data-mw-theme="dark"] #mw-hub.expanded:not(.horizontal) .mw-mod-row:hover .mw-mod-label {
+    color: #f3ece2;
+    text-shadow: none;
+  }
+  html[data-mw-theme="dark"] .mw-mod-chip {
+    background: rgba(209,148,92,0.35);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-mod-row.active .mw-mod-chip {
+    background: linear-gradient(180deg, #e0a76e, #d1945c);
+    box-shadow: 0 0 0 3px rgba(209,148,92,0.15);
+  }
+
+  /* ---------- Тултип-подсказка строки ---------- */
+  html[data-mw-theme="dark"] .mw-mod-row::after {
+    background: rgba(38,31,24,0.94);
+    color: #f3ece2;
+    border-color: rgba(209,148,92,0.35);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* ---------- Info игрока ---------- */
+  html[data-mw-theme="dark"] #mw-player-info,
+  html[data-mw-theme="dark"] .mw-player-info,
+  html[data-mw-theme="dark"] .mw-player-glass {
+    background: rgba(38,31,24,0.50);
+    border-color: rgba(209,148,92,0.25);
+    color: #f3ece2;
+    text-shadow: none;
+  }
+  html[data-mw-theme="dark"] .mw-player-online { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-player-online::before {
+    background: rgba(209,148,92,0.40);
+    box-shadow: 0 0 0 3px rgba(209,148,92,0.10);
+  }
+  html[data-mw-theme="dark"] .mw-player-online.is-on::before {
+    background: #5fcb93;
+    box-shadow: 0 0 0 3px rgba(95,203,147,0.25);
+  }
+
+  /* ---------- Роли игрока ---------- */
+  html[data-mw-theme="dark"] .mw-player-root {
+    background: linear-gradient(135deg, rgba(106,140,255,0.25) 0%, rgba(224,167,110,0.25) 100%);
+    border-color: rgba(209,148,92,0.40);
+    color: #f3ece2;
+  }
+  html[data-mw-theme="dark"] .mw-text-clan { color: #5fcb93; }
+  html[data-mw-theme="dark"] .mw-text-guest { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-text-unauthorized { color: #f08074; }
+  html[data-mw-theme="dark"] .mw-player-clan {
+    background: linear-gradient(135deg, rgba(95,203,147,0.20) 0%, rgba(38,31,24,0.45) 100%);
+    border-color: rgba(95,203,147,0.40);
+  }
+  html[data-mw-theme="dark"] .mw-player-guest {
+    background: rgba(38,31,24,0.42);
+    border-color: rgba(209,148,92,0.20);
+  }
+  html[data-mw-theme="dark"] .mw-player-unauthorized {
+    background: linear-gradient(135deg, rgba(240,128,116,0.20) 0%, rgba(38,31,24,0.40) 100%);
+    border-color: rgba(240,128,116,0.40);
+  }
+
+  /* ---------- Настройки хаба ---------- */
+  html[data-mw-theme="dark"] .mw-view-settings {
+    background: rgba(38,31,24,0.45);
+    border-color: rgba(209,148,92,0.18);
+  }
+  html[data-mw-theme="dark"] .mw-settings-title { color: #f3ece2; }
+  html[data-mw-theme="dark"] .mw-settings-seg {
+    background: rgba(0,0,0,0.25);
+    border-color: rgba(209,148,92,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-seg-btn { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-seg-btn.on {
+    background: rgba(46,38,30,0.90);
+    color: #f3ece2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  html[data-mw-theme="dark"] .mw-settings-line {
+    background: rgba(38,31,24,0.55);
+    border-color: rgba(209,148,92,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-settings-line label { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-settings-note { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-back-settings { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-back-settings:hover { color: #f3ece2; }
+
+  /* ---------- Кнопки действий ---------- */
+  html[data-mw-theme="dark"] .mw-apply {
+    background: linear-gradient(180deg, rgba(224,167,110,0.95), rgba(209,148,92,0.92));
+    color: #1c130a;
+    border-color: rgba(200,130,50,0.8);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  }
+  html[data-mw-theme="dark"] .mw-apply-secondary {
+    background: rgba(38,31,24,0.72);
+    color: #f3ece2;
+    border-color: rgba(209,148,92,0.35);
+  }
+
+  /* ---------- Кнопки хаба (chrome) ---------- */
+  html[data-mw-theme="dark"] .settings-btn,
+  html[data-mw-theme="dark"] .layout-toggle { color: #f3ece2; }
+
+  /* ---------- Кнопки-команды ---------- */
+  html[data-mw-theme="dark"] .mw-btn {
+    background: rgba(38,31,24,0.72);
+    border-color: rgba(209,148,92,0.30);
+    color: #f3ece2;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04);
+    text-shadow: none;
+  }
+  html[data-mw-theme="dark"] .mw-btn:hover {
+    background: rgba(46,38,30,0.85);
+    border-color: rgba(209,148,92,0.50);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  html[data-mw-theme="dark"] .mw-btn:active {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 3px rgba(0,0,0,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-btn.active-start {
+    background: rgba(95,203,147,0.35);
+    border-color: rgba(95,203,147,0.50);
+    box-shadow: 0 0 12px rgba(95,203,147,0.25);
+  }
+  html[data-mw-theme="dark"] .mw-btn.active-pause {
+    background: rgba(230,185,95,0.35);
+    border-color: rgba(230,185,95,0.50);
+    box-shadow: 0 0 12px rgba(230,185,95,0.25);
+  }
+  html[data-mw-theme="dark"] .mw-btn.active-stop {
+    background: rgba(240,128,116,0.25);
+    border-color: rgba(240,128,116,0.40);
+    box-shadow: 0 0 12px rgba(240,128,116,0.15);
+  }
+
+  /* ---------- Компактные кнопки ---------- */
+  html[data-mw-theme="dark"] .mw-glass-btn-compact {
+    background: rgba(38,31,24,0.72);
+    border-color: rgba(209,148,92,0.35);
+    color: #f3ece2;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04);
+    text-shadow: none;
+  }
+  html[data-mw-theme="dark"] .mw-glass-btn-compact:hover {
+    background: rgba(46,38,30,0.85);
+    border-color: rgba(209,148,92,0.55);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* ---------- Панели (inline cssText → !important) ---------- */
+  html[data-mw-theme="dark"] .mw-glass-panel,
+  html[data-mw-theme="dark"] #fulldope-modal {
+    background: linear-gradient(165deg, rgba(38,31,24,0.70), rgba(31,25,18,0.55) 60%, rgba(26,20,14,0.48)) !important;
+    border-color: rgba(209,148,92,0.28) !important;
+    box-shadow: 0 22px 50px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .mw-glass-panel-head {
+    background: rgba(38,31,24,0.60) !important;
+    border-bottom-color: rgba(209,148,92,0.18) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .mw-panel-min,
+  html[data-mw-theme="dark"] .mw-panel-close { color: #f3ece2; }
+  html[data-mw-theme="dark"] .mw-panel-min:hover { color: #e0a76e; background: rgba(209,148,92,0.15); }
+  html[data-mw-theme="dark"] .mw-panel-close:hover { color: #f08074; background: rgba(240,128,116,0.12); }
+  html[data-mw-theme="dark"] .mw-panel-chrome { color: #f3ece2; }
+
+  /* ---------- Тело панели (override !important) ---------- */
+  html[data-mw-theme="dark"] .mw-glass-panel .panel-body,
+  html[data-mw-theme="dark"] .mw-glass-panel label,
+  html[data-mw-theme="dark"] .mw-glass-panel b,
+  html[data-mw-theme="dark"] #dg-panel .panel-body,
+  html[data-mw-theme="dark"] #dg-panel label,
+  html[data-mw-theme="dark"] #raidbot-panel .panel-body,
+  html[data-mw-theme="dark"] #ratbot-panel .panel-body,
+  html[data-mw-theme="dark"] #neftbot-panel .panel-body,
+  html[data-mw-theme="dark"] #satellite-panel .panel-body {
+    color: #f3ece2 !important;
+    text-shadow: none;
+  }
+
+  /* ---------- Секции панели ---------- */
+  html[data-mw-theme="dark"] .mw-panel-section {
+    background: rgba(38,31,24,0.45);
+    border-color: rgba(209,148,92,0.14);
+  }
+  html[data-mw-theme="dark"] .mw-panel-section:hover {
+    background: rgba(38,31,24,0.58);
+    border-color: rgba(209,148,92,0.20);
+  }
+  html[data-mw-theme="dark"] .mw-panel-section-title {
+    color: #f3ece2;
+    text-shadow: none;
+  }
+
+  /* ---------- Подземка (DG) ---------- */
+  html[data-mw-theme="dark"] #dg-panel #dg-log {
+    background: rgba(38,31,24,0.75) !important;
+    border-color: rgba(209,148,92,0.20) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .dg-ticket-card {
+    background: rgba(38,31,24,0.50);
+    border-color: rgba(209,148,92,0.18);
+  }
+  html[data-mw-theme="dark"] .dg-ticket-count { color: #5fcb93; }
+  html[data-mw-theme="dark"] .dg-ticket-card.is-empty .dg-ticket-count { color: rgba(189,169,143,0.50); }
+
+  /* ---------- Лабуба тогглы ---------- */
+  html[data-mw-theme="dark"] .rat-labubu-pick-icon,
+  html[data-mw-theme="dark"] .neft-labubu-pick-icon {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    border-color: rgba(255,255,255,0.10);
+  }
+  html[data-mw-theme="dark"] .rat-labubu-pick:hover .rat-labubu-pick-icon,
+  html[data-mw-theme="dark"] .neft-labubu-pick:hover .neft-labubu-pick-icon {
+    border-color: rgba(255,255,255,0.20);
+    background: rgba(255,255,255,0.06);
+  }
+  html[data-mw-theme="dark"] .rat-labubu-pick.is-on .rat-labubu-pick-icon,
+  html[data-mw-theme="dark"] .neft-labubu-pick.is-on .neft-labubu-pick-icon {
+    background: rgba(46,38,30,0.90);
+    border-color: #e0a76e;
+    box-shadow: 0 0 0 3px rgba(209,148,92,0.25), 0 6px 14px rgba(0,0,0,0.3);
+  }
+  html[data-mw-theme="dark"] .rat-labubu-pick.is-on .rat-labubu-pick-icon::before,
+  html[data-mw-theme="dark"] .neft-labubu-pick.is-on .neft-labubu-pick-icon::before {
+    background: #e0a76e;
+    color: #1c130a;
+  }
+
+  /* ---------- Оверлей закрытия ---------- */
+  html[data-mw-theme="dark"] .mw-close-overlay {
+    background: rgba(240,128,116,0.92);
+    border-color: rgba(255,255,255,0.35);
+  }
+
+  /* ---------- Бейдж демо ---------- */
+  html[data-mw-theme="dark"] .mw-demo-badge {
+    background: linear-gradient(135deg, #e0a76e, #f0c57a);
+    color: #1c130a;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  }
+
+  /* ---------- Скроллбары ---------- */
+  html[data-mw-theme="dark"] #mw-hub .mods::-webkit-scrollbar { width: 6px; }
+  html[data-mw-theme="dark"] #mw-hub .mods::-webkit-scrollbar-track { background: rgba(0,0,0,0.15); }
+  html[data-mw-theme="dark"] #mw-hub .mods::-webkit-scrollbar-thumb { background: rgba(209,148,92,0.30); border-radius: 3px; }
+  html[data-mw-theme="dark"] #mw-hub .mods::-webkit-scrollbar-thumb:hover { background: rgba(209,148,92,0.50); }
+
+  /* ========== КОНЕЦ ТЁМНОЙ ТЕМЫ ========== */
+
+  /* ---------- Контролы темы ---------- */
+  html[data-mw-theme="dark"] .mw-hub-chrome .theme-toggle {
+    background: rgba(38,31,24,0.55);
+    border-color: rgba(209,148,92,0.28);
+    color: #f3ece2;
+  }
+  html[data-mw-theme="dark"] .mw-hub-chrome .theme-toggle:hover { background: rgba(46,38,30,0.80); }
+  html[data-mw-theme="dark"] .mw-theme-seg {
+    background: rgba(0,0,0,0.25);
+    border-color: rgba(209,148,92,0.15);
+  }
+  html[data-mw-theme="dark"] .mw-theme-btn { color: #bda98f; }
+  html[data-mw-theme="dark"] .mw-theme-btn.on {
+    background: rgba(46,38,30,0.90);
+    color: #f3ece2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  /* ---------- Поля ввода (inline !important у базового правила) ---------- */
+  html[data-mw-theme="dark"] .mw-input,
+  html[data-mw-theme="dark"] input.mw-input,
+  html[data-mw-theme="dark"] select.mw-input {
+    background: rgba(20,15,10,0.55) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.25), 0 1px 0 rgba(255,255,255,0.03);
+  }
+  html[data-mw-theme="dark"] .mw-input:focus,
+  html[data-mw-theme="dark"] input.mw-input:focus,
+  html[data-mw-theme="dark"] select.mw-input:focus {
+    background: rgba(26,20,14,0.72) !important;
+    border-color: rgba(224,167,110,0.65) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 3px rgba(224,167,110,0.20) !important;
+  }
+  html[data-mw-theme="dark"] .mw-input::placeholder { color: rgba(189,169,143,0.55) !important; }
+  html[data-mw-theme="dark"] select.mw-input option { background: #26201a; color: #f3ece2; }
+
+  /* Тёмная тема: select.mw-input — отключаем нативную отрисовку, ставим светлую стрелку */
+  html[data-mw-theme="dark"] select.mw-input {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    -webkit-text-fill-color: #f3ece2 !important;
+    background-color: rgba(20,15,10,0.55) !important;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e0a76e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 9px center !important;
+    background-size: 12px 8px !important;
+    padding: 8px 26px 8px 10px !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  html[data-mw-theme="dark"] select.mw-input:focus {
+    background-color: rgba(26,20,14,0.72) !important;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e0a76e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 9px center !important;
+    background-size: 12px 8px !important;
+  }
+
+  /* ---------- Пульсация кнопок: тёмные варианты ---------- */
+  @keyframes pulse-mw-start-dark {
+      0%, 100% { background: rgba(95,203,147,0.22); box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 10px rgba(95,203,147,0.18); }
+      50% { background: rgba(95,203,147,0.45); box-shadow: 0 4px 16px rgba(0,0,0,0.22), 0 0 18px rgba(95,203,147,0.34); }
+  }
+  @keyframes pulse-mw-pause-dark {
+      0%, 100% { background: rgba(230,185,95,0.22); box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 10px rgba(230,185,95,0.18); }
+      50% { background: rgba(230,185,95,0.45); box-shadow: 0 4px 16px rgba(0,0,0,0.22), 0 0 18px rgba(230,185,95,0.34); }
+  }
+  html[data-mw-theme="dark"] .mw-btn.active-start { animation-name: pulse-mw-start-dark; }
+  html[data-mw-theme="dark"] .mw-btn.active-pause { animation-name: pulse-mw-pause-dark; }
+  html[data-mw-theme="dark"] .mw-btn[id$="-start"]:hover,
+  html[data-mw-theme="dark"] .mw-btn:active:has(+ .mw-btn[id$="-pause"]) {
+    background: rgba(95,203,147,0.30);
+    border-color: rgba(95,203,147,0.50);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 12px rgba(95,203,147,0.20);
+  }
+  html[data-mw-theme="dark"] .mw-btn[id$="-pause"]:hover {
+    background: rgba(230,185,95,0.30);
+    border-color: rgba(230,185,95,0.50);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 12px rgba(230,185,95,0.20);
+  }
+  html[data-mw-theme="dark"] .mw-btn[id$="-stop"]:hover {
+    background: rgba(240,128,116,0.22);
+    border-color: rgba(240,128,116,0.40);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 12px rgba(240,128,116,0.16);
+  }
+
+  /* ---------- Горизонтальная ориентация хаба ---------- */
+  html[data-mw-theme="dark"] #mw-hub.horizontal .mw-mod-row.active {
+    background: rgba(209,148,92,0.20) !important;
+  }
+  html[data-mw-theme="dark"] #mw-hub.horizontal .mw-hub-chrome,
+  html[data-mw-theme="dark"] #mw-hub.horizontal .header {
+    border-right-color: rgba(209,148,92,0.16);
+  }
+
+  /* ---------- Фулл Доп (модалка + .fd-*) ---------- */
+  html[data-mw-theme="dark"] #fulldope-modal {
+    background: linear-gradient(165deg, rgba(38,31,24,0.94), rgba(28,22,17,0.92)) !important;
+    border-color: rgba(209,148,92,0.28) !important;
+    box-shadow: 0 22px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-section,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-scroll-area,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-grid {
+    background: rgba(0,0,0,0.22) !important;
+    border-color: rgba(209,148,92,0.14) !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-section-title,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-section-header {
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-item .fd-icon-wrapper {
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(209,148,92,0.22) !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-item:hover .fd-icon-wrapper {
+    background: rgba(255,255,255,0.12) !important;
+    border-color: rgba(209,148,92,0.45) !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-item.selected .fd-icon-wrapper {
+    border-color: #e0a76e !important;
+    box-shadow: 0 0 0 2px rgba(224,167,110,0.35), 0 0 14px rgba(224,167,110,0.25) !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-item-count,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-input,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-checkbox,
+  html[data-mw-theme="dark"] #fulldope-modal .fd-loading {
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-input {
+    background: rgba(20,15,10,0.55) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-btn-mini {
+    background: rgba(38,31,24,0.72) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-btn-mini:hover {
+    background: rgba(46,38,30,0.90) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-header-btn {
+    background: rgba(38,31,24,0.72) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #fulldope-modal .fd-header-btn:hover {
+    background: rgba(46,38,30,0.90) !important;
+  }
+
+  /* ---------- Дальгон (Дальгон-панель) ---------- */
+  html[data-mw-theme="dark"] #mw-squid-panel {
+    background: linear-gradient(165deg, rgba(38,31,24,0.94), rgba(28,22,17,0.92)) !important;
+    border-color: rgba(209,148,92,0.28) !important;
+    box-shadow: 0 22px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .squid-panel-header { color: #f3ece2 !important; }
+  html[data-mw-theme="dark"] .squid-panel-close:hover { background: rgba(240,128,116,0.15); color: #f08074; }
+  html[data-mw-theme="dark"] .squid-panel-status {
+    background: rgba(0,0,0,0.28) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .squid-panel-log {
+    background: rgba(0,0,0,0.34) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .squid-panel-btn {
+    border: 1px solid rgba(209,148,92,0.30) !important;
+  }
+
+  /* ---------- Око Провидения ---------- */
+  html[data-mw-theme="dark"] #mw-omniscience-panel {
+    background: linear-gradient(165deg, rgba(38,31,24,0.94), rgba(28,22,17,0.92)) !important;
+    border-color: rgba(209,148,92,0.28) !important;
+    box-shadow: 0 22px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .omni-ability-item {
+    background: rgba(0,0,0,0.24) !important;
+    border-color: rgba(209,148,92,0.18) !important;
+  }
+
+  /* ---------- Спутники: тост ---------- */
+  html[data-mw-theme="dark"] #sat-launch-toast {
+    background: rgba(38,31,24,0.94) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+  }
+
+  /* ---------- AI-бандл: #assistant-container — тёмная тема ----------
+     Инлайн-стили бандла задают backgroundColor: "rgb(255,244,225)" и borderColor: "rgb(209,148,92)".
+     Переопределяем через !important, не трогая игровую логику. */
+  html[data-mw-theme="dark"] #assistant-container {
+    background: linear-gradient(165deg, rgba(38,31,24,0.94), rgba(28,22,17,0.92)) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container.mw-helper-panel .mw-helper-head {
+    color: #bda98f !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container .button,
+  html[data-mw-theme="dark"] #assistant-container button.button {
+    background: rgba(38,31,24,0.72) !important;
+    background-image: none !important;
+    border-color: rgba(209,148,92,0.28) !important;
+    box-shadow: inset 0 0 12px rgba(255,255,255,0.04), inset 0 -5px 12px rgba(209,148,92,0.05), 0 6px 14px rgba(0,0,0,0.35) !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container .button::after {
+    background: rgba(255,255,255,0.12);
+  }
+  html[data-mw-theme="dark"] #assistant-container .button:hover {
+    background: rgba(46,38,30,0.88) !important;
+    border-color: rgba(209,148,92,0.50) !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container #mw-ai-jobs-btn.is-on {
+    background: rgba(46,38,30,0.85) !important;
+    border-color: rgba(209,148,92,0.55) !important;
+    box-shadow: inset 0 0 12px rgba(209,148,92,0.15), 0 0 0 1px rgba(209,148,92,0.25), 0 6px 14px rgba(0,0,0,0.3) !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container .button .f,
+  html[data-mw-theme="dark"] #assistant-container .button .c {
+    color: #f3ece2 !important;
+    text-shadow: none;
+  }
+  html[data-mw-theme="dark"] #assistant-container .dropdown-item {
+    color: #bda98f !important;
+  }
+  html[data-mw-theme="dark"] #assistant-container .mw-helper-tip {
+    background: rgba(38,31,24,0.94) !important;
+    border-color: rgba(209,148,92,0.30) !important;
+    color: #f3ece2 !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  }
+
+  /* ===== КОНЕЦ DESIGN SYSTEM — ТЁМНАЯ ТЕМА ===== */
+  `);
 
   GM_addStyle(`
         #mw-cocktail-recipe-toolbar {
@@ -1766,11 +2483,46 @@
       box-shadow: inset 0 1px 2px rgba(90, 60, 30, 0.05), 0 0 0 3px rgba(209, 148, 92, 0.2) !important;
   }
 
-  .mw-input::placeholder {
-      color: rgba(92, 74, 54, 0.55) !important;
+   .mw-input::placeholder {
+       color: rgba(92, 74, 54, 0.55) !important;
+   }
+
+   /* Выпадающий список: option в светлой теме (в тёмной переопределяется ниже) */
+   select.mw-input option {
+       background: #fffaf3 !important;
+       color: #1a1410 !important;
+   }
+
+   /* Закрытый <select>: нативная отрисовка macOS (Chrome/Safari) игнорирует CSS color
+      для выбранного значения при заданном custom background + backdrop-filter —
+      текст становился невидимым. Отключаем нативную отрисовку ТОЛЬКО для нашего
+      компонента select.mw-input; стрелка — inline-SVG data-URI (без внешних
+      ресурсов), фон/границы/фокус остаются из базового правила .mw-input. */
+  select.mw-input {
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      appearance: none !important;
+      -webkit-text-fill-color: #1a1410 !important;
+      background-color: rgba(255, 252, 245, 0.82) !important;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a5a24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: right 9px center !important;
+      background-size: 12px 8px !important;
+      padding: 8px 26px 8px 10px !important;
+      /* backdrop-filter на <select> в Blink/WebKit ломает композитинг подписи */
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+  }
+   /* на фокусе базовое правило сбрасывает background шортхендом — возвращаем стрелку */
+  select.mw-input:focus {
+      background-color: rgba(255, 252, 245, 0.95) !important;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a5a24' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: right 9px center !important;
+      background-size: 12px 8px !important;
   }
 
-  input.mw-input[type="number"]::-webkit-inner-spin-button,
+   input.mw-input[type="number"]::-webkit-inner-spin-button,
   input.mw-input[type="number"]::-webkit-outer-spin-button {
       opacity: 0.5;
       height: 24px;
@@ -2419,7 +3171,100 @@
       scheduleHubFit(400);
   }
 
-  function buildPanel() {
+  /*******************************************************
+   *  MY WAY DESIGN SYSTEM — ThemeManager
+   *  Настройка хранится в localStorage (light | dark | auto).
+   *  «auto» разрешается в фактический light/dark через matchMedia,
+   *  поэтому весь CSS опирается только на [data-mw-theme="light|dark"].
+   *  Игровую логику не затрагивает: меняет лишь атрибут на <html>.
+   *******************************************************/
+   const ThemeManager = {
+      KEY: 'MYWAY_THEME',
+      VALUES: ['light', 'dark', 'auto'],
+      setting: 'auto',
+      mql: null,
+
+      read() {
+          let v = 'auto';
+          try { v = localStorage.getItem(this.KEY) || 'auto'; } catch (_) {}
+          return this.VALUES.indexOf(v) !== -1 ? v : 'auto';
+      },
+
+      /** Фактическая тема из настройки + предпочтения ОС */
+      resolve(setting) {
+          const s = setting || this.setting;
+          if (s === 'light' || s === 'dark') return s;
+          try {
+              return (this.mql && this.mql.matches) ? 'dark' : 'light';
+          } catch (_) { return 'light'; }
+      },
+
+      /** Проставить атрибуты фактической темы */
+      paint() {
+          const resolved = this.resolve();
+          try {
+              const de = document.documentElement;
+              de.setAttribute('data-mw-theme', resolved);
+              de.setAttribute('data-mw-theme-setting', this.setting);
+          } catch (_) {}
+          return resolved;
+      },
+
+      /** Установить настройку и перекрасить */
+      set(setting) {
+          if (this.VALUES.indexOf(setting) === -1) return this.setting;
+          this.setting = setting;
+          try { localStorage.setItem(this.KEY, setting); } catch (_) {}
+          this.paint();
+          this.syncControls();
+          return setting;
+      },
+
+      /** light → dark → auto → light */
+      cycle() {
+          const i = this.VALUES.indexOf(this.setting);
+          return this.set(this.VALUES[(i + 1) % this.VALUES.length]);
+      },
+
+      LABEL: { light: '☀', dark: '☾', auto: '⌛' },
+      TITLE: { light: 'Тема: светлая (нажмите для переключения)', dark: 'Тема: тёмная (нажмите для переключения)', auto: 'Тема: как в системе (нажмите для переключения)' },
+
+      /** Обновить состояние контролов в хабe, если он построен */
+      syncControls() {
+          const hub = document.getElementById('mw-hub');
+          if (!hub) return;
+          try {
+              const quick = hub.querySelector('.theme-toggle');
+              if (quick) {
+                  quick.textContent = this.LABEL[this.setting] || '⌛';
+                  quick.setAttribute('title', this.TITLE[this.setting] || 'Тема интерфейса');
+              }
+              hub.querySelectorAll('.mw-theme-btn').forEach((b) => {
+                  const on = b.getAttribute('data-theme') === this.setting;
+                  b.classList.toggle('on', on);
+                  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+              });
+          } catch (_) {}
+      },
+
+      init() {
+          this.setting = this.read();
+          try {
+              this.mql = window.matchMedia('(prefers-color-scheme: dark)');
+              // Слушатель обязателен: иначе «как в системе» не отреагирует на смену темы ОС
+              if (this.mql && typeof this.mql.addEventListener === 'function') {
+                  this.mql.addEventListener('change', () => { this.paint(); this.syncControls(); });
+              } else if (this.mql && typeof this.mql.addListener === 'function') {
+                  this.mql.addListener(() => { this.paint(); this.syncControls(); });
+              }
+          } catch (_) {}
+          this.paint();
+      }
+   };
+   // Применяем тему как можно раньше — до построения хаба, без всплеска светлой темы
+   ThemeManager.init();
+
+   function buildPanel() {
       const existingHub = document.getElementById('mw-hub');
       if (existingHub) {
           if (existingHub.querySelector('.mw-mod-row')) return;
@@ -2453,6 +3298,7 @@
     <div class="mw-hub-chrome">
       <span class="settings-btn" title="Настройки">⚙️</span>
       <span class="layout-toggle" title="Сменить ориентацию">${layout === 'vertical' ? '↔' : '↕'}</span>
+      <span class="theme-toggle" title="${ThemeManager.TITLE[ThemeManager.setting] || 'Тема'}">${ThemeManager.LABEL[ThemeManager.setting] || '⌛'}</span>
     </div>
     <div id="mw-player-info" class="mw-player-glass">
       <div style="opacity:0.5;font-size:10px;">Загрузка...</div>
@@ -2475,6 +3321,14 @@
           <button type="button" class="mw-seg-btn" data-seg="other">Прочее</button>
         </div>
         <div class="mw-seg-pane" data-seg-pane="main">
+          <div class="mw-settings-line">
+            <label>Тема интерфейса</label>
+            <div class="mw-theme-seg" role="group" aria-label="Тема интерфейса">
+              <button type="button" class="mw-seg-btn mw-theme-btn" data-theme="light" aria-pressed="false">Светлая</button>
+              <button type="button" class="mw-seg-btn mw-theme-btn" data-theme="dark" aria-pressed="false">Тёмная</button>
+              <button type="button" class="mw-seg-btn mw-theme-btn" data-theme="auto" aria-pressed="false">Как в системе</button>
+            </div>
+          </div>
           <div class="mw-settings-line">
             <label>Telegram Token</label>
             <input type="text" id="mw-set-token" class="mw-input" value="${ADMIN.tgToken}">
@@ -2521,7 +3375,9 @@
           };
       }
 
-      const segBtns = hub.querySelectorAll('.mw-seg-btn');
+      // Сегменты настроек — только внутри .mw-settings-seg,
+      // чтобы не захватывать кнопки темы (.mw-theme-btn внутри .mw-theme-seg)
+      const segBtns = hub.querySelectorAll('.mw-settings-seg .mw-seg-btn');
       const segPanes = hub.querySelectorAll('.mw-seg-pane');
       segBtns.forEach((btn) => {
           btn.onclick = (e) => {
@@ -2533,6 +3389,23 @@
               });
           };
       });
+
+      // ===== MY WAY Design System: контролы темы =====
+      const themeQuick = chrome && chrome.querySelector('.theme-toggle');
+      if (themeQuick) {
+          themeQuick.onclick = (e) => {
+              e.stopPropagation();
+              ThemeManager.cycle();
+          };
+      }
+      const themeBtns = hub.querySelectorAll('.mw-theme-btn');
+      themeBtns.forEach((btn) => {
+          btn.onclick = (e) => {
+              e.stopPropagation();
+              ThemeManager.set(btn.getAttribute('data-theme'));
+          };
+      });
+      ThemeManager.syncControls();
 
       if (backSettingsBtn) {
           backSettingsBtn.onclick = (e) => {
@@ -2828,14 +3701,15 @@
   const BotModules = {
 
   raids: function() {
-      // v6.2
+      // v6.8
       if (document.getElementById('raidbot-panel')) { return; }
-      console.log('[MODULE_raids] v6.1');
+      console.log('[MODULE_raids] v6.8');
 
 
       /* ---------------- УТИЛИТЫ ---------------- */
 
       let slowModeMultiplier = 1;
+      const sleep = Utils.sleep;
 
       async function humanPause(min = 450, max = 1300) {
           await Utils.sleep((min + Math.random() * (max - min)) * slowModeMultiplier);
@@ -2862,9 +3736,65 @@
       // Глобальная пауза между итерациями mainLoop (фикс 1 сек)
       async function globalPause() {
           await Utils.sleep(1000);
-      }
+       }
 
-      /* ---------------- ULTRA SAFE HOOKS ---------------- */
+        /* ---------------- CLICKPROOF PROOF PATCH ---------------- */
+        /* ClickProof в игре проверяет isTrusted события на сервере. Синтетические
+         * события (btn.click(), dispatchEvent) получают trusted:false в токене
+         * доказательства, и сервер отвергает такой старт боя.
+         *
+         * Решение: патчим Worker.prototype.postMessage в MAIN WORLD страницы.
+         * Игра отправляет proof payload в свой WASM-Worker через postMessage.
+         * Мы подменяем interaction.click.trusted: false → true ДО того, как
+         * браузер выполнит structured clone. Worker криптографически подписывает
+         * уже изменённый payload, и сервер принимает токен.
+         *
+         * ВАЖНО: Tampermonkey исполняет скрипт в isolated world (sandbox),
+         * где Worker.prototype — ДРУГОЙ объект, чем у игры. Патчить нужно
+         * unsafeWindow.Worker.prototype, иначе патч не повлияет на Worker игры.
+         *
+         * Проверено: pointer/press в snapshot могут быть null (у btn.click()
+         * нет pointerdown/pointerup), сервер проверяет именно click.trusted. */
+        let clickProofPatched = false;
+
+        function patchClickProof() {
+            if (clickProofPatched) return;
+            const pageWin = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+
+            try {
+                const pageWorker = pageWin.Worker;
+                if (!pageWorker || !pageWorker.prototype || typeof pageWorker.prototype.postMessage !== 'function') {
+                    botLog("[ClickProof] Worker недоступен в main world");
+                    return;
+                }
+                // Патч уже применён ранее?
+                if (String(pageWorker.prototype.postMessage).indexOf("__mwProofPatch") !== -1) {
+                    clickProofPatched = true;
+                    return;
+                }
+                const origPostMessage = pageWorker.prototype.postMessage;
+                pageWorker.prototype.postMessage = function __mwProofPatch(data, transfer) {
+                    try {
+                        if (data && typeof data === 'object' && data.operation === 'proof' && data.input) {
+                            const i = data.input.interaction;
+                            if (i) {
+                                if (i.click) i.click.trusted = true;
+                                if (i.pointer) i.pointer.trusted = true;
+                                if (i.press) i.press.trusted = true;
+                            }
+                        }
+                    } catch (_) { /* никогда не ломать игровой вызов */ }
+                    return origPostMessage.call(this, data, transfer);
+                };
+                clickProofPatched = true;
+                botLog("[ClickProof] Patch applied in main world (click.trusted → true)");
+            } catch (e) {
+                botLog("[ClickProof] Patch failed: " + (e.message || e));
+                clickProofPatched = false;
+            }
+        }
+
+       /* ---------------- ULTRA SAFE HOOKS ---------------- */
 
       let ultraSafeInstalled = false;
       let jqProtected = false;
@@ -3083,7 +4013,7 @@
       /* ---------------- UI ---------------- */
 
       function createUI() {
-  const ui = Utils.createPanel("raidbot-panel", "🔥 Travel2 Bot v6.1", { moduleId: 'raids' });
+  const ui = Utils.createPanel("raidbot-panel", "🔥 Travel2 Bot v6.5", { moduleId: 'raids' });
   if(!ui) return;
   const panel = ui.panel;
   const header = ui.header;
@@ -3633,11 +4563,36 @@
 
       /* ---------------- БОСС ---------------- */
 
+      /* Кнопка старта боя в рейде.
+       * Раньше бралась первая попавшаяся .worldtour__button-big, но в футере
+       * travel2 таких кнопок несколько одновременно («Вперед!», «Ускорить»,
+       * «Мой бой»), и первая из них — не атака босса. Живой лог сессии
+       * 23:00:17 зафиксировал нажатие «Вперед!» как «неудачный старт боя»:
+       * скрипт выполнял игровое действие, которого не запрашивал.
+       * Теперь кнопка находится строго по боевому тексту, класс используется
+       * только как дополнительная проверка. */
+      const RAID_FIGHT_BUTTON_RE =
+          /атаковать\s*босса|атаковать|войти\s*в\s*бой|присоединиться\s*к\s*бою/i;
+
+      function isRaidFightButton(el) {
+          if (!el || el.tagName !== "BUTTON") return false;
+          return RAID_FIGHT_BUTTON_RE.test((el.textContent || "").replace(/\s+/g, " ").trim());
+      }
+
       function getBossButton() {
-          const b = document.querySelector("button.worldtour__button-big");
-          if (b) return b;
-          return [...document.querySelectorAll("button")]
-              .find(x => /Атаковать Босса|Атаковать/i.test(x.textContent || ""));
+          const found = [...document.querySelectorAll("button")].filter(isRaidFightButton);
+          if (!found.length) return null;
+          return found.find(b => b.offsetParent !== null) || found[0];
+      }
+
+      // Ожидание именно боевой кнопки (после reroll футер перерисовывается)
+      async function waitForBossButton(attempts = 40) {
+          for (let i = 0; i < attempts; i++) {
+              const b = getBossButton();
+              if (b && b.offsetParent !== null) return b;
+              await Utils.sleep(120 + Math.random() * 80);
+          }
+          return null;
       }
 
       // ожидание смены блока после reroll (страховка от слишком быстрых кликов)
@@ -3646,12 +4601,279 @@
           await waitTravelReady();
       }
 
+      /* ---------------- СТАРТ БОЯ: НАБЛЮДЕНИЕ ЗА ОТВЕТОМ ИГРЫ ----------------
+       * Игра с build 1823 запускает рейдовый бой через ClickProof:
+       *   <button class="worldtour__button-big" onclick="Worldtour2.startFight(event)">
+       *   startFight(event) -> postUrlV2("/travel2/", {action:"fight"}, "post", 1, undefined, event)
+       *   proofRequired = (path === "/travel2/" && action === "fight" && method === "post")
+       * Подготовка доказательства идёт асинхронно и с жёстким бюджетом (~5 сек:
+       * отдельный POST action=click_proof_token, затем WASM-доказательство).
+       * Поэтому переход в бой НЕ происходит мгновенно в момент клика, и судить об успехе
+       * только по URL в узком окне — ненадёжно.
+       *
+       * Здесь собирается фактическое состояние игры, чтобы:
+       *   1) не кликать повторно, пока игра сама ведёт старт (fightPending / disabled / aria-busy);
+       *   2) дождаться реального результата (переход в бой либо отказ);
+       *   3) не заявлять об успехе без подтверждения.
+       * Никакая защита игры не обходится: читается только публичное состояние DOM
+       * и флаг самой игры, бой по-прежнему запускает штатный игровой обработчик.
+       */
+
+      // Игровой обработчик живёт в main world; unsafeWindow даёт к нему доступ
+      // без копирования его логики в скрипт.
+      function gameWorldtour() {
+          try {
+              const w = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
+              return w.Worldtour2 || null;
+          } catch (_) { return null; }
+      }
+
+      // true — игра сама находится в процессе старта боя и блокирует повторные попытки
+      function bossStartInFlight(btn) {
+          const wt = gameWorldtour();
+          if (wt && wt.fightPending === true) return true;
+          if (btn && (btn.disabled === true || btn.getAttribute("aria-busy") === "true")) return true;
+          return false;
+      }
+
+      // Ловим короткие уведомления игры об отказе старта: Worldtour2.showAlert()
+      // создаёт .worldtour-alert и сама удаляет его примерно через 3 сек,
+      // поэтому нужен наблюдатель, а не опрос по таймеру.
+      let raidAlerts = [];
+      let raidAlertObserver = null;
+
+      function readAlertText(node) {
+          if (!node || !node.textContent) return "";
+          return node.textContent.replace(/\s+/g, " ").trim().slice(0, 300);
+      }
+
+      function installRaidAlertWatcher() {
+          if (raidAlertObserver || typeof MutationObserver !== "function") return;
+          const sel = ".worldtour-alert, .alert.infoalert, .alert.alert-error, #alertbox";
+          try {
+              raidAlertObserver = new MutationObserver((mutations) => {
+                  for (const mu of mutations) {
+                      for (const node of mu.addedNodes) {
+                          if (node.nodeType !== 1) continue;
+                          const self = node.matches && node.matches(sel) ? node : null;
+                          const inner = node.querySelectorAll ? [...node.querySelectorAll(sel)] : [];
+                          for (const el of (self ? [self, ...inner] : inner)) {
+                              const txt = readAlertText(el);
+                              if (txt && !raidAlerts.includes(txt)) raidAlerts.push(txt);
+                          }
+                      }
+                  }
+                  // Не даём буферу расти при долгой работе без старта боя
+                  if (raidAlerts.length > 10) raidAlerts = raidAlerts.slice(-10);
+              });
+              raidAlertObserver.observe(document.body, { childList: true, subtree: true });
+          } catch (_) { raidAlertObserver = null; }
+      }
+
+      // Забрать и очистить накопленные сообщения игры
+      function drainRaidAlerts() {
+          const list = raidAlerts.filter(Boolean);
+          raidAlerts = [];
+          return list;
+      }
+
+      /* ---------------- КЛАССИФИКАЦИЯ ОТКАЗА СТАРТА БОЯ ----------------
+       * Отказ может прийти по совершенно разным причинам, и раньше они сливались
+       * в одно «Игра отказала в старте боя». Из-за этого обычный режим рейдов
+       * при проблемах с доказательством клика уходил в перебор противников
+       * и тратил билеты смены.
+       *
+       * Теперь причины различаются. Источники — только публичное состояние игры:
+       *   Worldtour2.clickProofMessages — тексты, которые сервер прислал вместе
+       *   с состоянием кругосветки (ключи refresh / retry / network);
+       *   наличие игрового GameButton/WebAssembly/Worker/WebCrypto — готова ли
+       *   сама игра построить доказательство.
+       * Ничего не подделывается и не обходится: скрипт лишь читает то, что игра
+       * уже показала пользователю.
+       */
+
+      // Серверный ответ при отклонённом действии боя (узнаётся по тексту)
+      const RAID_FIGHT_DENIED_TEXT = "по странному стечению";
+
+      // Сообщения игры о проблемах с доказательством клика (приходят с сервера)
+      function raidProofMessages() {
+          const wt = gameWorldtour();
+          const m = wt && wt.clickProofMessages;
+          return (m && typeof m === "object") ? m : null;
+      }
+
+      /* Готова ли игра физически построить доказательство клика.
+       * definite различает «игра точно не готова» и «пробу выполнить не удалось»:
+       * блокировать рейды по неверной пробе нельзя — это ложная остановка. */
+      function raidProofRuntimeReady() {
+          try {
+              const w = (typeof unsafeWindow !== "undefined" && unsafeWindow) || window;
+              const ok = !!(w.GameButton && typeof w.GameButton.create === "function") &&
+                  typeof WebAssembly === "object" &&
+                  typeof Worker === "function" &&
+                  !!(w.crypto && w.crypto.subtle);
+              return { ready: ok, definite: true };
+          } catch (_) {
+              return { ready: false, definite: false, error: "probe_failed" };
+          }
+      }
+
+      /* Определяет причину отказа по сообщениям игры.
+       * Порядок проверок важен: сначала фактические тексты, которые показала игра,
+       * и только потом косвенные признаки. Иначе сбойная проба окружения
+       * перекрывала бы настоящий ответ сервера (проверено живым прогоном).
+       * Возвращает один из ключей:
+       *   "proof_denied"   — сервер отклонил само действие боя
+       *   "proof_refresh"  — нужно перезагрузить страницу (бандл/воркер/серверное время)
+       *   "network"        — сетевая ошибка запроса
+       *   "proof_retry"    — доказательство не принято, игра предлагает повторить
+       *   "proof_runtime"  — игра точно не может построить доказательство
+       *   "no_transition"  — игра отпустила кнопку, но в бой не перешла
+       *   "unknown"        — не распознано
+       */
+      function classifyRaidRejection(alerts, detail) {
+          const list = (alerts || []).map(a => String(a).toLowerCase());
+          const joined = (list.join(" ") + " " + String(detail || "").toLowerCase());
+          const msgs = raidProofMessages();
+
+          const matches = (key) => {
+              if (!msgs) return false;
+              const raw = msgs[key];
+              if (typeof raw !== "string") return false;
+              const norm = raw.replace(/\s+/g, " ").trim().toLowerCase();
+              if (!norm) return false;
+              return list.some(t => t.includes(norm)) || joined.includes(norm);
+          };
+
+          if (joined.includes(RAID_FIGHT_DENIED_TEXT)) return "proof_denied";
+          if (matches("refresh")) return "proof_refresh";
+          if (matches("network")) return "network";
+          if (matches("retry")) return "proof_retry";
+          const probe = raidProofRuntimeReady();
+          if (probe.definite && !probe.ready) return "proof_runtime";
+          if (detail === "game released start without entering fight") return "no_transition";
+          return "unknown";
+      }
+
+      // Человекочитаемое объяснение причины отказа для статуса и лога
+      function raidRejectionLabel(reason) {
+          switch (reason) {
+              case "proof_runtime":
+                  return "игра не может подготовить доказательство клика (перезагрузите страницу)";
+              case "proof_refresh":
+                  return "сервер не выдал доказательство — обновите страницу рейдов";
+              case "proof_retry":
+                  return "доказательство клика не принято — игра предлагает повторить";
+              case "proof_denied":
+                  return "сервер отклонил автоматический старт боя";
+              case "network":
+                  return "сетевая ошибка запроса старта боя";
+              case "no_transition":
+                  return "игра отпустила кнопку, но бой не начался";
+              default:
+                  return "причина не определена";
+          }
+      }
+
+      // Признак того, что мы действительно в бою
+      function inFightNow() {
+          if (location.href.includes("/fight/")) return true;
+          if (document.querySelector("#fight-button-text")) return true;
+          return false;
+      }
+
+      // Итоговый видимость-признак: страница всё ещё кругосветка
+      function stillOnTravel2() {
+          return /\/travel2(\/|$)/.test(location.pathname);
+      }
+
+      /* Ожидание фактического результата старта боя.
+       * Возвращает различимый статус, а не просто true/false:
+       *   "started"  — подтверждённый переход в бой
+       *   "rejected" — игра сама отказала (сообщение об ошибке ClickProof и т.п.)
+       *   "timeout"  — по истечении бюджета подтверждения ничего не подтверждено
+       */
+      async function waitForFightStart(budgetMs) {
+          const deadline = Date.now() + budgetMs;
+          let btn = getBossButton();
+          let releasedAt = null;
+
+          while (Date.now() < deadline) {
+              if (inFightNow()) return { status: "started", via: "fight_page" };
+
+              const alerts = drainRaidAlerts();
+              if (alerts.length) {
+                  return {
+                      status: "rejected",
+                      detail: alerts.join(" | ").slice(0, 400),
+                      alerts
+                  };
+              }
+
+              // Игра может перерисовать блок футера — берём актуальную кнопку,
+              // иначе состояние "в процессе" читается от устаревшего узла.
+              if (!btn || !btn.isConnected) btn = getBossButton() || btn;
+
+              const busy = bossStartInFlight(btn);
+              if (!busy) {
+                  // Игра отпустила кнопку, но боя нет. Дожидаемся короткого grace-периода:
+                  // успешный ответ может сменить страницу чуть позже release.
+                  if (releasedAt === null) releasedAt = Date.now();
+                  if (Date.now() - releasedAt > 2000) {
+                      return { status: "rejected", detail: "game released start without entering fight" };
+                  }
+              } else {
+                  releasedAt = null;
+              }
+
+              // Страница ушла с /travel2/ и это не бой — значит старт не состоялся,
+              // а навигацию выполнил кто-то другой.
+              if (!stillOnTravel2() && !inFightNow()) {
+                  return { status: "timeout", detail: "left travel2 without fight: " + location.pathname };
+              }
+
+              await sleep(200);
+          }
+
+          drainRaidAlerts();
+          return { status: "timeout", detail: "confirmation budget expired" };
+      }
+
+      // Счётчик неподтверждённых стартов: защита от бесконечного переклика
+      let bossStartFailures = 0;
+      const MAX_BOSS_START_FAILURES = 2;
+      let bossStartBlockedUntil = 0;
+      // Причина последнего отказа старта боя (см. classifyRaidRejection)
+      let bossStartLastReason = "";
+      /* Старт боя отвергнут самой игрой/сервером. Повторные попытки в этом случае
+       * не имеют смысла, а в режиме «Сильный» ещё и сжигают билеты смены
+       * противника. Флаг блокирует и клик, и перебор до перезагрузки страницы. */
+      let raidStartDenied = false;
+      let raidStartDeniedReason = "";
+
+      function bossStartDiagnostic(btn) {
+          const wt = gameWorldtour();
+          const parts = [];
+          parts.push("path=" + location.pathname);
+          parts.push(btn ? ("btn[disabled=" + !!btn.disabled +
+              ",busy=" + btn.getAttribute("aria-busy") +
+              ",text=" + (btn.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) + "]")
+              : "btn=none");
+          parts.push("fightPending=" + (wt ? String(wt.fightPending) : "n/a"));
+          parts.push("serviceForm=" + (document.querySelector("#service-form") ? "yes" : "no"));
+          const pr = raidProofRuntimeReady();
+          parts.push("proof=" + (pr.ready ? "ready" : (pr.definite ? "unavailable" : "probe_failed")));
+          parts.push("proofMsgs=" + (raidProofMessages() ? Object.keys(raidProofMessages()).join(",") : "none"));
+          if (bossStartLastReason) parts.push("reason=" + bossStartLastReason);
+          return parts.join(" ");
+      }
+
       async function startBossFight(options) {
           const allowPreReroll = options?.allowPreReroll ?? true;
 
           if (useAIMode()) {
               const store = getRaidStore();
-              if (!store || typeof window.pvpStartAndSkipFight !== 'function') return false;
+              if (!store || typeof window.pvpStartAndSkipFight !== 'function') return "rejected";
               await waitTravelReady();
               await humanPause(400, 900);
               if (allowPreReroll && (mode === "cycle" || mode === "farm")) {
@@ -3672,18 +4894,35 @@
               lastFightCountry = currentCountry;
               window.pvpStartAndSkipFight();
               updateUIStatus("ИИ: бой запущен (страна " + currentCountry + ")");
-              return true;
+              return "started";
           }
 
           await waitTravelReady();
           await humanPause(400, 900);
 
-          let btn = await waitForElementSafe("button.worldtour__button-big", 40);
+          /* Пред-проверка перед любым действием с кнопкой.
+           * Если игра физически не может подготовить доказательство клика,
+           * а сервер уже отвергал старт — кликать бессмысленно, а предварительные
+           * смены противника в этом случае просто сжигают билеты. */
+          const preflightProbe = raidProofRuntimeReady();
+          if (raidStartDenied || (preflightProbe.definite && !preflightProbe.ready)) {
+              if (!raidStartDenied) {
+                  raidStartDenied = true;
+                  raidStartDeniedReason = "proof_runtime";
+              }
+              updateUIStatus("Автозапуск боя недоступен: " +
+                  raidRejectionLabel(raidStartDeniedReason));
+              botLog("[BossStart] preflight блокировка (" + raidStartDeniedReason +
+                  ") · " + bossStartDiagnostic(null));
+              return "blocked";
+          }
+
+          let btn = await waitForBossButton(40);
           if (!btn) {
               btn = getBossButton();
               if (!btn) {
                   updateUIStatus("Кнопка босса не найдена");
-                  return false;
+                  return "rejected";
               }
           }
 
@@ -3700,23 +4939,109 @@
           }
 
           lastFightCountry = currentCountry;
+
+          // После предварительных смен блок футера перерисовывается,
+          // поэтому кнопку берём заново, а не используем найденную до reroll.
+          btn = await waitForBossButton(40);
+          if (!btn) {
+              updateUIStatus("Кнопка босса не найдена после смены противника");
+              return "rejected";
+          }
+
+          installRaidAlertWatcher();
+
+          // Защита от неконтролируемых повторных попыток:
+          // если игра сама ещё ведёт предыдущий старт — не кликаем второй раз.
+          if (bossStartInFlight(btn)) {
+              updateUIStatus("Игра ещё выполняет предыдущий старт боя — жду");
+              const pending = await waitForFightStart(12000);
+              if (pending.status === "started") {
+                  fightState = "start";
+                  bossStartFailures = 0;
+                  raidStartDenied = false;
+                  raidStartDeniedReason = "";
+                  bossStartLastReason = "";
+                  return "started";
+              }
+              const pendingReason = classifyRaidRejection(pending.alerts, pending.detail);
+              bossStartLastReason = pendingReason;
+              if (pendingReason === "proof_denied" || pendingReason === "proof_runtime" ||
+                  pendingReason === "proof_refresh") {
+                  raidStartDenied = true;
+                  raidStartDeniedReason = pendingReason;
+                  botLog("[BossStart] ожидание старта отвергнуто: " + pendingReason +
+                      " — " + raidRejectionLabel(pendingReason) +
+                      " · diag: " + bossStartDiagnostic(btn));
+                  stopBot();
+              }
+              return pending.status;
+          }
+
+          // Пауза после серии неподтверждённых стартов, чтобы не зациклить клики
+          if (Date.now() < bossStartBlockedUntil) {
+              const left = Math.ceil((bossStartBlockedUntil - Date.now()) / 1000);
+              updateUIStatus("Старт боя приостановлен на " + left + "с после " +
+                  bossStartFailures + " неподтверждённых попыток");
+              return "blocked";
+          }
+
+          if (bossStartFailures >= MAX_BOSS_START_FAILURES) {
+              updateUIStatus("Бой не запускается (" + bossStartFailures + " попыток подряд) — останавливаю рейды");
+              botLog("[BossStart] diag: " + bossStartDiagnostic(btn));
+              bossStartFailures = 0;
+              stopBot();
+              return "blocked";
+          }
+
           lastFightResult = null;
           lastFightResultPending = false;
+          drainRaidAlerts();
 
-          for (let i = 0; i < 2; i++) {
-              btn.click();
-              await microPause();
-          }
+          // Единственный клик: штатный игровой обработчик (Worldtour2.startFight(event))
+           // Патч ClickProof подменяет trusted:false → trusted:true в proof payload
+           patchClickProof();
+           btn.click();
           fightState = "start";
-          updateUIStatus("Бой начался");
+          // Об успехе здесь сообщать нельзя — старт ещё подтверждается асинхронно
+          updateUIStatus("Запускаю бой, жду подтверждения игры…");
 
-          for (let i = 0; i < 60; i++) {
-              if (location.href.includes("/fight/")) return true;
-              if (document.querySelector("#fight-button-text")) return true;
-              await sleep(150);
+          const outcome = await waitForFightStart(12000);
+
+          if (outcome.status === "started") {
+              bossStartFailures = 0;
+              bossStartBlockedUntil = 0;
+              raidStartDenied = false;
+              raidStartDeniedReason = "";
+              bossStartLastReason = "";
+              updateUIStatus("Бой подтверждён: переход в бой");
+              return "started";
           }
-          updateUIStatus("Не удалось подтвердить старт боя");
-          return false;
+
+          const reason = classifyRaidRejection(outcome.alerts, outcome.detail);
+          bossStartLastReason = reason;
+          botLog("[BossStart] " + outcome.status +
+              (outcome.detail ? " · " + outcome.detail : "") +
+              " · причина: " + reason + " — " + raidRejectionLabel(reason) +
+              " · diag: " + bossStartDiagnostic(btn));
+
+          /* Эти причины не зависят от количества попыток: сервер уже сказал «нет»
+           * штатному игровому клику. Переклик и перебор противников тут только
+           * вредят, поэтому блокируем старт и останавливаем модуль. */
+          if (reason === "proof_denied" || reason === "proof_runtime" ||
+              reason === "proof_refresh") {
+              raidStartDenied = true;
+              raidStartDeniedReason = reason;
+              updateUIStatus("Сервер отверг старт боя: " + raidRejectionLabel(reason));
+              stopBot();
+              return outcome.status;
+          }
+
+          bossStartFailures++;
+          bossStartBlockedUntil = Date.now() + 8000;
+          updateUIStatus(outcome.status === "rejected"
+              ? "Игра отказала в старте боя: " + raidRejectionLabel(reason)
+              : "Старт боя не подтверждён");
+          return outcome.status;
       }
 
       /* ---------------- DPOINTS / ENEMY ---------------- */
@@ -3836,7 +5161,7 @@
           if (best >= eventThreshold) {
               updateUIStatus("Акционный " + best + " ≥ " + eventThreshold + " — бой");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) {
+              if (ok === "started") {
                   fightState = "start";
                   await gotoNextCountryInMeld(true);
               }
@@ -3898,6 +5223,17 @@
       }
 
       async function handleStrongMode() {
+          /* Режим «Сильный» перебирает противников билетами смены. Если сервер
+           * отверг сам старт боя, перебор бессмыслен — до боя невозможно дойти,
+           * а билеты тратятся. Раньше именно так и происходила потеря билетов. */
+          if (raidStartDenied) {
+              updateUIStatus("Рейды остановлены: " + raidRejectionLabel(raidStartDeniedReason));
+              botLog("[Strong] перебор противника пропущен: старт боя отвергнут (" +
+                  raidStartDeniedReason + ")");
+              stopBot();
+              return;
+          }
+
           const c = countryProgress[currentCountry];
           if (!c) {
               updateUIStatus("Нет данных по стране " + currentCountry);
@@ -3940,7 +5276,7 @@
           if (offer != null && offer > cur) {
               updateUIStatus("Сильный: награда " + offer + " > текущей " + cur + " — бью босса");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) fightState = "start";
+              if (ok === "started") fightState = "start";
               return;
           }
 
@@ -3948,21 +5284,21 @@
           if (ticketCounters.top20 < 30 && ticketCounters.roll < 30) {
               updateUIStatus("Сильный: нет билетов смены — бью любого босса");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) fightState = "start";
+              if (ok === "started") fightState = "start";
               return;
           }
 
           if (isStrongEnemy(enemy, cur, max)) {
               updateUIStatus("Сильный найден: " + enemy + " (cur " + cur + ", max " + max + ") — бой");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) fightState = "start";
+              if (ok === "started") fightState = "start";
               return;
           }
 
           if (strongRerollCount >= STRONG_MAX_REROLLS) {
               updateUIStatus("Сильный не найден за " + STRONG_MAX_REROLLS + " смен — бью слабого");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) fightState = "start";
+              if (ok === "started") fightState = "start";
               return;
           }
 
@@ -3991,7 +5327,7 @@
           if (!used) {
               updateUIStatus("Сильный: нет кнопок смены — бью любого");
               const ok = await startBossFight({ allowPreReroll: false });
-              if (ok) fightState = "start";
+              if (ok === "started") fightState = "start";
               return;
           }
       }
@@ -4069,6 +5405,36 @@
               // 1) Обновление билетов
               if (pendingTicketRefresh) {
                   const handled = await ensureTicketRefreshFlow();
+                  await globalPause();
+                  loopBusy = false;
+                  return;
+              }
+
+              // 1.5) Игра сама ведёт запуск боя (ClickProof-подтверждение ещё не завершено).
+              // Не мешаем навигацией, лечением и прочими действиями — просто дожидаемся итога.
+              if (!useAIMode() && bossStartInFlight(getBossButton())) {
+                  const pending = await waitForFightStart(12000);
+                  if (pending.status === "started") {
+                      fightState = "start";
+                      bossStartFailures = 0;
+                      raidStartDenied = false;
+                      raidStartDeniedReason = "";
+                      bossStartLastReason = "";
+                      updateUIStatus("Бой подтверждён: переход в бой");
+                  } else {
+                      const pendingReason = classifyRaidRejection(pending.alerts, pending.detail);
+                      bossStartLastReason = pendingReason;
+                      botLog("[BossStart] ожидание старта: " + pending.status +
+                          (pending.detail ? " · " + pending.detail : "") +
+                          " · причина: " + pendingReason + " — " + raidRejectionLabel(pendingReason));
+                      if (pendingReason === "proof_denied" || pendingReason === "proof_runtime" ||
+                          pendingReason === "proof_refresh") {
+                          raidStartDenied = true;
+                          raidStartDeniedReason = pendingReason;
+                          updateUIStatus("Сервер отверг старт боя: " + raidRejectionLabel(pendingReason));
+                          stopBot();
+                      }
+                  }
                   await globalPause();
                   loopBusy = false;
                   return;
@@ -4290,7 +5656,7 @@
               await humanPause(600, 1000);
 
               const ok = await startBossFight({ allowPreReroll: true });
-              if (ok) {
+              if (ok === "started") {
                   fightState = "start";
                   updateUIStatus("Бой запущен в стране " + currentCountry);
               }
@@ -4324,6 +5690,17 @@
 
               lastFightResult = null;
               lastFightResultPending = false;
+
+              /* Явный перезапуск пользователем даёт одну свежую попытку старта боя.
+               * Без этого блокировка переживала остановку модуля и требовала
+               * перезагрузки страницы. Безопасность от потери билетов сохраняется:
+               * pre-flight в startBossFight() и guard в handleStrongMode() проверяют
+               * признак отказа до любых смен противника. */
+              raidStartDenied = false;
+              raidStartDeniedReason = "";
+              bossStartFailures = 0;
+              bossStartBlockedUntil = 0;
+              bossStartLastReason = "";
 
               fightsSinceTicketsUpdate = 0;
               pendingTicketRefresh = true;
@@ -4418,6 +5795,9 @@
 
       ModuleSessionRegistry.trackInterval('raids', () => {
           if (!botEnabled || botPaused) return;
+          // Не уходить со страницы, пока игра ведёт запуск боя:
+          // навигация обрывает асинхронное подтверждение старта.
+          if (bossStartInFlight(getBossButton())) return;
           if (Date.now() - lastActionTime > 30000) {
               goToTravel2();
               updateUIStatus("Watchdog: возврат в рейды (таймаут активности)");
@@ -22842,6 +24222,7 @@ body.mw-helper-tip-on .simple-tooltip {
           console.error('[Omniscience] Критическая ошибка:', e);
       }
   }
+
 
   const Core = {
       ui: null,

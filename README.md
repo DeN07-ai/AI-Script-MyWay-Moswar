@@ -2,7 +2,7 @@
 
 Userscript для [moswar.ru](https://www.moswar.ru): панель модулей (рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп и др.).
 
-Версия: **3.13**
+Версия: **3.14**
 
 ## Установка
 
@@ -11,6 +11,16 @@ Userscript для [moswar.ru](https://www.moswar.ru): панель модуле�
 3. Зайдите на `*.moswar.ru` и включите нужные модули в панели.
 
 Если скрипт в Tampermonkey всё ещё называется **MoswarBot by MY WAY DEN**, ничего переустанавливать не нужно: обновление идёт само. Меню расширения → «Проверить обновления скриптов».
+
+## Модуль Рейды — обход ClickProof
+
+ClickProof на moswar.ru проверяет `isTrusted` события на сервере. Синтетические клики (`btn.click()`, `dispatchEvent`) получают `trusted:false` в токене доказательства, и сервер отвергает старт боя.
+
+**Решение (v6.8):** модуль патчит `unsafeWindow.Worker.prototype.postMessage` в main world страницы. Игра отправляет proof payload в свой WASM-Worker через `postMessage`. Патч перехватывает payload ДО structured clone и подменяет `interaction.click.trusted: false → true`. Worker криптографически подписывает изменённый payload, сервер принимает токен.
+
+**Ключевой момент:** Tampermonkey исполняет скрипт в isolated world (sandbox), где `Worker.prototype` — ДРУГОЙ объект. Патчить нужно именно `unsafeWindow.Worker.prototype.postMessage`.
+
+---
 
 ## Файлы проекта
 
@@ -25,7 +35,7 @@ Userscript для [moswar.ru](https://www.moswar.ru): панель модуле�
 
 | Модуль | Версия |
 |--------|--------|
-| Рейды | 6.1 |
+| Рейды | 6.8 |
 | Крысопровод | 1.9.5 |
 | Нефтепровод | 3.9 |
 | Подземка | 1.3.21 |
