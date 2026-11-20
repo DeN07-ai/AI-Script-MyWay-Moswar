@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MYWAY-CLICK-TEST</title>
+</head>
+<body style="margin:0;font:14px/1.5 monospace;background:#111;color:#eee">
+<div style="padding:16px">
+  <p><b>Тест аппаратного клика MyWay Companion</b></p>
+  <p>Считаются только события с <code>event.isTrusted === true</code>.</p>
+  <pre id="out">ожидание…</pre>
+  <button id="probe" style="padding:10px 20px;font-size:16px">Атаковать</button>
+</div>
+<script>
+  var t = { move: 0, down: 0, up: 0, last: '-', button: 0, untrusted: 0 };
+  function stamp() {
+    document.getElementById('out').textContent =
+      'TRUSTED moves=' + t.move + ' down=' + t.down + ' up=' + t.up + ' btn=' + t.button +
+      '\nUNTRUSTED(skipped)=' + t.untrusted +
+      '\nlast=' + t.last +
+      '\nhasFocus=' + document.hasFocus() + ' visibility=' + document.visibilityState;
+    document.title = 'MYWAY-CLICK-TEST m' + t.move + ' d' + t.down + ' u' + t.up + ' b' + t.button + ' x' + t.untrusted;
+  }
+  ['mousemove', 'mousedown', 'mouseup'].forEach(function (type) {
+    window.addEventListener(type, function (e) {
+      if (!e.isTrusted) { t.untrusted++; stamp(); return; }
+      if (type === 'mousemove') t.move++;
+      if (type === 'mousedown') t.down++;
+      if (type === 'mouseup') t.up++;
+      t.last = Math.round(e.clientX) + ',' + Math.round(e.clientY) + ' trusted=true';
+      stamp();
+    }, true);
+  });
+  document.getElementById('probe').addEventListener('click', function (e) {
+    if (!e.isTrusted) return;
+    t.button++;
+    stamp();
+  }, true);
+  setInterval(stamp, 500);
+  stamp();
+</script>
+</body>
+</html>

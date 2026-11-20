@@ -1,0 +1,265 @@
+#!/usr/bin/env node
+/**
+ * MyWay Moswar Companion (Клик-сервер для аппаратного обхода проверок)
+ *
+ * Назначение:
+ * Принимает локальные команды от userscript (Tampermonkey) и выполняет
+ * настоящий доверенный клик (event.isTrusted === true) на уровне операционной
+ * системы или через Chrome DevTools Protocol (CDP).
+ *
+ * Поддерживаемые платформы: macOS (Apple Silicon / Intel) и Windows (10 / 11).
+ * Зависимости: стандартный Node.js (v18+), внешние npm-пакеты не требуются.
+ */
+
+const http = require('http');
+const { execFile, exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const PORT = 3999;
+const CDP_PORTS = [9222, 9223, 9224];
+const IS_MAC = process.platform === 'darwin';
+const IS_WIN = process.platform === 'win32';
+
+// Директория для скомпилированных бинарников (на macOS)
+const BIN_DIR = path.join(__dirname, 'bin');
+const MAC_CLICKER_BIN = path.join(BIN_DIR, 'cg_click_mac');
+
+/* ---------------- ПОДГОТОВКА OS-КЛИКЕРА ---------------- */
+
+function ensureMacClicker() {
+    if (!IS_MAC) return;
+    if (!fs.existsSync(BIN_DIR)) {
+        fs.mkdirSync(BIN_DIR, { recursive: true });
+    }
+    if (fs.existsSync(MAC_CLICKER_BIN)) return;
+
+    console.log('[Companion] Компиляция нативного CoreGraphics-кликера для macOS...');
+    const srcPath = path.join(BIN_DIR, 'cg_click.c');
+    const cSource = `
+#include <CoreGraphics/CoreGraphics.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+int main(int argc, char** argv) {
+    if (argc < 3) return 1;
+    float x = atof(argv[1]);
+    float y = atof(argv[2]);
+    CGPoint pt = CGPointMake(x, y);
+
+    CGEventRef move = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, pt, kCGMouseButtonLeft);
+    if (move) { CGEventPost(kCGHIDEventTap, move); CFRelease(move); }
+    usleep(20000);
+
+    CGEventRef down = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, pt, kCGMouseButtonLeft);
+    if (down) { CGEventPost(kCGHIDEventTap, down); CFRelease(down); }
+    usleep(70000);
+
+    CGEventRef up = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseUp, pt, kCGMouseButtonLeft);
+    if (up) { CGEventPost(kCGHIDEventTap, up); CFRelease(up); }
+
+    return 0;
+}
+`;
+    fs.writeFileSync(srcPath, cSource, 'utf8');
+    exec(`clang -framework ApplicationServices -framework CoreGraphics "${srcPath}" -o "${MAC_CLICKER_BIN}"`, (err) => {
+        try { fs.unlinkSync(srcPath); } catch (_) {}
+        if (err) {
+            console.error('[Companion] Ошибка компиляции CoreGraphics-кликера:', err.message);
+        } else {
+            console.log('[Companion] Нативный кликер macOS готов:', MAC_CLICKER_BIN);
+        }
+    });
+}
+
+function clickOS(x, y) {
+    return new Promise((resolve) => {
+        if (IS_MAC) {
+            if (fs.existsSync(MAC_CLICKER_BIN)) {
+                execFile(MAC_CLICKER_BIN, [String(x), String(y)], (err) => {
+                    if (err) resolve({ success: false, error: err.message });
+                    else resolve({ success: true, mode: 'os_mac' });
+                });
+            } else {
+                resolve({ success: false, error: 'Mac clicker binary not ready' });
+            }
+        } else if (IS_WIN) {
+            const psScript = `Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int flags, int dx, int dy, int cButtons, int extraInfo); [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);' -Name U -Namespace W; [W.U]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}); [W.U]::mouse_event(2, 0, 0, 0, 0); Start-Sleep -Milliseconds 70; [W.U]::mouse_event(4, 0, 0, 0, 0)`;
+            exec(`powershell.exe -NoProfile -Command "${psScript}"`, (err) => {
+                if (err) resolve({ success: false, error: err.message });
+                else resolve({ success: true, mode: 'os_win' });
+            });
+        } else {
+            resolve({ success: false, error: 'Unsupported platform: ' + process.platform });
+        }
+    });
+}
+
+/* ---------------- CDP КЛИКЕР ---------------- */
+
+async function fetchJson(url) {
+    return new Promise((resolve, reject) => {
+        const req = http.get(url, { timeout: 600 }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    });
+}
+
+async function findCdpTarget() {
+    for (const port of CDP_PORTS) {
+        try {
+            const list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+            if (Array.isArray(list)) {
+                const target = list.find(t => t.type === 'page' && /moswar\.ru\/travel2/i.test(t.url)) ||
+                               list.find(t => t.type === 'page' && /moswar\.ru/i.test(t.url));
+                if (target && target.webSocketDebuggerUrl) {
+                    return { port, target };
+                }
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+function clickViaCDP(wsUrl, clientX, clientY) {
+    return new Promise((resolve) => {
+        if (typeof WebSocket === 'undefined') {
+            return resolve({ success: false, error: 'Native WebSocket not available in this Node runtime' });
+        }
+
+        try {
+            const ws = new WebSocket(wsUrl);
+            let timer = setTimeout(() => {
+                try { ws.close(); } catch (_) {}
+                resolve({ success: false, error: 'CDP timeout' });
+            }, 1500);
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    id: 1,
+                    method: 'Input.dispatchMouseEvent',
+                    params: {
+                        type: 'mousePressed',
+                        x: clientX,
+                        y: clientY,
+                        button: 'left',
+                        clickCount: 1
+                    }
+                }));
+
+                setTimeout(() => {
+                    ws.send(JSON.stringify({
+                        id: 2,
+                        method: 'Input.dispatchMouseEvent',
+                        params: {
+                            type: 'mouseReleased',
+                            x: clientX,
+                            y: clientY,
+                            button: 'left',
+                            clickCount: 1
+                        }
+                    }));
+
+                    setTimeout(() => {
+                        clearTimeout(timer);
+                        try { ws.close(); } catch (_) {}
+                        resolve({ success: true, mode: 'cdp' });
+                    }, 40);
+                }, 70);
+            };
+
+            ws.onerror = (e) => {
+                clearTimeout(timer);
+                resolve({ success: false, error: e.message || 'ws error' });
+            };
+        } catch (e) {
+            resolve({ success: false, error: e.message });
+        }
+    });
+}
+
+/* ---------------- HTTP СЕРВЕР ---------------- */
+
+const server = http.createServer(async (req, res) => {
+    // CORS заголовки для Tampermonkey
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
+
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/status')) {
+        const cdpTarget = await findCdpTarget();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: 'ok',
+            name: 'MyWay Moswar Companion',
+            version: '1.0',
+            platform: process.platform,
+            cdp: cdpTarget ? { connected: true, port: cdpTarget.port, tab: cdpTarget.target.title } : { connected: false }
+        }));
+        return;
+    }
+
+    if (req.method === 'POST' && req.url === '/click') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const params = JSON.parse(body);
+                const clientX = Number(params.clientX) || 0;
+                const clientY = Number(params.clientY) || 0;
+                const screenX = Number(params.screenX) || clientX;
+                const screenY = Number(params.screenY) || clientY;
+
+                console.log(`[Companion] Запрос на клик: client=(${clientX}, ${clientY}), screen=(${screenX}, ${screenY})`);
+
+                // 1. Сначала пробуем CDP (если браузер запущен с отладочным портом)
+                const cdpInfo = await findCdpTarget();
+                if (cdpInfo) {
+                    const cdpResult = await clickViaCDP(cdpInfo.target.webSocketDebuggerUrl, clientX, clientY);
+                    if (cdpResult.success) {
+                        console.log(`[Companion] ✔ Клик через CDP успешен (${cdpInfo.target.title}, порт ${cdpInfo.port})`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, mode: 'cdp', port: cdpInfo.port }));
+                        return;
+                    }
+                    console.warn('[Companion] CDP сбой, переключаюсь на OS клик:', cdpResult.error);
+                }
+
+                // 2. Если CDP недоступен — выполняем аппаратный клик операционной системы
+                const osResult = await clickOS(screenX, screenY);
+                console.log(`[Companion] ✔ Клик через OS выполнен (режим: ${osResult.mode})`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(osResult));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    res.writeHead(404);
+    res.end();
+});
+
+ensureMacClicker();
+
+server.listen(PORT, '127.0.0.1', () => {
+    console.log('========================================================');
+    console.log(`   MyWay Moswar Companion запущен на порту ${PORT}`);
+    console.log(`   Платформа: ${process.platform} (${process.arch})`);
+    console.log(`   Статус: http://127.0.0.1:${PORT}/status`);
+    console.log('========================================================');
+});
