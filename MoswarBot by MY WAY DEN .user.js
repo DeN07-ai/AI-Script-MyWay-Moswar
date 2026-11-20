@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.16
+// @version      3.18
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
 // @match        https://*.moswar.ru/*
@@ -15,20 +15,23 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
-// @grant        GM_addElement
 // @grant        unsafeWindow
 // @noframes
 // @connect      api.telegram.org
 // @connect      raw.githubusercontent.com
 // @connect      github.com
 // @connect      moskwar.ru
+// @connect      127.0.0.1
+// @connect      localhost
 // @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
 // @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
 // ==/UserScript==
 // @ts-nocheck
+/* global unsafeWindow, GM_info, GM_xmlhttpRequest, GM_addStyle, GM_getValue, GM_setValue, GM_deleteValue */
 
 (function () {
   'use strict';
+
   // Свой GM_addStyle (грант тоже указан — так TM не ругается на стили)
   function GM_addStyle(css) {
       const style = document.createElement('style');
@@ -3702,9 +3705,9 @@
   const BotModules = {
 
   raids: function() {
-      // v6.12
+      // v6.19
       if (document.getElementById('raidbot-panel')) { return; }
-      console.log('[MODULE_raids] v6.12');
+      console.log('[MODULE_raids] v6.19');
 
 
       /* ---------------- УТИЛИТЫ ---------------- */
@@ -3739,160 +3742,158 @@
           await Utils.sleep(1000);
        }
 
-          /* ---------------- CLICKPROOF TRUSTED CLICK ---------------- */
-          /* v6.12
-           *
-           * ClickProof в игре проверяет isTrusted события на сервере.
-           * Синтетический клик (btn.click()) получает trusted:false в proof
-           * payload, и сервер отвергает старт боя.
-           *
-           * Корневая проблема: игра сериализует снапшот взаимодействия через
-           * JSON.stringify, отправляет строку в WASM-Worker (postMessage),
-           * Worker криптографически подписывает строку и отправляет токен на
-           * сервер. Сервер проверяет подпись + содержимое строки.
-           *
-           * Обход v6.11 (JSON.parse обёртка) не работает: сервер принимает
-           * объект-клон, но подпись берётся с оригинальной строки.
-           *
-           * Решение v6.12:
-           * 1) Эмулируем РЕАЛИСТИЧНУЮ цепочку событий:
-           *    pointermove (15-25 точек, 20-80ms) → hover (300-800ms) →
-           *    pointerdown → hold (60-100ms) → pointerup → click (1-5ms)
-           *    Все координаты (clientX/Y, pageX/Y, screenX/Y) — центр кнопки.
-           *    window.focus() → page.focused=true.
-           * 2) На время синхронного стека dispatchEvent обёртываем
-           *    JSON.stringify в main world: правим "trusted":false → true
-           *    в строках снапшота (содержащих "version":2).
-           * 3) В finally JSON.stringify немедленно восстанавливается.
-           *
-           * Точка обёртки: main world через мост GM_addElement (обход CSP).
-           * Мост хранит нативный JSON.stringify и даёт wrap/unwrap.
-           * Резервный контур: прямая подмена через unsafeWindow. */
-        /* ---------------- CLICKPROOF TRUSTED CLICK (по тесту AB6) ---------------- */
-        let clickProofPatched = false;
-
-        /* Постоянная установка stringify-патча в Main World (как в тесте AB6) */
-        function installClickProofPatch() {
-            if (clickProofPatched) return;
-            clickProofPatched = true;
-
-            const patchCode = `(function(){
-                if (window.__mwClickProofInstalled) return;
-                window.__mwClickProofInstalled = true;
-                var nativeStringify = JSON.stringify;
-                JSON.stringify = function(value, replacer, space) {
-                    var out = nativeStringify.call(JSON, value, replacer, space);
-                    try {
-                        if (typeof out === 'string' && out.indexOf('"version":2') !== -1 && out.indexOf('"trusted":false') !== -1) {
-                            return out.replace(/"trusted":false/g, '"trusted":true');
-                        }
-                    } catch(e) {}
-                    return out;
-                };
-            })();`;
-
-            if (typeof GM_addElement === "function") {
-                try { GM_addElement('script', { textContent: patchCode }); } catch (_) {}
-            }
-            try {
-                const pw = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
-                if (!pw.__mwClickProofInstalled) {
-                    pw.__mwClickProofInstalled = true;
-                    const origStr = pw.JSON.stringify;
-                    pw.JSON.stringify = function(value, replacer, space) {
-                        const out = origStr.call(pw.JSON, value, replacer, space);
-                        try {
-                            if (typeof out === 'string' && out.indexOf('"version":2') !== -1 && out.indexOf('"trusted":false') !== -1) {
-                                return out.replace(/"trusted":false/g, '"trusted":true');
-                            }
-                        } catch (_) {}
-                        return out;
-                    };
-                }
-            } catch (_) {}
+        function isAvailableBossButton(el) {
+            return !!el && el.tagName === "BUTTON" && el.isConnected &&
+                !el.disabled && el.getAttribute("aria-disabled") !== "true" &&
+                el.offsetParent !== null;
         }
 
-        /* Реалистичный клик — строго по схеме успешно работающего теста AB6 */
-        async function clickBossTrusted(btn) {
-            installClickProofPatch();
+        /* ---------------- MYWAY COMPANION (аппаратный клик) ----------------
+         *
+         * Игра проверяет event.isTrusted у клика по кнопке боя. Событие,
+         * рождённое внутри JS, всегда isTrusted === false, и сервер отвергает
+         * такой старт. Поэтому клик выполняет внешний локальный процесс —
+         * companion/companion.js (порт 127.0.0.1:3999). Скрипт только сообщает
+         * ему координаты кнопки, а само событие приходит от ОС/браузерного
+         * процесса, поэтому является настоящим.
+         *
+         * ВАЖНО: если Companion недоступен, делать синтетический клик нельзя —
+         * это заведомо отвергнутый запрос на сервер. В этом случае старт боя
+         * просто не выполняется, а пользователю показывается понятная подсказка.
+         */
 
-            // 1. Фокус на окно с паузой 200ms
-            try { window.focus(); } catch (_) {}
+        const COMPANION_URL = "http://127.0.0.1:3999";
+        const COMPANION_STATUS_TTL = 20000;
+
+        let companionState = { checkedAt: 0, ok: false, clickReady: false, detail: null };
+
+        function companionRequest(path, method, payload, timeoutMs) {
+            return new Promise((resolve) => {
+                if (typeof GM_xmlhttpRequest !== "function") {
+                    return resolve({ ok: false, error: "no_gm_xhr" });
+                }
+                try {
+                    GM_xmlhttpRequest({
+                        method: method,
+                        url: COMPANION_URL + path,
+                        headers: { "Content-Type": "application/json" },
+                        data: payload ? JSON.stringify(payload) : undefined,
+                        timeout: timeoutMs,
+                        onload: function (res) {
+                            try {
+                                resolve({ ok: true, data: JSON.parse(res.responseText) });
+                            } catch (_) {
+                                resolve({ ok: false, error: "bad_json" });
+                            }
+                        },
+                        onerror: function () { resolve({ ok: false, error: "offline" }); },
+                        ontimeout: function () { resolve({ ok: false, error: "timeout" }); }
+                    });
+                } catch (e) {
+                    resolve({ ok: false, error: e.message });
+                }
+            });
+        }
+
+        /** Проверяем доступность Companion, кэшируя результат на COMPANION_STATUS_TTL. */
+        async function checkCompanion(force) {
+            const now = Date.now();
+            if (!force && now - companionState.checkedAt < COMPANION_STATUS_TTL) return companionState;
+            const r = await companionRequest("/status", "GET", null, 2500);
+            companionState = {
+                checkedAt: now,
+                ok: !!(r && r.ok),
+                clickReady: !!(r && r.ok && r.data && r.data.clickReady),
+                detail: (r && r.data) || null,
+                error: r && r.error
+            };
+            if (!companionState.ok) {
+                botLog("[Companion] не отвечает (" + (companionState.error || "нет ответа") +
+                    "). Аппаратный клик недоступен.");
+            } else if (!companionState.clickReady) {
+                botLog("[Companion] отвечает, но не готов кликать: " +
+                    JSON.stringify({
+                        clicker: companionState.detail && companionState.detail.clicker,
+                        axTrusted: companionState.detail && companionState.detail.axTrusted,
+                        chromePid: companionState.detail && companionState.detail.chromePid,
+                        window: companionState.detail && companionState.detail.window
+                    }));
+            }
+            return companionState;
+        }
+
+        function companionClick(clientX, clientY, dpr, hint) {
+            /* window.innerWidth/innerHeight — это CSS-пиксели, они уже зависят
+             * от масштаба вкладки (80% / 100% / 110%). Companion сравнивает их
+             * с реальным размером окна, полученным из Accessibility, и вычисляет
+             * точный масштаб. devicePixelRatio передаём как запасной источник. */
+            const payload = {
+                clientX: clientX,
+                clientY: clientY,
+                dpr: dpr > 0 ? dpr : 1,
+                hint: hint,
+                cssWidth: Math.round(window.innerWidth || 0),
+                cssHeight: Math.round(window.innerHeight || 0),
+                url: location.href,
+                /* Резервный путь для Windows: экранные координаты. На macOS не
+                 * используются — там геометрия берётся из Accessibility. */
+                screenX: Math.round((window.screenX || 0) + clientX * (dpr > 0 ? dpr : 1)),
+                screenY: Math.round((window.screenY || 0) + clientY * (dpr > 0 ? dpr : 1))
+            };
+            return companionRequest("/click", "POST", payload, 4000);
+        }
+
+        function companionHint(btn) {
+            let text = "";
+            try { text = (btn.textContent || btn.value || btn.title || btn.getAttribute("aria-label") || "").trim(); } catch (_) {}
+            return text.slice(0, 80);
+        }
+
+        /**
+         * Запуск боя одним-единственным честным способом: просим Companion
+         * кликнуть по центру кнопки. Возвращает "ok" | "no-button" | "no-companion".
+         */
+        async function startRaidFightClean(btn) {
+            if (!isAvailableBossButton(btn)) {
+                botLog("[BossStart] Кнопка исчезла или недоступна перед стартом");
+                return "no-button";
+            }
+
             try {
-                const pw = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
-                if (pw && typeof pw.focus === 'function') pw.focus();
+                if (typeof btn.scrollIntoView === "function") {
+                    btn.scrollIntoView({ behavior: "instant", block: "nearest" });
+                }
             } catch (_) {}
-            await sleep(200);
 
-            const realWin = btn.ownerDocument?.defaultView || (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
             const rect = btn.getBoundingClientRect();
-            const cx = Math.round(rect.left + rect.width / 2);
-            const cy = Math.round(rect.top + rect.height / 2);
-
-            const rand = (min, max) => Math.round(min + Math.random() * (max - min));
-
-            function base(x, y) {
-                return {
-                    bubbles: true, cancelable: true, composed: true,
-                    view: realWin,
-                    clientX: x, clientY: y,
-                    pageX: x + (realWin.pageXOffset || 0),
-                    pageY: y + (realWin.pageYOffset || 0),
-                    screenX: x + (realWin.screenX || 0),
-                    screenY: y + (realWin.screenY || 0),
-                    movementX: 0, movementY: 0,
-                    pointerId: 1, pointerType: 'mouse', isPrimary: true,
-                    ctrlKey: false, shiftKey: false, altKey: false, metaKey: false
-                };
+            if (!rect || rect.width <= 0 || rect.height <= 0) {
+                botLog("[BossStart] Кнопка не имеет видимых размеров, кликать некуда");
+                return "no-button";
             }
 
-            // 1) Наведение мыши (pointermove события по дуге к цели)
-            const moveCount = rand(15, 25);
-            let mx = cx + rand(80, 200), my = cy + rand(60, 150);
-            for (let i = 0; i < moveCount; i++) {
-                const t = i / moveCount;
-                const x = Math.round(mx + (cx - mx) * t + rand(-8, 8));
-                const y = Math.round(my + (cy - my) * t + rand(-5, 5));
-                const prevX = i > 0 ? Math.round(mx + (cx - mx) * ((i - 1) / moveCount)) : x;
-                const prevY = i > 0 ? Math.round(my + (cy - my) * ((i - 1) / moveCount)) : y;
-                btn.dispatchEvent(new PointerEvent('pointermove', Object.assign(base(x, y), {
-                    movementX: x - prevX, movementY: y - prevY
-                })));
-                await sleep(rand(20, 80));
+            const clientX = Math.round(rect.left + rect.width / 2);
+            const clientY = Math.round(rect.top + rect.height / 2);
+            const dpr = Number(window.devicePixelRatio) || 1;
+
+            const state = await checkCompanion(false);
+            if (!state.clickReady) {
+                updateUIStatus("Companion недоступен — бой не запускаю. " +
+                    "Нужно запустить MyWay Moswar Companion (companion/start-companion-mac.sh)");
+                return "no-companion";
             }
 
-            // 2) Hover (300-800ms)
-            btn.dispatchEvent(new PointerEvent('pointerover', base(cx, cy)));
-            btn.dispatchEvent(new MouseEvent('mouseover', Object.assign(base(cx, cy), { detail: 0 })));
-            await sleep(rand(300, 800));
+            const comp = await companionClick(clientX, clientY, dpr, companionHint(btn));
+            if (comp && comp.ok && comp.data && comp.data.success) {
+                botLog("[BossStart] Аппаратный клик выполнен через Companion (режим: " +
+                    comp.data.mode + ", точка: " + clientX + "," + clientY + ")");
+                return "ok";
+            }
 
-            // 3) pointerdown + mousedown
-            btn.dispatchEvent(new PointerEvent('pointerdown', Object.assign(base(cx, cy), {
-                button: 0, buttons: 1, pressure: 0.5
-            })));
-            btn.dispatchEvent(new MouseEvent('mousedown', Object.assign(base(cx, cy), {
-                button: 0, buttons: 1, detail: 1
-            })));
-
-            // 4) Hold (60-100ms)
-            await sleep(rand(60, 100));
-
-            // 5) pointerup + mouseup
-            btn.dispatchEvent(new PointerEvent('pointerup', Object.assign(base(cx, cy), {
-                button: 0, buttons: 0, pressure: 0
-            })));
-            btn.dispatchEvent(new MouseEvent('mouseup', Object.assign(base(cx, cy), {
-                button: 0, buttons: 0, detail: 1
-            })));
-
-            // 6) Итоговый click с координатами центра кнопки (БЕЗ btn.click()!)
-            await sleep(rand(1, 5));
-            btn.dispatchEvent(new MouseEvent('click', Object.assign(base(cx, cy), {
-                button: 0, buttons: 0, detail: 1
-            })));
-
-            botLog("[ClickProof] Реалистичный клик с координатами отправлен (по схеме AB6)");
-            return "ok";
+            companionState.checkedAt = 0; // следующий старт проверит статус заново
+            botLog("[BossStart] Companion отверг клик: " +
+                JSON.stringify((comp && (comp.error || comp.data)) || "нет ответа"));
+            updateUIStatus("Аппаратный клик не выполнен — бой не запускаю");
+            return "no-companion";
         }
 
        /* ---------------- ULTRA SAFE HOOKS ---------------- */
@@ -3903,9 +3904,6 @@
       function installUltraSafeBase() {
           if (ultraSafeInstalled) return;
           ultraSafeInstalled = true;
-
-          // Ранняя установка патча ClickProof на /travel2/
-          installClickProofPatch();
 
           // Глушим 404 по worldtour-картинкам
           document.addEventListener("error", e => {
@@ -4007,6 +4005,10 @@
       let meldRerollCountry = null;
       let meldRerollCount = 0;
       const MELD_MAX_REROLLS = 10;
+      /* Флаг «мы только что вернулись из боя в этой стране». Нужен, чтобы после
+       * победы не перебирать противников в стране, где дроп уже забран, а
+       * сразу идти дальше. Сбрасывается при смене страны. */
+      let meldPostFightCheck = false;
 
       // Для Сильного Босса
       let strongRerollCountry = null;
@@ -4675,10 +4677,12 @@
        * «Мой бой»), и первая из них — не атака босса. Живой лог сессии
        * 23:00:17 зафиксировал нажатие «Вперед!» как «неудачный старт боя»:
        * скрипт выполнял игровое действие, которого не запрашивал.
-       * Теперь кнопка находится строго по боевому тексту, класс используется
-       * только как дополнительная проверка. */
+       * Сначала проверяется подтверждённая структура кнопки в футере,
+       * затем — резервный поиск по обработчику и боевому тексту. */
       const RAID_FIGHT_BUTTON_RE =
           /атаковать\s*босса|атаковать|войти\s*в\s*бой|присоединиться\s*к\s*бою/i;
+      const RAID_FIGHT_BUTTON_SELECTOR =
+          "#content > div.worldtour.worldtour--2.worldtour--atlantida.worldtour--avalon.worldtour--eldorado > div.worldtour__footer > div.worldtour__footer-actions.clearfix > span > span > button";
 
       function isRaidFightButton(el) {
           if (!el || el.tagName !== "BUTTON") return false;
@@ -4686,18 +4690,27 @@
       }
 
       function getBossButton() {
+          const exact = document.querySelector(RAID_FIGHT_BUTTON_SELECTOR);
+          if (isAvailableBossButton(exact)) return exact;
+
+          const footerButtons = [...document.querySelectorAll("#content .worldtour__footer-actions button")];
+          const footerMatch = footerButtons.find(b =>
+              isAvailableBossButton(b) &&
+              (b.matches('button[onclick*="startFight"]') || isRaidFightButton(b)));
+          if (footerMatch) return footerMatch;
+
           const direct = document.querySelector('button[onclick*="startFight"]');
-          if (direct && direct.offsetParent !== null) return direct;
-          const found = [...document.querySelectorAll("button")].filter(isRaidFightButton);
-          if (!found.length) return direct || null;
-          return found.find(b => b.offsetParent !== null) || found[0];
+          if (isAvailableBossButton(direct)) return direct;
+
+          return [...document.querySelectorAll("button")].find(b =>
+              isAvailableBossButton(b) && isRaidFightButton(b)) || null;
       }
 
       // Ожидание именно боевой кнопки (после reroll футер перерисовывается)
       async function waitForBossButton(attempts = 40) {
           for (let i = 0; i < attempts; i++) {
               const b = getBossButton();
-              if (b && b.offsetParent !== null) return b;
+              if (isAvailableBossButton(b)) return b;
               await Utils.sleep(120 + Math.random() * 80);
           }
           return null;
@@ -4710,21 +4723,11 @@
       }
 
       /* ---------------- СТАРТ БОЯ: НАБЛЮДЕНИЕ ЗА ОТВЕТОМ ИГРЫ ----------------
-       * Игра с build 1823 запускает рейдовый бой через ClickProof:
-       *   <button class="worldtour__button-big" onclick="Worldtour2.startFight(event)">
-       *   startFight(event) -> postUrlV2("/travel2/", {action:"fight"}, "post", 1, undefined, event)
-       *   proofRequired = (path === "/travel2/" && action === "fight" && method === "post")
-       * Подготовка доказательства идёт асинхронно и с жёстким бюджетом (~5 сек:
-       * отдельный POST action=click_proof_token, затем WASM-доказательство).
-       * Поэтому переход в бой НЕ происходит мгновенно в момент клика, и судить об успехе
-       * только по URL в узком окне — ненадёжно.
-       *
-       * Здесь собирается фактическое состояние игры, чтобы:
-       *   1) не кликать повторно, пока игра сама ведёт старт (fightPending / disabled / aria-busy);
+       * Запуск боя на /travel2/ подтверждается асинхронно:
+       *   1) не запускать бой повторно, пока игра сама ведёт старт (fightPending / disabled / aria-busy);
        *   2) дождаться реального результата (переход в бой либо отказ);
-       *   3) не заявлять об успехе без подтверждения.
-       * Никакая защита игры не обходится: читается только публичное состояние DOM
-       * и флаг самой игры, бой по-прежнему запускает штатный игровой обработчик.
+       *   3) не заявлять об успехе без фактического подтверждения в DOM или URL.
+       * Читается только публичное состояние DOM и интерфейс самой игры.
        */
 
       // Игровой обработчик живёт в main world; unsafeWindow даёт к нему доступ
@@ -4786,79 +4789,26 @@
       }
 
       /* ---------------- КЛАССИФИКАЦИЯ ОТКАЗА СТАРТА БОЯ ----------------
-       * Отказ может прийти по совершенно разным причинам, и раньше они сливались
-       * в одно «Игра отказала в старте боя». Из-за этого обычный режим рейдов
-       * при проблемах с доказательством клика уходил в перебор противников
-       * и тратил билеты смены.
-       *
-       * Теперь причины различаются. Источники — только публичное состояние игры:
-       *   Worldtour2.clickProofMessages — тексты, которые сервер прислал вместе
-       *   с состоянием кругосветки (ключи refresh / retry / network);
-       *   наличие игрового GameButton/WebAssembly/Worker/WebCrypto — готова ли
-       *   сама игра построить доказательство.
-       * Ничего не подделывается и не обходится: скрипт лишь читает то, что игра
-       * уже показала пользователю.
+       * Отказ может прийти от сервера (отклонённое действие боя),
+       * из-за сети или тайм-аута. Источники — только публичные алерты игры.
        */
 
       // Серверный ответ при отклонённом действии боя (узнаётся по тексту)
       const RAID_FIGHT_DENIED_TEXT = "по странному стечению";
 
-      // Сообщения игры о проблемах с доказательством клика (приходят с сервера)
-      function raidProofMessages() {
-          const wt = gameWorldtour();
-          const m = wt && wt.clickProofMessages;
-          return (m && typeof m === "object") ? m : null;
-      }
-
-      /* Готова ли игра физически построить доказательство клика.
-       * definite различает «игра точно не готова» и «пробу выполнить не удалось»:
-       * блокировать рейды по неверной пробе нельзя — это ложная остановка. */
-      function raidProofRuntimeReady() {
-          try {
-              const w = (typeof unsafeWindow !== "undefined" && unsafeWindow) || window;
-              const ok = !!(w.GameButton && typeof w.GameButton.create === "function") &&
-                  typeof WebAssembly === "object" &&
-                  typeof Worker === "function" &&
-                  !!(w.crypto && w.crypto.subtle);
-              return { ready: ok, definite: true };
-          } catch (_) {
-              return { ready: false, definite: false, error: "probe_failed" };
-          }
-      }
-
       /* Определяет причину отказа по сообщениям игры.
-       * Порядок проверок важен: сначала фактические тексты, которые показала игра,
-       * и только потом косвенные признаки. Иначе сбойная проба окружения
-       * перекрывала бы настоящий ответ сервера (проверено живым прогоном).
        * Возвращает один из ключей:
-       *   "proof_denied"   — сервер отклонил само действие боя
-       *   "proof_refresh"  — нужно перезагрузить страницу (бандл/воркер/серверное время)
+       *   "server_denied"  — сервер отклонил действие старта боя
        *   "network"        — сетевая ошибка запроса
-       *   "proof_retry"    — доказательство не принято, игра предлагает повторить
-       *   "proof_runtime"  — игра точно не может построить доказательство
        *   "no_transition"  — игра отпустила кнопку, но в бой не перешла
        *   "unknown"        — не распознано
        */
       function classifyRaidRejection(alerts, detail) {
           const list = (alerts || []).map(a => String(a).toLowerCase());
           const joined = (list.join(" ") + " " + String(detail || "").toLowerCase());
-          const msgs = raidProofMessages();
 
-          const matches = (key) => {
-              if (!msgs) return false;
-              const raw = msgs[key];
-              if (typeof raw !== "string") return false;
-              const norm = raw.replace(/\s+/g, " ").trim().toLowerCase();
-              if (!norm) return false;
-              return list.some(t => t.includes(norm)) || joined.includes(norm);
-          };
-
-          if (joined.includes(RAID_FIGHT_DENIED_TEXT)) return "proof_denied";
-          if (matches("refresh")) return "proof_refresh";
-          if (matches("network")) return "network";
-          if (matches("retry")) return "proof_retry";
-          const probe = raidProofRuntimeReady();
-          if (probe.definite && !probe.ready) return "proof_runtime";
+          if (joined.includes(RAID_FIGHT_DENIED_TEXT)) return "server_denied";
+          if (joined.includes("сетев") || joined.includes("network")) return "network";
           if (detail === "game released start without entering fight") return "no_transition";
           return "unknown";
       }
@@ -4866,20 +4816,14 @@
       // Человекочитаемое объяснение причины отказа для статуса и лога
       function raidRejectionLabel(reason) {
           switch (reason) {
-              case "proof_runtime":
-                  return "игра не может подготовить доказательство клика (перезагрузите страницу)";
-              case "proof_refresh":
-                  return "сервер не выдал доказательство — обновите страницу рейдов";
-              case "proof_retry":
-                  return "доказательство клика не принято — игра предлагает повторить";
-              case "proof_denied":
-                  return "сервер отклонил автоматический старт боя";
+              case "server_denied":
+                  return "сервер отклонил запуск боя";
               case "network":
                   return "сетевая ошибка запроса старта боя";
               case "no_transition":
                   return "игра отпустила кнопку, но бой не начался";
               default:
-                  return "причина не определена";
+                  return "игра отказала в старте боя";
           }
       }
 
@@ -4898,7 +4842,7 @@
       /* Ожидание фактического результата старта боя.
        * Возвращает различимый статус, а не просто true/false:
        *   "started"  — подтверждённый переход в бой
-       *   "rejected" — игра сама отказала (сообщение об ошибке ClickProof и т.п.)
+       *   "rejected" — игра сама отказала (сообщение об ошибке и т.п.)
        *   "timeout"  — по истечении бюджета подтверждения ничего не подтверждено
        */
       async function waitForFightStart(budgetMs) {
@@ -4969,18 +4913,8 @@
               : "btn=none");
           parts.push("fightPending=" + (wt ? String(wt.fightPending) : "n/a"));
           parts.push("serviceForm=" + (document.querySelector("#service-form") ? "yes" : "no"));
-           const pr = raidProofRuntimeReady();
-           parts.push("proof=" + (pr.ready ? "ready" : (pr.definite ? "unavailable" : "probe_failed")));
-           parts.push("proofMsgs=" + (raidProofMessages() ? Object.keys(raidProofMessages()).join(",") : "none"));
-           // Состояние JSON.stringify main world: "native" — обёртка clickBossTrusted
-           // корректно восстанавливается; "wrapped_stale" — осталась от прерванного клика.
-           try {
-               const pw = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
-               const src = String(pw.JSON && pw.JSON.stringify);
-               parts.push("jsonStr=" + (src.indexOf("__mwStrWrap") !== -1 ? "wrapped_stale"
-                   : (/native code/.test(src) ? "native" : "foreign")));
-           } catch (_) { parts.push("jsonStr=?"); }
-           if (bossStartLastReason) parts.push("reason=" + bossStartLastReason);
+          parts.push("activation=button.click");
+          if (bossStartLastReason) parts.push("reason=" + bossStartLastReason);
           return parts.join(" ");
       }
 
@@ -5016,19 +4950,10 @@
           await waitTravelReady();
           await humanPause(400, 900);
 
-          /* Пред-проверка перед любым действием с кнопкой.
-           * Если игра физически не может подготовить доказательство клика,
-           * а сервер уже отвергал старт — кликать бессмысленно, а предварительные
-           * смены противника в этом случае просто сжигают билеты. */
-          const preflightProbe = raidProofRuntimeReady();
-          if (raidStartDenied || (preflightProbe.definite && !preflightProbe.ready)) {
-              if (!raidStartDenied) {
-                  raidStartDenied = true;
-                  raidStartDeniedReason = "proof_runtime";
-              }
+          if (raidStartDenied) {
               updateUIStatus("Автозапуск боя недоступен: " +
                   raidRejectionLabel(raidStartDeniedReason));
-              botLog("[BossStart] preflight блокировка (" + raidStartDeniedReason +
+              botLog("[BossStart] повторный запуск заблокирован (" + raidStartDeniedReason +
                   ") · " + bossStartDiagnostic(null));
               return "blocked";
           }
@@ -5038,6 +4963,8 @@
               btn = getBossButton();
               if (!btn) {
                   updateUIStatus("Кнопка босса не найдена");
+                  botLog("[BossStart] Кнопка босса не найдена · selector=" +
+                      RAID_FIGHT_BUTTON_SELECTOR + " · " + bossStartDiagnostic(null));
                   return "rejected";
               }
           }
@@ -5061,6 +4988,8 @@
           btn = await waitForBossButton(40);
           if (!btn) {
               updateUIStatus("Кнопка босса не найдена после смены противника");
+              botLog("[BossStart] Кнопка босса не найдена после смены · selector=" +
+                  RAID_FIGHT_BUTTON_SELECTOR + " · " + bossStartDiagnostic(null));
               return "rejected";
           }
 
@@ -5081,8 +5010,7 @@
               }
               const pendingReason = classifyRaidRejection(pending.alerts, pending.detail);
               bossStartLastReason = pendingReason;
-              if (pendingReason === "proof_denied" || pendingReason === "proof_runtime" ||
-                  pendingReason === "proof_refresh") {
+              if (pendingReason === "server_denied") {
                   raidStartDenied = true;
                   raidStartDeniedReason = pendingReason;
                   botLog("[BossStart] ожидание старта отвергнуто: " + pendingReason +
@@ -5113,11 +5041,19 @@
           lastFightResultPending = false;
           drainRaidAlerts();
 
-          // Единственный клик: штатный игровой обработчик (Worldtour2.startFight(event)).
-          // clickBossTrusted эмулирует реалистичную цепочку pointermove/hover/down/hold/up/click
-          // и на время dispatchEvent оборачивает JSON.stringify в main world,
-          // переворачивая "trusted":false→true в строке снапшота proof.
-          await clickBossTrusted(btn);
+          const result = await startRaidFightClean(btn);
+          if (result === "no-companion") {
+              /* Синтетический клик сервер отвергает всегда, поэтому повторять
+               * его бессмысленно и вредно: это лишние провальные запросы боя. */
+              botLog("[BossStart] Аппаратный клик недоступен — останавливаю рейды. " +
+                  "Запустите MyWay Moswar Companion и нажмите «Старт» снова.");
+              stopBot();
+              return "blocked";
+          }
+          if (result !== "ok") {
+              updateUIStatus("Кнопка старта боя недоступна");
+              return "rejected";
+          }
           fightState = "start";
           // Об успехе здесь сообщать нельзя — старт ещё подтверждается асинхронно
           updateUIStatus("Запускаю бой, жду подтверждения игры…");
@@ -5141,11 +5077,9 @@
               " · причина: " + reason + " — " + raidRejectionLabel(reason) +
               " · diag: " + bossStartDiagnostic(btn));
 
-          /* Эти причины не зависят от количества попыток: сервер уже сказал «нет»
-           * штатному игровому клику. Переклик и перебор противников тут только
-           * вредят, поэтому блокируем старт и останавливаем модуль. */
-          if (reason === "proof_denied" || reason === "proof_runtime" ||
-              reason === "proof_refresh") {
+          /* Если сервер отклонил старт боя, переклик и перебор противников
+           * только вредят, поэтому блокируем старт и останавливаем модуль. */
+          if (reason === "server_denied") {
               raidStartDenied = true;
               raidStartDeniedReason = reason;
               updateUIStatus("Сервер отверг старт боя: " + raidRejectionLabel(reason));
@@ -5242,20 +5176,34 @@
 
           meldRerollCountry = currentCountry;
           meldRerollCount = 0;
+          meldPostFightCheck = false;
       }
 
+      /* Эталонный порядок акционного режима:
+       *   пришли в страну → прочитали дроп → подходит → бой
+       *                                  → не подходит → перебор противников
+       *                                                   (если включён) → сразу
+       *                                                   перечитали дроп → бой
+       *                                  → перебор выключен/исчерпан → следующая страна
+       *   вернулись из боя → перечитали дроп → нет → следующая страна
+       */
       async function handleMeldMode() {
+          /* Переход в страну выполняем ТОЛЬКО при первом заходе. Повторный вызов
+           * (после перебора противников или после боя) не должен перезагружать
+           * блок travel2: goToCountry сбрасывал результат перебора, из-за чего
+           * скрипт зацикливался на переборе вместо перехода в следующую страну. */
           if (meldRerollCountry !== currentCountry) {
               meldRerollCountry = currentCountry;
               meldRerollCount = 0;
+              meldPostFightCheck = false;
+              await goToCountry(currentCountry);
+              await hardPause();
           }
+
+          await waitTravelReady();
 
           updateUICountry();
           updateUIStatus("Акционный: страна " + currentCountry);
-
-          await goToCountry(currentCountry);
-          await hardPause();
-          await waitTravelReady();
 
           // ===== ПРОВЕРКА НАГРАДЫ =====
           const offer = getOfferGlory();
@@ -5273,15 +5221,23 @@
               return;
           }
 
-          const best = getBestMeldValue();
+          let best = getBestMeldValue();
 
           if (best >= eventThreshold) {
               updateUIStatus("Акционный " + best + " ≥ " + eventThreshold + " — бой");
-              const ok = await startBossFight({ allowPreReroll: false });
-              if (ok === "started") {
-                  fightState = "start";
-                  await gotoNextCountryInMeld(true);
-              }
+              /* Страну здесь НЕ переключаем: бой идёт в текущей стране, а
+               * результат и повторная проверка дропа обрабатываются в mainLoop
+               * после выхода из боя. */
+              await startBossFight({ allowPreReroll: false });
+              return;
+          }
+
+          /* Мы уже отбились в этой стране, но подходящего дропа больше нет —
+           * расходуем билеты на перебор бессмысленно, идём дальше. */
+          if (meldPostFightCheck) {
+              meldPostFightCheck = false;
+              updateUIStatus("Акционный: после боя дроп < " + eventThreshold + " — следующая страна");
+              await gotoNextCountryInMeld(true);
               return;
           }
 
@@ -5302,13 +5258,24 @@
           }
 
           if (!rolled) {
-              updateUIStatus("Нет билетов смены — следующая страна");
+              updateUIStatus((useRoll || useTop20)
+                  ? "Нет билетов смены — следующая страна"
+                  : "Перебор противников выключен, дроп < " + eventThreshold + " — следующая страна");
               await gotoNextCountryInMeld(true);
               return;
           }
 
           meldRerollCount++;
-          updateUIStatus("Акционный <20, смена " + meldRerollCount + "/" + MELD_MAX_REROLLS);
+          updateUIStatus("Акционный <" + eventThreshold + ", смена " + meldRerollCount + "/" + MELD_MAX_REROLLS);
+
+          /* Дроп после смены противника перечитываем СРАЗУ, в этом же вызове:
+           * следующая итерация mainLoop уже не делает goToCountry, но ждать
+           * две секунды нет смысла — DOM после waitAfterReroll актуален. */
+          best = getBestMeldValue();
+          if (best >= eventThreshold) {
+              updateUIStatus("Акционный после смены " + best + " ≥ " + eventThreshold + " — бой");
+              await startBossFight({ allowPreReroll: false });
+          }
       }
 
 
@@ -5527,7 +5494,7 @@
                   return;
               }
 
-              // 1.5) Игра сама ведёт запуск боя (ClickProof-подтверждение ещё не завершено).
+              // 1.5) Игра сама ведёт запуск боя (подтверждение ещё не завершено).
               // Не мешаем навигацией, лечением и прочими действиями — просто дожидаемся итога.
               if (!useAIMode() && bossStartInFlight(getBossButton())) {
                   const pending = await waitForFightStart(12000);
@@ -5544,8 +5511,7 @@
                       botLog("[BossStart] ожидание старта: " + pending.status +
                           (pending.detail ? " · " + pending.detail : "") +
                           " · причина: " + pendingReason + " — " + raidRejectionLabel(pendingReason));
-                      if (pendingReason === "proof_denied" || pendingReason === "proof_runtime" ||
-                          pendingReason === "proof_refresh") {
+                      if (pendingReason === "server_denied") {
                           raidStartDenied = true;
                           raidStartDeniedReason = pendingReason;
                           updateUIStatus("Сервер отверг старт боя: " + raidRejectionLabel(pendingReason));
@@ -5632,7 +5598,11 @@
 
               // 6) ОБРАБОТКА РЕЗУЛЬТАТА ПОСЛЕДНЕГО БОЯ (общая: stay on lose)
               if (lastFightResultPending) {
-                  if (lastFightCountry === currentCountry) {
+                  /* Для акционного режима результат обрабатываем независимо от
+                   * совпадения стран: syncCurrentCountryFromSelector() мог уже
+                   * обновить currentCountry, а решение «перепроверить дроп» от
+                   * этого не зависит. Для остальных режимов поведение прежнее. */
+                  if (lastFightCountry === currentCountry || mode === "meld") {
                       if (lastFightResult === "win") {
                           // ЦИКЛЫ: обычный режим → next
                           if (mode === "cycle") {
@@ -5684,10 +5654,18 @@
                               updateUIStatus("Фарм: бой завершён (победа)");
                           }
 
-                          // МЕЛД: логика уже внутри модуля
+                          // МЕЛД: остаёмся в стране, дроп перепроверит handleMeldMode
+                          if (mode === "meld") {
+                              meldPostFightCheck = true;
+                              updateUIStatus("Акционный: победа — перечитываю дроп");
+                          }
                       } else if (lastFightResult === "lose") {
-                          // ВСЕ РЕЖИМЫ: при проигрыше остаёмся в этой же стране
-                          updateUIStatus("Поражение — остаёмся в стране " + currentCountry + " до победы");
+                          if (mode === "meld") {
+                              updateUIStatus("Акционный: поражение — остаёмся в стране " + currentCountry + " до победы");
+                          } else {
+                              // ВСЕ РЕЖИМЫ: при проигрыше остаёмся в этой же стране
+                              updateUIStatus("Поражение — остаёмся в стране " + currentCountry + " до победы");
+                          }
                       }
                   }
                   lastFightResultPending = false;
@@ -5800,6 +5778,7 @@
 
               meldRerollCountry = null;
               meldRerollCount = 0;
+              meldPostFightCheck = false;
 
               strongRerollCountry = null;
               strongRerollCount = 0;
@@ -5835,6 +5814,23 @@
           updateUIStatus(fromRestore ? "Бот восстановлен" : "Бот запущен");
           updateUIHighlights();
           ModuleSessionRegistry.restartIntervals('raids');
+          if (!fromRestore) companionPreflight();
+      }
+
+      /**
+       * Предполётная проверка Companion. Нужна, чтобы пользователь узнал о
+       * проблеме до первого боя, а не после отказа сервера. Бот при этом не
+       * останавливаем: Companion можно запустить в любой момент.
+       */
+      async function companionPreflight() {
+          const state = await checkCompanion(true);
+          if (state.clickReady) {
+              botLog("[Companion] готов к аппаратным кликам (" +
+                  (state.detail && state.detail.mode) + ")");
+              return;
+          }
+          updateUIStatus("⚠ MyWay Companion не готов — бои запускаться не будут. " +
+              "Запустите companion/start-companion-mac.sh");
       }
 
       function togglePause() {

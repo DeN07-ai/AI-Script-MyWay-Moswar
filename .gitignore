@@ -5,3 +5,4 @@ _tcshop_module_snip.js
 .env
 .env.*
 credentials.json
+companion/bin/
