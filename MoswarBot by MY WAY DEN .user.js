@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.26
+// @version      3.27
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.9' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.10' }
     ];
 
 
@@ -24418,7 +24418,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.9 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.10 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24428,7 +24428,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.9');
+      console.log('[MODULE_arena] v2.10');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -24757,22 +24757,21 @@ body.mw-helper-tip-on .simple-tooltip {
           const last = turn ? live.attacks[turn - 1] : 0;
           let run = 0;
           for (let i = turn - 1; i >= 0 && live.attacks[i] === last; i--) run++;
-          const blockedLast = last && outcomes[outcomes.length - 1] === 'block';
-          function softTarget() {
-              if (!weakest) return (open[0] || ZONES[2]).id;
-              const openWeak = weakest.filter(z => !blockedLast || z.id !== last);
-              return (openWeak[0] || weakest[0]).id;
+          function otherThan(list, skip) {
+              const pool = list && list.length ? list : open;
+              const rest = skip ? pool.filter(z => z.id !== skip) : pool;
+              return (rest[0] || pool[0] || ZONES[2]).id;
           }
           let atk;
           if (knockout) {
               const prev = outcomes.slice(-2);
               const twoHits = prev.length === 2 && prev[0] === 'hit' && prev[1] === 'hit';
-              if (twoHits && (blocked[shut[0].id] || 0) > 0) atk = shut[0].id;
-              else atk = softTarget();
+              const covered = shut.find(z => (blocked[z.id] || 0) > 0);
+              atk = twoHits && covered ? covered.id : otherThan(weakest, last);
           } else if (stubborn && last && run < 3) {
               atk = last;
           } else {
-              atk = softTarget();
+              atk = otherThan(weakest, last);
           }
           return { atk: atk, def: def };
       }
