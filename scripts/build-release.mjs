@@ -24,17 +24,17 @@ export const EXPECTED_CONFIG = {
     name: 'AI MyWay DeN',
     namespace: 'MyWay.Moswar',
     updateURL:
-      'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js',
+      'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/AI%20MyWay%20DeN.user.js',
     downloadURL:
-      'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js',
+      'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/AI%20MyWay%20DeN.user.js',
   },
   bridge: {
     name: 'MoswarBot by MY WAY DEN',
     namespace: 'MY WAY',
     updateURL:
-      'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js',
+      'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js',
     downloadURL:
-      'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js',
+      'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js',
   },
 };
 

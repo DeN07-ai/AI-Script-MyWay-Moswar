@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.25
+// @version      3.26
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -23,8 +23,8 @@
 // @connect      moskwar.ru
 // @connect      127.0.0.1
 // @connect      localhost
-// @updateURL    https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
-// @downloadURL  https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// @updateURL    https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
+// @downloadURL  https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js
 // ==/UserScript==
 // @ts-nocheck
 /* global unsafeWindow, GM_info, GM_xmlhttpRequest, GM_addStyle, GM_getValue, GM_setValue, GM_deleteValue */
@@ -20997,7 +20997,7 @@ body.mw-helper-tip-on .simple-tooltip {
       // Проверяем один раз за сессию, чтобы не спамить запросами
       if (sessionStorage.getItem('mw_update_checked')) return;
 
-      const updateUrl = 'https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js';
+      const updateUrl = 'https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/AI%20MyWay%20DeN.user.js';
       try {
           // Добавляем timestamp, чтобы избежать кэширования
           const res = await crossFetch(updateUrl + '?t=' + Date.now());

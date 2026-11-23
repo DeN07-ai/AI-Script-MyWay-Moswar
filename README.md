@@ -2,12 +2,12 @@
 
 Userscript для [moswar.ru](https://www.moswar.ru): панель модулей — рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения и Арена.
 
-Версия: **3.25**
+Версия: **3.26**
 
 ## Установка
 
 1. Поставьте [Tampermonkey](https://www.tampermonkey.net/).
-2. Откройте [AI MyWay DeN.user.js](https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js) и подтвердите установку.
+2. Откройте [AI MyWay DeN.user.js](https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/AI%20MyWay%20DeN.user.js) и подтвердите установку.
 3. Зайдите на `*.moswar.ru` и включите нужные модули в панели.
 
 Если скрипт в Tampermonkey всё ещё называется **MoswarBot by MY WAY DEN**, ничего переустанавливать не нужно: обновление идёт само. Меню расширения → «Проверить обновления скриптов».
@@ -127,6 +127,11 @@ Windows — один двойной щелчок по `companion/start-companion
 За ход скрипт выбирает одну атаку и две защиты, пока на ринге идёт «Тик-так». Блок ставится в две зоны, куда соперник уже попадал. Пока это неизвестно, закрыты торс и пах.
 
 Удар идёт в самую слабую зону соперника. Шкала зоны — это прочность, не отдельная жизнь. На нуле зона ослаблена, и попадание туда сильнее. Скрипт бьёт в другую зону, если прошлый удар в слабую уже закрыли блоком. С приёмом Упорный три удара подряд остаются в одной зоне, чтобы третий прошёл сквозь блок.
+
+## Изменения в 3.26
+
+- Версия поднята до 3.26, чтобы Tampermonkey увидел обновление поверх 3.25.
+- Ссылка обновления ведёт сразу на файл скрипта, без пустого перехода GitHub.
 
 ## Изменения в 3.25
 
@@ -261,8 +266,8 @@ node scripts/build-release.mjs --release
    # Коммит и push выполняйте только после отдельного подтверждения.
    ```
 5. Проверить доступность опубликованных URL в браузере:
-   - Основной файл: `https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/AI%20MyWay%20DeN.user.js`
-   - Мост: `https://github.com/DeN07-ai/AI-Script-MyWay-Moswar/raw/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js`
+   - Основной файл: `https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/AI%20MyWay%20DeN.user.js`
+   - Мост: `https://raw.githubusercontent.com/DeN07-ai/AI-Script-MyWay-Moswar/refs/heads/main/MoswarBot%20by%20MY%20WAY%20DEN%20.user.js`
 
 ---
 
