@@ -3,7 +3,7 @@
 // @namespace    MyWay.Moswar
 // @version      3.18
 // @author       MyWay DeN
-// @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения
+// @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
 // @match        http://moswar.net/*
 // @match        https://moswar.net/*
@@ -572,7 +572,8 @@
       { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
-      { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' }
+      { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Автозапись, выбор приёмов, ход за 10 секунд, несколько стратегий', version: '2.4' }
     ];
 
 
@@ -1928,6 +1929,58 @@
   .mw-mod-icon .tcshop-ico .tcshop-mix { left: 5px; bottom: 5px; top: auto; }
   .mw-mod-icon .tcshop-ico .tcshop-mask { right: 5px; bottom: 5px; top: auto; left: auto; }
 
+  /* ===== Иконка «Арена» — буба в глянцевой капле, как остальные модули ===== */
+  .mw-mod-icon .arena-ico {
+      position: relative;
+      width: 86%;
+      height: 86%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 1;
+  }
+  .mw-mod-icon .arena-ico img {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain;
+      object-position: center 40%;
+      filter:
+          drop-shadow(0 2px 2px rgba(60,35,10,0.4))
+          drop-shadow(0 0 1px rgba(255,255,255,0.4))
+          contrast(1.08)
+          saturate(1.15);
+  }
+  .mw-glass-panel-head .arena-ico {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      border-radius: 50%;
+      background:
+          radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.15) 28%, transparent 52%),
+          linear-gradient(155deg, #fff9ef 0%, #f3d7a8 38%, #e0a86a 72%, #c4843f 100%);
+      border: 1.5px solid rgba(196,134,69,0.7);
+      box-shadow:
+          inset 0 1px 2px rgba(255,255,255,0.85),
+          inset 0 -4px 8px rgba(120,70,30,0.22),
+          0 2px 6px rgba(90,55,25,0.28);
+      overflow: hidden;
+  }
+  .mw-glass-panel-head .arena-ico img {
+      width: 86%;
+      height: 86%;
+      object-fit: contain;
+      object-position: center 40%;
+      filter: drop-shadow(0 1px 1px rgba(60,35,10,0.35));
+      pointer-events: none;
+  }
+
   .mw-mod-label {
       flex:1; opacity:1; white-space:nowrap; overflow:hidden;
       font-weight:800; font-size:15px; letter-spacing:-0.01em; color:#1a1410;
@@ -2793,7 +2846,8 @@
       'tcshop': 'tcshop-panel',
       'omon': 'omon-panel',
       'omniscience': 'mw-omniscience-panel',
-      'squid': 'mw-squid-panel'
+      'squid': 'mw-squid-panel',
+      'arena': 'mw-arena-panel'
   };
 
   function getPanelEl(id) {
@@ -3494,7 +3548,8 @@
               'tcshop': 'tcshop-stop',
               'omon': 'omon-stop',
               'omniscience': 'omniscience-stop-btn',
-              'squid': 'squid-stop-btn'
+              'squid': 'squid-stop-btn',
+              'arena': 'arena-stop'
           };
           const btnId = stopMap[id];
           if (btnId) {
@@ -24337,6 +24392,833 @@ body.mw-helper-tip-on .simple-tooltip {
   }
 
 
+  /* ==========================================================================
+     МОДУЛЬ «АРЕНА» v2.4 — бой 1на1 по живой разметке 23.11.2026
+     Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
+     Ход: input.blindfight-item-input, затем groupFightMakeStep().
+     Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
+     ========================================================================== */
+  BotModules.arena = function () {
+      if (document.getElementById('mw-arena-panel')) {
+          ModuleSessionRegistry.restartIntervals('arena');
+          return;
+      }
+      console.log('[MODULE_arena] v2.4');
+
+      const LS_CFG = 'MYWAY_ARENA_CFG_V1';
+      const LS_STATS = 'MYWAY_ARENA_STATS_V1';
+      const LS_HIST = 'MYWAY_ARENA_HISTORY_V1';
+      const LS_LIVE = 'MYWAY_ARENA_LIVE_V1';
+      const LS_RUN = 'MYWAY_ARENA_RUN_V1';
+
+      const BUFF_NAMES = {
+          1: 'Взвешивание', 2: 'Двойная страховка', 3: 'Упорный!', 4: 'Весомый аргумент', 5: 'Дай списать!',
+          6: 'Нокаут!', 7: 'Зеркало', 8: 'Защитная Серия', 9: 'Пластырь', 10: 'Берсерк', 11: 'Гомеопатия',
+          12: 'Ловкач', 13: 'Запрет критов', 14: 'Допинг', 15: 'Глухая оборона', 16: 'Запас прочности',
+          17: 'Закалка', 18: 'Стартовый натиск', 19: 'Таран', 20: 'Кровоточащая рана', 21: 'Вампиризм',
+          22: 'Чужая сила', 23: 'Ответ тяжеловесу'
+      };
+      const ZONES = [
+          { id: 1, name: 'Голова' },
+          { id: 2, name: 'Торс' },
+          { id: 3, name: 'Пах' },
+          { id: 4, name: 'Ноги' }
+      ];
+      const ZONE_BY_NAME = { 'Голова': 1, 'Торс': 2, 'Пах': 3, 'Ноги': 4 };
+      // Наборы подобраны по правилам и двум живым боям, не как универсальный рецепт.
+      const STRATS = {
+          rampart: {
+              title: 'Таран и Закалка',
+              buffs: [17, 8, 3, 19, 11, 12, 2, 16, 18],
+              plan: 'stubborn',
+              hint: 'Долгий бой: броня растёт, серия блоков, пробой на третьем ударе'
+          },
+          fortress: {
+              title: 'Длинная защита',
+              buffs: [17, 8, 2, 12, 11, 15, 16, 3, 7],
+              plan: 'cover',
+              hint: 'Блоки, автоблок и уклонение, если соперник бьёт дольше'
+          },
+          early: {
+              title: 'Ранний удар',
+              buffs: [19, 18, 20, 17, 3, 8, 11, 12],
+              plan: 'early',
+              hint: 'Таран и натиск в первые ходы, пока броня ещё слабая'
+          },
+          mirror: {
+              title: 'Зеркало первых ходов',
+              buffs: [7, 2, 8, 12, 3, 17, 11, 16],
+              plan: 'cover',
+              hint: 'Первые ходы зеркалом и страховкой, дальше серия блоков'
+          }
+      };
+
+      const cfg = {
+          autoJoin: true,
+          autoReward: true,
+          autoBuffs: true,
+          strategy: 'rampart',
+          maxFightsWeek: 50,
+          tgNotify: false
+      };
+      try { Object.assign(cfg, JSON.parse(localStorage.getItem(LS_CFG) || '{}')); } catch (e) { }
+      if (!STRATS[cfg.strategy]) cfg.strategy = 'rampart';
+      function saveCfg() { try { localStorage.setItem(LS_CFG, JSON.stringify(cfg)); } catch (e) { } }
+
+      function weekKeyNow() {
+          const d = new Date();
+          const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+          return mon.toISOString().slice(0, 10);
+      }
+      const stats = { weekKey: weekKeyNow(), wins: 0, fights: 0, lastResult: '' };
+      try {
+          const s = JSON.parse(localStorage.getItem(LS_STATS) || '{}');
+          if (s.weekKey === weekKeyNow()) Object.assign(stats, s);
+      } catch (e) { }
+      function saveStats() {
+          stats.weekKey = weekKeyNow();
+          try { localStorage.setItem(LS_STATS, JSON.stringify(stats)); } catch (e) { }
+      }
+
+      const A = {
+          phase: 'idle',
+          phaseAt: 0,
+          busy: false,
+          lastNavAt: 0,
+          lastLogMsg: '',
+          lastLogAt: 0,
+          resultHandled: false,
+          run: 'idle',
+          bag: null,
+          prepared: '',
+          detail: '',
+          stepSent: false,
+          lastChase: 0,
+          windowLine: 'Расписание ещё не прочитано.'
+      };
+      try {
+          const savedRun = sessionStorage.getItem(LS_RUN) || localStorage.getItem(LS_RUN);
+          if (savedRun === 'run' || savedRun === 'pause') A.run = savedRun;
+      } catch (e) { }
+      function isLive() { return A.run === 'run'; }
+      function saveRun() {
+          try {
+              if (A.run === 'run' || A.run === 'pause') {
+                  sessionStorage.setItem(LS_RUN, A.run);
+                  localStorage.setItem(LS_RUN, A.run);
+              } else {
+                  sessionStorage.removeItem(LS_RUN);
+                  localStorage.removeItem(LS_RUN);
+              }
+          } catch (e) { }
+      }
+      function pageWindow() {
+          try { if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow; } catch (e) { }
+          return window;
+      }
+      function setPhase(p, note) {
+          if (A.phase === p) return;
+          A.phase = p;
+          A.phaseAt = Date.now();
+          aLog('Фаза: ' + p + (note ? ' — ' + note : ''));
+          paintStatus();
+      }
+
+      function aLog(txt) {
+          const line = '[Арена] ' + txt;
+          console.log(line);
+          if (txt !== A.lastLogMsg || Date.now() - A.lastLogAt > 20000) {
+              A.lastLogMsg = txt;
+              A.lastLogAt = Date.now();
+              const el = document.getElementById('mw-arena-log');
+              if (el) {
+                  const div = document.createElement('div');
+                  div.textContent = new Date().toLocaleTimeString() + ' ' + txt;
+                  el.prepend(div);
+                  while (el.children.length > 80) el.removeChild(el.lastChild);
+              }
+          }
+      }
+      function tgArena(msg) {
+          if (!cfg.tgNotify) return;
+          try { Utils.sendTelegram('🥊 <b>Арена:</b> ' + msg); } catch (e) { }
+      }
+
+      function arenaStack() {
+          const nodes = document.querySelectorAll('.battle2025, [x-data]');
+          for (const el of nodes) {
+              const stack = el._x_dataStack || (el._x_data ? [el._x_data] : null);
+              if (!stack) continue;
+              if (stack.some(o => o && ('canJoin' in o || 'arenaSchedule' in o || typeof o.submit === 'function'))) return stack;
+          }
+          return null;
+      }
+      function apGet(name) {
+          const stack = arenaStack();
+          if (!stack) return undefined;
+          for (const o of stack) { try { if (o && name in o) return o[name]; } catch (e) { } }
+          return undefined;
+      }
+      function apObj() {
+          const stack = arenaStack();
+          if (!stack) return null;
+          return stack.find(o => o && typeof o.submit === 'function') || null;
+      }
+
+      function fightId() {
+          const m = (location.pathname || '').match(/\/fight\/(\d+)/);
+          return m ? m[1] : '';
+      }
+      function liveState() {
+          let s = { id: '', attacks: [], opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          try { s = Object.assign(s, JSON.parse(sessionStorage.getItem(LS_LIVE) || '{}')); } catch (e) { }
+          const id = fightId();
+          if (s.id !== id) s = { id: id, attacks: [], opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          return s;
+      }
+      function saveLive(s) { try { sessionStorage.setItem(LS_LIVE, JSON.stringify(s)); } catch (e) { } }
+
+      function sideName(sel) {
+          const el = document.querySelector(sel);
+          if (!el) return '';
+          return (el.innerText || '').replace(/\(\s*\d+\s*\/\s*\d+\s*\)/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+      function logText() {
+          const el = document.querySelector('.fight-log');
+          return ((el && el.innerText) || '').replace(/\s+/g, ' ').trim();
+      }
+      function escapeRe(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+      function scanLog(me, opp) {
+          const text = logText();
+          const oppHits = { 1: 0, 2: 0, 3: 0, 4: 0 };
+          const blocked = { 1: 0, 2: 0, 3: 0, 4: 0 };
+          const zoneRe = '(Голова|Торс|Пах|Ноги)';
+          if (me && opp) {
+              const reOpp = new RegExp(escapeRe(opp) + '[\\s\\S]{0,40}→[\\s\\S]{0,40}' + escapeRe(me) + '[\\s\\S]{0,20}:\\s*' + zoneRe, 'g');
+              const reMe = new RegExp(escapeRe(me) + '[\\s\\S]{0,40}→[\\s\\S]{0,40}' + escapeRe(opp) + '[\\s\\S]{0,24}:\\s*' + zoneRe + '\\s*—\\s*(БЛОК|ПОПАДАНИЕ|КРИТ|МИМО)', 'g');
+              let m;
+              while ((m = reOpp.exec(text))) { const id = ZONE_BY_NAME[m[1]]; if (id) oppHits[id]++; }
+              while ((m = reMe.exec(text))) { if (m[2] === 'БЛОК') { const id = ZONE_BY_NAME[m[1]]; if (id) blocked[id]++; } }
+          }
+          return { text: text, oppHits: oppHits, blocked: blocked };
+      }
+
+      function pickZones(plan, live, scanned) {
+          const opp = scanned.oppHits;
+          const blocked = scanned.blocked;
+          const rankedOpp = ZONES.slice().sort((a, b) => (opp[b.id] || 0) - (opp[a.id] || 0) || a.id - b.id);
+          const def = [rankedOpp[0].id, rankedOpp[1].id];
+          const attacks = live.attacks || [];
+          const last = attacks.length ? attacks[attacks.length - 1] : 0;
+          let run = 0;
+          for (let i = attacks.length - 1; i >= 0 && attacks[i] === last; i--) run++;
+          let atk = 3;
+          if (plan === 'early' && attacks.length < 3) {
+              atk = [3, 1, 4][attacks.length];
+          } else if (plan === 'cover') {
+              const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
+              atk = open[0].id;
+              if (def.indexOf(atk) >= 0 && open[1]) atk = open[1].id;
+          } else {
+              if (last && run < 3) atk = last;
+              else {
+                  const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
+                  atk = (open[0].id === last && open[1]) ? open[1].id : open[0].id;
+              }
+          }
+          return { atk: atk, def: def };
+      }
+
+      function clockOf(sec) {
+          const n = Number(sec) || 0;
+          if (!n) return '';
+          try {
+              return new Date(n * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
+          } catch (e) { return ''; }
+      }
+      function windowLine(sched, canJoin, isQueued) {
+          sched = sched || {};
+          const fightAt = sched.fightStartTime || clockOf(sched.fightStartsAt);
+          const openAt = clockOf(sched.refreshAt);
+          const label = sched.nextJoinLabel || (openAt ? ('сегодня в ' + openAt) : '');
+          if (isQueued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
+          if (canJoin && sched.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
+          const when = openAt || label;
+          if (when) return 'Следующая запись в ' + when + '.';
+          return 'Жду расписание Арены.';
+      }
+      function bagReport(amounts) {
+          const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          const want = strat.buffs.slice(0, 5);
+          const have = [];
+          const miss = [];
+          want.forEach(num => {
+              const code = 'arena_item' + num;
+              if (Number(amounts && amounts[code]) > 0) have.push(BUFF_NAMES[num]);
+              else miss.push(BUFF_NAMES[num]);
+          });
+          if (!amounts) return 'Сумку ещё не вижу. Старт откроет Арену и проверит приёмы.';
+          if (!miss.length) return 'В сумке все 5 приёмов режима «' + strat.title + '».';
+          return 'Нет в сумке: ' + miss.join(', ') + '. Возьму замену из списка режима.';
+      }
+
+      function chooseBuffs(amounts) {
+          const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          const order = strat.buffs.concat([17, 8, 3, 19, 11, 12, 2, 16, 18, 7, 20, 23, 1, 5, 21, 15]);
+          const picked = [];
+          for (const num of order) {
+              const code = 'arena_item' + num;
+              const have = Number(amounts && amounts[code]) || 0;
+              if (have > 0 && picked.indexOf(code) < 0) picked.push(code);
+              if (picked.length >= 5) break;
+          }
+          return picked;
+      }
+
+      function applyBuffs(obj, picked) {
+          if (!obj) return;
+          try {
+              obj.selectedBuffs = picked.slice();
+              if (typeof obj.saveSelectedBuffs === 'function') obj.saveSelectedBuffs();
+          } catch (e) { }
+      }
+
+      async function joinQueue(picked) {
+          const body = new URLSearchParams();
+          body.set('action', 'join_arena_fight');
+          body.set('ajax', '1');
+          picked.forEach(code => body.append('buffs[]', code));
+          const res = await fetch('/fight/', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+              body: body.toString()
+          });
+          const text = await res.text();
+          try { return JSON.parse(text); } catch (e) { return { raw: text.slice(0, 180) }; }
+      }
+
+      async function pollFightUrl() {
+          const res = await fetch('/alley/arena-status/?queued=1', { credentials: 'same-origin', cache: 'no-store' });
+          const data = await res.json();
+          if (data && data.fightUrl) {
+              aLog('Бой создан, открываю ринг');
+              location.href = data.fightUrl;
+          }
+          return data;
+      }
+
+      function rememberHistory(entry) {
+          let list = [];
+          try { list = JSON.parse(localStorage.getItem(LS_HIST) || '[]'); } catch (e) { }
+          if (!Array.isArray(list)) list = [];
+          list.unshift(entry);
+          try { localStorage.setItem(LS_HIST, JSON.stringify(list.slice(0, 30))); } catch (e) { }
+      }
+
+      function handleResult() {
+          if (A.resultHandled) return;
+          const text = (document.body.innerText || '').replace(/\s+/g, ' ');
+          if (!/Победители/.test(text)) return;
+          A.resultHandled = true;
+          const g1 = (document.querySelector('.group1') || {}).innerText || '';
+          const g2 = (document.querySelector('.group2') || {}).innerText || '';
+          let result = 'Поражение';
+          if (/\(1\/1\)/.test(g1)) result = 'Победа';
+          else if (/ничья/i.test(text)) result = 'Ничья';
+          const pts = (text.match(/очки рейтинга Арены за этот бой:\s*([+\-]?\d+)/) || [])[1] || '';
+          const week = (text.match(/боёв за неделю:\s*(\d+)/i) || [])[1];
+          const wins = (text.match(/(\d+)\s*из\s*35\s*побед/) || [])[1];
+          if (week) stats.fights = Number(week) || stats.fights;
+          if (wins) stats.wins = Number(wins) || stats.wins;
+          stats.lastResult = result + (pts ? ' ' + pts : '');
+          saveStats();
+          rememberHistory({
+              id: fightId(),
+              at: new Date().toISOString(),
+              result: result,
+              points: pts,
+              strategy: cfg.strategy,
+              me: sideName('.group1'),
+              opp: sideName('.group2'),
+              log: logText().slice(0, 1500)
+          });
+          aLog('Итог: ' + stats.lastResult + '. Боёв за неделю: ' + stats.fights);
+          tgArena(stats.lastResult);
+          try { sessionStorage.removeItem(LS_LIVE); } catch (e) { }
+          setTimeout(() => {
+              A.resultHandled = false;
+              if (!/\/alley\/?$/.test(location.pathname)) location.href = '/alley/';
+              setPhase('wait_window', 'после боя');
+          }, 4000);
+      }
+
+      function zoneBox(name, value) {
+          return document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+      }
+      function decisionSeconds() {
+          const text = (document.body.innerText || '').replace(/\s+/g, ' ');
+          const m = text.match(/Тик-так:\s*(\d+)/);
+          return m ? Number(m[1]) : null;
+      }
+      function choiceButton() {
+          return document.querySelector('#fight-button-text');
+      }
+      function selectAndSend() {
+          const me = sideName('.group1');
+          const opp = sideName('.group2');
+          const scanned = scanLog(me, opp);
+          if (/Победители/.test(scanned.text)) { handleResult(); A.busy = false; return; }
+          const btn = choiceButton();
+          if (!btn || !/Выбери/.test(btn.innerText || '')) { A.busy = false; return; }
+          if (!zoneBox('blindfight-defence', 'defence_1') || !zoneBox('blindfight-attack', 'attack_1')) {
+              A.busy = false;
+              return;
+          }
+          const live = liveState();
+          const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          const pick = pickZones(strat.plan, live, scanned);
+          const w = pageWindow();
+          const jq = w.jQuery || w.$;
+          function setBox(name, value) {
+              const el = zoneBox(name, value);
+              if (!el) return false;
+              el.checked = true;
+              try { if (jq) jq(el).prop('checked', true).trigger('change'); } catch (e) { }
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+          }
+          document.querySelectorAll('[name="blindfight-defence"], [name="blindfight-attack"]').forEach(el => {
+              if (!el.checked) return;
+              el.checked = false;
+              try { if (jq) jq(el).prop('checked', false).trigger('change'); } catch (e) { }
+          });
+          const defOk = pick.def.every(id => setBox('blindfight-defence', 'defence_' + id));
+          const atkOk = setBox('blindfight-attack', 'attack_' + pick.atk);
+          const zn = (id) => (ZONES.find(z => z.id === id) || {}).name || id;
+          const line = 'Ход: удар в ' + zn(pick.atk) + ', блок ' + pick.def.map(zn).join(' + ');
+          setTimeout(() => {
+              const defenceCount = document.querySelectorAll('[name="blindfight-defence"]:checked').length;
+              const attackCount = document.querySelectorAll('[name="blindfight-attack"]:checked').length;
+              const field = document.querySelector('#actionfield');
+              if (!(atkOk && defOk && defenceCount >= 2 && attackCount >= 1)) {
+                  aLog('Ход не собран: защита ' + defenceCount + ', атака ' + attackCount);
+                  A.busy = false;
+                  return;
+              }
+              if (field) field.value = 'arena';
+              const step = w.groupFightMakeStep;
+              if (typeof step === 'function') {
+                  A.stepSent = true;
+                  live.attacks = (live.attacks || []).concat([pick.atk]).slice(-40);
+                  saveLive(live);
+                  step.call(w);
+                  aLog(line + (decisionSeconds() != null ? (' · ' + decisionSeconds()) : ''));
+              } else {
+                  const now = choiceButton();
+                  const b2 = now && now.closest('button');
+                  if (b2 && !b2.disabled) {
+                      A.stepSent = true;
+                      live.attacks = (live.attacks || []).concat([pick.atk]).slice(-40);
+                      saveLive(live);
+                      b2.click();
+                      aLog(line);
+                  } else {
+                      aLog('Ход не отправился');
+                      A.busy = false;
+                      return;
+                  }
+              }
+              setTimeout(() => { A.busy = false; }, 500);
+          }, 60);
+      }
+
+      function arenaFightTick() {
+          const tick = decisionSeconds();
+          const btn = choiceButton();
+          const text = (btn && btn.innerText) || '';
+          const choosing = /Выбери/.test(text);
+          if (!choosing) A.stepSent = false;
+          A.phase = 'fighting';
+          A.windowLine = choosing
+              ? ('Ход' + (tick != null ? (' · ' + tick) : ''))
+              : (/Победители/.test(document.body.innerText || '') ? 'Итог боя' : (tick != null ? ('Тик-так ' + tick) : 'Бой'));
+          try { paintStatus(); } catch (e) { }
+          if (!isLive() || A.busy || A.stepSent) return;
+          if (/Победители/.test(document.body.innerText || '')) {
+              handleResult();
+              return;
+          }
+          if (!choosing) return;
+          A.busy = true;
+          try { selectAndSend(); } catch (e) { aLog('Ошибка хода: ' + e); A.busy = false; }
+      }
+
+      function syncLobbyCounters() {
+          const text = (document.body.innerText || '').replace(/\s+/g, ' ');
+          const fights = text.match(/Бои:\s*(\d+)\s*\/\s*(\d+)/);
+          const wins = text.match(/Выиграно\s+боев\s*(\d+)\s*из\s*(\d+)/i);
+          if (fights) stats.fights = Number(fights[1]) || 0;
+          if (wins) stats.wins = Number(wins[1]) || 0;
+          saveStats();
+      }
+
+      function ensureArenaOpen() {
+          if (!/^\/alley\/?$/.test(location.pathname)) {
+              if (Date.now() - A.lastNavAt > 8000) {
+                  A.lastNavAt = Date.now();
+                  aLog('Открываю Закоулки, чтобы проверить запись');
+                  location.href = '/alley/';
+              }
+              return false;
+          }
+          const obj = apObj();
+          if (obj) {
+              try { if (!obj.isOpened && typeof obj.showModal === 'function') obj.showModal(); } catch (e) { }
+              return true;
+          }
+          const btn = document.querySelector('.battle2025-banner-button');
+          if (btn && Date.now() - A.lastNavAt > 4000) {
+              A.lastNavAt = Date.now();
+              btn.click();
+              aLog('Открываю окно Арены');
+          } else if (!btn) {
+              aLog('На странице нет кнопки «К арене»');
+          }
+          return false;
+      }
+
+      async function arenaLobbyTick() {
+          if (A.busy) return;
+          const obj = apObj();
+          if (!obj) {
+              A.windowLine = 'Окно Арены ещё не открыто. Старт сам зайдёт в Закоулки.';
+              paintStatus();
+              if (isLive()) ensureArenaOpen();
+              return;
+          }
+          syncLobbyCounters();
+          const sched = obj.arenaSchedule || {};
+          const canJoin = !!obj.canJoin;
+          const isQueued = !!obj.isQueued;
+          const tickets = Number(obj.playerTicketsAmount);
+          A.bag = obj.boostAmounts || null;
+          A.windowLine = windowLine(sched, canJoin, isQueued);
+          paintCounters(isNaN(tickets) ? null : tickets, canJoin, isQueued);
+          paintModes();
+
+          if (!isLive()) return;
+
+          if (cfg.autoBuffs && !isQueued) {
+              const picked = chooseBuffs(obj.boostAmounts);
+              const sig = picked.join(',');
+              if (picked.length && A.prepared !== sig) {
+                  applyBuffs(obj, picked);
+                  A.prepared = sig;
+                  const names = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', ');
+                  aLog('Приёмы для записи: ' + names + '. ' + bagReport(obj.boostAmounts));
+              }
+          }
+
+          if (cfg.autoReward && obj.canTakeReward && typeof obj.getReward === 'function') {
+              A.busy = true;
+              try { obj.getReward(); aLog('Забираю личный приз'); } catch (e) { }
+              setTimeout(() => { A.busy = false; }, 2500);
+              return;
+          }
+
+          if (isQueued) {
+              setPhase('wait_fight', 'в очереди, бой в ' + (sched.fightStartTime || ''));
+              if (Date.now() - A.lastNavAt > 4000) {
+                  A.lastNavAt = Date.now();
+                  try { await pollFightUrl(); } catch (e) { }
+              }
+              return;
+          }
+
+          if (cfg.autoJoin && canJoin && sched.open && isLive()) {
+              if (stats.fights >= cfg.maxFightsWeek) {
+                  setPhase('cooldown', 'лимит недели');
+                  aLog('Лимит боёв ' + cfg.maxFightsWeek + ' исчерпан');
+                  return;
+              }
+              if (!isNaN(tickets) && tickets < 1) {
+                  aLog('Нет билета — запись пропущена');
+                  setPhase('cooldown', 'нет билета');
+                  return;
+              }
+              const picked = cfg.autoBuffs ? chooseBuffs(obj.boostAmounts) : (obj.selectedBuffs || []);
+              if (cfg.autoBuffs) applyBuffs(obj, picked);
+              A.busy = true;
+              setPhase('joining');
+              aLog('Запись: ' + picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', '));
+              try {
+                  const data = await joinQueue(picked);
+                  if (data && (data.result === 1 || data.tickets != null && data.buffs)) {
+                      aLog('В очереди. Бой в ' + (data.fightStartTime || '') + '. Билетов: ' + data.tickets);
+                      tgArena('Записан. Бой в ' + (data.fightStartTime || ''));
+                      try { await pollFightUrl(); } catch (e) { }
+                      setPhase('wait_fight', 'запись прошла');
+                  } else {
+                      aLog('Запись не подтвердилась: ' + ((data && (data.error || data.title)) || 'пустой ответ'));
+                  }
+              } catch (e) {
+                  aLog('Ошибка записи: ' + e);
+              }
+              setTimeout(() => { A.busy = false; }, 3000);
+              return;
+          }
+
+          setPhase('wait_window', A.windowLine);
+          if (A.waitNote !== A.windowLine) {
+              A.waitNote = A.windowLine;
+              aLog('Старт горит. ' + A.windowLine);
+          }
+      }
+
+      function onFightPage() {
+          if (!/\/fight\/\d+/.test(location.pathname || '')) return false;
+          let kind = '';
+          try { kind = pageWindow().fightType || ''; } catch (e) { }
+          if (kind && kind !== 'arena') return false;
+          if (kind === 'arena') return true;
+          return !!document.querySelector('.fight-arena, .blindfight, [name="blindfight-attack"], .arena-fighter-zone');
+      }
+
+      async function chaseFight() {
+          if (!isLive() || /\/fight\/\d+/.test(location.pathname || '')) return false;
+          if (Date.now() - A.lastChase < 3000) return false;
+          A.lastChase = Date.now();
+          try {
+              const off = pageWindow().offset != null ? pageWindow().offset : 0;
+              const res = await fetch('/player/ajax/state/' + off + '/', { credentials: 'same-origin', cache: 'no-store' });
+              const data = await res.json();
+              if (data && data.state === 'fight' && data.stateparam) {
+                  aLog('Идёт бой, открываю ринг');
+                  location.href = '/fight/' + data.stateparam + '/';
+                  return true;
+              }
+          } catch (e) { }
+          return false;
+      }
+
+      async function arenaTick() {
+          try {
+              if (stats.weekKey !== weekKeyNow()) { stats.weekKey = weekKeyNow(); stats.wins = 0; stats.fights = 0; saveStats(); }
+              if (onFightPage()) { arenaFightTick(); return; }
+              if (await chaseFight()) return;
+              if (/^\/alley\/?$/.test(location.pathname) || document.querySelector('.battle2025')) {
+                  await arenaLobbyTick();
+                  return;
+              }
+              if (isLive() && (A.phase === 'joining' || A.phase === 'wait_fight' || A.phase === 'fighting') && Date.now() - A.lastNavAt > 12000) {
+                  A.lastNavAt = Date.now();
+                  aLog('Возврат в Закоулки');
+                  location.href = '/alley/';
+              }
+          } catch (e) {
+              console.error('[Арена] Ошибка тика:', e);
+              A.busy = false;
+          }
+      }
+
+      const ui = Utils.createPanel('mw-arena-panel', '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span> Арена', { moduleId: 'arena' });
+      if (!ui) return;
+      ui.body.innerHTML = `
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button id="arena-start" class="mw-btn" style="flex:1;">▶ Старт</button>
+          <button id="arena-pause" class="mw-btn" style="flex:1;">⏸ Пауза</button>
+          <button id="arena-stop" class="mw-btn" style="flex:1;">⏹ Стоп</button>
+        </div>
+        <div id="mw-arena-status" style="padding:8px 10px;border-radius:12px;background:rgba(0,0,0,.22);margin-bottom:8px;font-weight:700;line-height:1.3;"></div>
+        <select id="arena-strategy" class="mw-input" style="width:100%;margin:0 0 8px;padding:6px 8px;"></select>
+        <div id="mw-arena-modes" style="display:flex;gap:8px;min-height:40px;margin-bottom:8px;"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;font-size:11px;margin-bottom:8px;">
+          <label title="Записываться, когда окно открыто"><input type="checkbox" id="arena-cfg-autojoin"> Запись</label>
+          <label title="Брать приёмы выбранного режима"><input type="checkbox" id="arena-cfg-autobuffs"> Приёмы</label>
+          <label title="Забирать личный приз"><input type="checkbox" id="arena-cfg-autoreward"> Приз</label>
+          <label title="Сообщение в Telegram"><input type="checkbox" id="arena-cfg-tg"> TG</label>
+          <label title="Лимит боёв в неделю">до <input id="arena-cfg-maxfights" type="number" min="1" max="50" class="mw-input" style="width:46px;padding:1px 4px;"></label>
+        </div>
+        <div id="mw-arena-log" style="max-height:72px;overflow-y:auto;font-size:11px;line-height:1.3;opacity:.85;"></div>
+      `;
+
+      const $ = (s) => ui.panel.querySelector(s);
+      const stratSel = $('#arena-strategy');
+      Object.keys(STRATS).forEach(key => {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = STRATS[key].title;
+          stratSel.appendChild(opt);
+      });
+      stratSel.value = cfg.strategy;
+      stratSel.title = (STRATS[cfg.strategy] && STRATS[cfg.strategy].hint) || '';
+
+      function buffIcon(num) {
+          const code = 'arena_item' + num;
+          const known = !!A.bag;
+          const qty = known ? Number(A.bag[code] || 0) : null;
+          const wrap = document.createElement('span');
+          wrap.title = (BUFF_NAMES[num] || code) + (qty == null ? '' : (' × ' + qty));
+          wrap.style.cssText = 'position:relative;display:inline-block;width:40px;height:40px;' + (qty === 0 ? 'opacity:.38;filter:grayscale(1);' : '');
+          const img = document.createElement('img');
+          img.src = '/@/images/obj/arena/items/' + num + '.png';
+          img.alt = '';
+          img.style.cssText = 'width:40px;height:40px;border-radius:10px;display:block;';
+          wrap.appendChild(img);
+          if (qty != null) {
+              const badge = document.createElement('span');
+              badge.textContent = String(qty);
+              badge.style.cssText = 'position:absolute;right:-4px;bottom:-4px;min-width:14px;text-align:center;background:rgba(0,0,0,.82);border-radius:7px;padding:0 3px;font-size:10px;line-height:14px;font-weight:700;';
+              wrap.appendChild(badge);
+          }
+          return wrap;
+      }
+
+      function paintModes() {
+          const box = $('#mw-arena-modes');
+          if (!box) return;
+          const sig = cfg.strategy + '|' + JSON.stringify(A.bag || null);
+          if (box.dataset.sig === sig) return;
+          box.dataset.sig = sig;
+          box.replaceChildren();
+          const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          strat.buffs.slice(0, 5).forEach(num => box.appendChild(buffIcon(num)));
+          if (stratSel) stratSel.title = strat.hint || strat.title;
+      }
+
+      function statusMain() {
+          const when = A.windowLine || 'расписание ещё не прочитано';
+          if (A.run === 'pause') return 'Пауза · ' + when;
+          if (A.run !== 'run') return 'Стоп · ' + when;
+          if (A.phase === 'joining') return 'Записываюсь';
+          if (A.phase === 'fighting') return A.windowLine || 'Бой';
+          return when;
+      }
+      function paintStatus() {
+          const el = $('#mw-arena-status');
+          if (!el) return;
+          const main = statusMain();
+          const sub = A.detail || '';
+          if (el.dataset.main === main && el.dataset.sub === sub) return;
+          el.dataset.main = main;
+          el.dataset.sub = sub;
+          el.replaceChildren();
+          const a = document.createElement('div');
+          a.textContent = main;
+          el.appendChild(a);
+          if (sub) {
+              const b = document.createElement('div');
+              b.style.cssText = 'font-weight:600;font-size:11px;opacity:.8;margin-top:2px;';
+              b.textContent = sub;
+              el.appendChild(b);
+          }
+      }
+      function paintCounters(tickets, canJoin, isQueued) {
+          const parts = [];
+          if (tickets != null) parts.push('🎟 ' + tickets);
+          parts.push(stats.fights + '/50');
+          parts.push('🎁 ' + stats.wins + '/35');
+          if (isQueued) parts.push('в очереди');
+          else if (canJoin) parts.push('открыто');
+          A.detail = parts.join(' · ');
+          paintStatus();
+      }
+      function paintButtons() {
+          const start = $('#arena-start');
+          const pause = $('#arena-pause');
+          const stop = $('#arena-stop');
+          [start, pause, stop].forEach(el => {
+              if (!el) return;
+              el.classList.remove('active-start', 'active-pause', 'active-stop');
+          });
+          if (A.run === 'run' && start) start.classList.add('active-start');
+          else if (A.run === 'pause' && pause) pause.classList.add('active-pause');
+      }
+
+      stratSel.addEventListener('change', () => {
+          if (!STRATS[stratSel.value]) return;
+          cfg.strategy = stratSel.value;
+          saveCfg();
+          const box = $('#mw-arena-modes');
+          if (box) box.dataset.sig = '';
+          paintModes();
+          aLog(STRATS[cfg.strategy].title);
+      });
+
+      const cfgBind = (id, key, type) => {
+          const el = $(id);
+          if (!el) return;
+          if (type === 'check') el.checked = !!cfg[key];
+          else el.value = cfg[key];
+          el.addEventListener('change', () => {
+              cfg[key] = type === 'check' ? el.checked : (type === 'num' ? Math.max(1, Math.min(50, Number(el.value) || 50)) : el.value);
+              saveCfg();
+              aLog('Настройка ' + key + ' = ' + cfg[key]);
+          });
+      };
+      cfgBind('#arena-cfg-autojoin', 'autoJoin', 'check');
+      cfgBind('#arena-cfg-autobuffs', 'autoBuffs', 'check');
+      cfgBind('#arena-cfg-autoreward', 'autoReward', 'check');
+      cfgBind('#arena-cfg-tg', 'tgNotify', 'check');
+      cfgBind('#arena-cfg-maxfights', 'maxFightsWeek', 'num');
+
+      $('#arena-start').onclick = (e) => {
+          e.stopPropagation();
+          A.run = 'run';
+          A.busy = false;
+          A.phase = 'wait_window';
+          saveRun();
+          paintButtons();
+          paintStatus();
+          aLog('Старт. ' + (STRATS[cfg.strategy] || STRATS.rampart).title);
+          ensureArenaOpen();
+          arenaTick();
+      };
+      $('#arena-pause').onclick = (e) => {
+          e.stopPropagation();
+          A.run = 'pause';
+          A.busy = false;
+          saveRun();
+          paintButtons();
+          paintStatus();
+          aLog('Пауза. ' + A.windowLine);
+      };
+      $('#arena-stop').onclick = (e) => {
+          e.stopPropagation();
+          A.run = 'idle';
+          A.busy = false;
+          A.phase = 'idle';
+          saveRun();
+          paintButtons();
+          paintStatus();
+          aLog('Стоп');
+      };
+      paintButtons();
+      paintModes();
+      paintStatus();
+
+      ModuleSessionRegistry.register('arena', {
+          onAbort: () => {
+              A.run = 'idle';
+              saveRun();
+              ModuleSessionRegistry.clearIntervals('arena');
+              const p = document.getElementById('mw-arena-panel');
+              if (p) p.remove();
+          },
+          onPause: () => {
+              A.run = A.run === 'run' ? 'pause' : 'run';
+              saveRun();
+              paintButtons();
+              paintStatus();
+              aLog(A.run === 'run' ? 'Старт снова включён' : 'Пауза');
+          }
+      });
+      ModuleSessionRegistry.trackInterval('arena', () => { arenaTick(); }, 400, 'main');
+      arenaTick();
+      aLog(A.run === 'run' ? 'Старт включён' : STRATS[cfg.strategy].title);
+  };
   const Core = {
       ui: null,
       init: async function() {
