@@ -14,7 +14,8 @@
  *   macOS   — основной путь: нативный кликер bin/mw_clicker_mac (Accessibility
  *             читает реальную геометрию viewport, CoreGraphics шлёт событие).
  *             Перезапуск Chrome НЕ требуется.
- *   Windows — основной путь: CDP (Chrome нужно запускать через launch-chrome-win.bat).
+ *   Windows — основной путь: CDP. Браузер и сервер поднимает
+ *             start-companion-win.bat (отдельный профиль, порт 9222).
  *             Запасной путь: клик через user32.dll из PowerShell.
  *
  * Зависимости: только Node.js 18+ (внешние npm-пакеты не нужны). На macOS
@@ -319,8 +320,12 @@ async function handleStatus() {
     if (IS_MAC) {
         out.clickReady = !!(out.clicker && out.clicker.ready && out.axTrusted && pid &&
             out.window && !out.window.error);
+    } else if (IS_WIN) {
+        // Готов только при вкладке Мосвара на отладочном порту.
+        // Сам факт Windows не означает, что клик по кнопке попадёт.
+        out.clickReady = !!cdp;
     } else {
-        out.clickReady = !!cdp || IS_WIN;
+        out.clickReady = false;
     }
     return out;
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.24
+// @version      3.25
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.8' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.9' }
     ];
 
 
@@ -3822,6 +3822,20 @@
 
         let companionState = { checkedAt: 0, ok: false, clickReady: false, detail: null };
 
+        function isWindowsClient() {
+            return /Windows|Win32|Win64/i.test(
+                String((navigator.userAgent || "") + " " + (navigator.platform || ""))
+            );
+        }
+
+        function companionLaunchHint() {
+            if (isWindowsClient()) {
+                return "Скачайте папку companion и дважды щёлкните start-companion-win.bat. " +
+                    "Нужен Node.js 22 или новее: https://nodejs.org/en/download";
+            }
+            return "Нужно запустить MyWay Moswar Companion (companion/start-companion-mac.sh)";
+        }
+
         function companionRequest(path, method, payload, timeoutMs) {
             return new Promise((resolve) => {
                 if (typeof GM_xmlhttpRequest !== "function") {
@@ -3868,6 +3882,8 @@
             } else if (!companionState.clickReady) {
                 botLog("[Companion] отвечает, но не готов кликать: " +
                     JSON.stringify({
+                        mode: companionState.detail && companionState.detail.mode,
+                        cdp: companionState.detail && companionState.detail.cdp,
                         clicker: companionState.detail && companionState.detail.clicker,
                         axTrusted: companionState.detail && companionState.detail.axTrusted,
                         chromePid: companionState.detail && companionState.detail.chromePid,
@@ -3932,8 +3948,12 @@
 
             const state = await checkCompanion(false);
             if (!state.clickReady) {
-                updateUIStatus("Companion недоступен — бой не запускаю. " +
-                    "Нужно запустить MyWay Moswar Companion (companion/start-companion-mac.sh)");
+                if (state.ok && isWindowsClient()) {
+                    updateUIStatus("Companion запущен, но не видит окно игры. " +
+                        "Запустите companion\\start-companion-win.bat и войдите в игру в открывшемся окне.");
+                } else {
+                    updateUIStatus("Companion недоступен — бой не запускаю. " + companionLaunchHint());
+                }
                 return "no-companion";
             }
 
@@ -5884,8 +5904,13 @@
                   (state.detail && state.detail.mode) + ")");
               return;
           }
+          if (state.ok && isWindowsClient()) {
+              updateUIStatus("⚠ Companion запущен, но не видит окно игры. " +
+                  "Запустите companion\\start-companion-win.bat и войдите в игру в открывшемся окне.");
+              return;
+          }
           updateUIStatus("⚠ MyWay Companion не готов — бои запускаться не будут. " +
-              "Запустите companion/start-companion-mac.sh");
+              companionLaunchHint());
       }
 
       function togglePause() {
@@ -24393,7 +24418,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.8 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.9 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24403,7 +24428,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.8');
+      console.log('[MODULE_arena] v2.9');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -24695,6 +24720,25 @@ body.mw-helper-tip-on .simple-tooltip {
           if (scanned.ourOutcome) live.outcomes = (live.outcomes || []).concat(scanned.ourOutcome).slice(-12);
           saveLive(live);
       }
+      function opponentArmor() {
+          const heads = document.querySelectorAll('.arena-fighter-zone-heading');
+          let head = null;
+          heads.forEach(el => { if (/Атакуем/.test(el.textContent || '')) head = el; });
+          if (!head) return null;
+          const armor = {};
+          let node = head.nextElementSibling;
+          while (node && !(node.classList && node.classList.contains('arena-fighter-zone-heading'))) {
+              const zones = node.classList.contains('arena-fighter-zone') ? [node] : node.querySelectorAll('.arena-fighter-zone');
+              zones.forEach(z => {
+                  const name = ((z.querySelector('.arena-fighter-zone-name') || {}).textContent || '').trim();
+                  const pct = parseInt((z.querySelector('.arena-fighter-zone-value') || {}).textContent || '', 10);
+                  const id = ZONE_BY_NAME[name];
+                  if (id && !isNaN(pct)) armor[id] = pct;
+              });
+              node = node.nextElementSibling;
+          }
+          return Object.keys(armor).length ? armor : null;
+      }
       function pickZones(plan, live) {
           const buffs = live.buffs || [];
           const usePlan = live.plan || plan;
@@ -24708,27 +24752,27 @@ body.mw-helper-tip-on .simple-tooltip {
           const def = (opp[ranked[0].id] || 0) > 0 ? [ranked[0].id, ranked[1].id] : [2, 3];
           const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
           const shut = ZONES.slice().sort((a, b) => (blocked[b.id] || 0) - (blocked[a.id] || 0) || a.id - b.id);
+          const armor = opponentArmor();
+          const weakest = armor ? ZONES.slice().sort((a, b) => (armor[a.id] - armor[b.id]) || a.id - b.id) : null;
           const last = turn ? live.attacks[turn - 1] : 0;
           let run = 0;
           for (let i = turn - 1; i >= 0 && live.attacks[i] === last; i--) run++;
+          const blockedLast = last && outcomes[outcomes.length - 1] === 'block';
+          function softTarget() {
+              if (!weakest) return (open[0] || ZONES[2]).id;
+              const openWeak = weakest.filter(z => !blockedLast || z.id !== last);
+              return (openWeak[0] || weakest[0]).id;
+          }
           let atk;
           if (knockout) {
               const prev = outcomes.slice(-2);
               const twoHits = prev.length === 2 && prev[0] === 'hit' && prev[1] === 'hit';
               if (twoHits && (blocked[shut[0].id] || 0) > 0) atk = shut[0].id;
-              else if (last && outcomes[outcomes.length - 1] === 'block') atk = (open.find(z => z.id !== last) || open[0]).id;
-              else atk = (open[0] || ZONES[2]).id;
-              if (!turn) atk = 3;
+              else atk = softTarget();
           } else if (stubborn && last && run < 3) {
               atk = last;
-          } else if (stubborn) {
-              atk = turn ? (open.find(z => z.id !== last) || open[0]).id : 3;
-          } else if (usePlan === 'early' && turn < 4) {
-              atk = [4, 1, 3, 2][turn];
           } else {
-              atk = open[0].id;
-              if (last && atk === last && (blocked[last] || 0) > 0 && open[1]) atk = open[1].id;
-              if (!turn) atk = 3;
+              atk = softTarget();
           }
           return { atk: atk, def: def };
       }
@@ -24813,6 +24857,24 @@ body.mw-helper-tip-on .simple-tooltip {
               arenaTick();
           });
           A.clockWatch.observe(el, { attributes: true, childList: true, characterData: true, subtree: true });
+      }
+      function readBag() {
+          const obj = apObj();
+          const amounts = (obj && obj.boostAmounts) || null;
+          const bag = {};
+          let seen = 0;
+          document.querySelectorAll('input[name="battle-arena"]').forEach(el => {
+              const code = el.value;
+              if (!code) return;
+              seen++;
+              const label = el.closest('.battle2025-setup-buff-choice') || el.closest('label');
+              const out = !!(el.disabled || (label && label.classList.contains('out-of-stock')));
+              const alpineQty = amounts ? Number(amounts[code]) : 0;
+              if (out) bag[code] = 0;
+              else bag[code] = alpineQty > 0 ? alpineQty : 1;
+          });
+          if (seen) return bag;
+          return amounts || A.bag || null;
       }
       function bagReport(amounts) {
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
@@ -25085,7 +25147,7 @@ body.mw-helper-tip-on .simple-tooltip {
           const isQueued = serverQueued || !!obj.isQueued;
           const windowOpen = haveServer ? serverOpen : alpineOpen;
           const tickets = (data && typeof data.tickets === 'number') ? data.tickets : Number(obj.playerTicketsAmount);
-          A.bag = obj.boostAmounts || null;
+          A.bag = readBag();
           if (!haveServer) A.windowLine = windowLine(sched, !!obj.canJoin, isQueued);
           paintCounters(isNaN(tickets) ? null : tickets, windowOpen, isQueued);
           paintModes();
@@ -25093,14 +25155,14 @@ body.mw-helper-tip-on .simple-tooltip {
           if (!isLive()) return;
 
           if (cfg.autoBuffs && !isQueued) {
-              const picked = chooseBuffs(obj.boostAmounts);
+              const picked = chooseBuffs(A.bag);
               const sig = picked.join(',');
               if (picked.length && A.prepared !== sig) {
                   applyBuffs(obj, picked);
                   savePicked(picked, (STRATS[cfg.strategy] || STRATS.rampart).plan);
                   A.prepared = sig;
                   const names = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', ');
-                  aLog('Приёмы для записи: ' + names + '. ' + bagReport(obj.boostAmounts));
+                  aLog('Приёмы для записи: ' + names + '. ' + bagReport(A.bag));
               }
           }
 
@@ -25137,7 +25199,7 @@ body.mw-helper-tip-on .simple-tooltip {
                   setPhase('cooldown', 'нет билета');
                   return;
               }
-              const picked = cfg.autoBuffs ? chooseBuffs(obj.boostAmounts) : (obj.selectedBuffs || []);
+              const picked = cfg.autoBuffs ? chooseBuffs(A.bag) : (obj.selectedBuffs || []);
               if (cfg.autoBuffs && picked.length < 1) {
                   aLog('Приёмы не выбраны. Без них запись не отправляю');
                   setPhase('wait_window', A.windowLine);
@@ -25307,12 +25369,15 @@ body.mw-helper-tip-on .simple-tooltip {
       function paintModes() {
           const box = $('#mw-arena-modes');
           if (!box) return;
+          A.bag = readBag();
           const sig = cfg.strategy + '|' + JSON.stringify(A.bag || null);
           if (box.dataset.sig === sig) return;
           box.dataset.sig = sig;
           box.replaceChildren();
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
-          strat.buffs.slice(0, 5).forEach(num => box.appendChild(buffIcon(num)));
+          const shown = chooseBuffs(A.bag).map(code => Number(String(code).replace('arena_item', '')));
+          strat.buffs.forEach(num => { if (shown.length < 5 && shown.indexOf(num) < 0) shown.push(num); });
+          shown.slice(0, 5).forEach(num => box.appendChild(buffIcon(num)));
           if (stratSel) stratSel.title = strat.hint || strat.title;
       }
 
@@ -25373,6 +25438,7 @@ body.mw-helper-tip-on .simple-tooltip {
           if (!STRATS[stratSel.value]) return;
           cfg.strategy = stratSel.value;
           saveCfg();
+          A.bag = readBag();
           const box = $('#mw-arena-modes');
           if (box) box.dataset.sig = '';
           paintModes();
