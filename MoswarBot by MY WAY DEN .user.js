@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.18
+// @version      3.19
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -561,7 +561,7 @@
 
   const CORE_KEY = 'moswar_allinone_core_v1';
   const MODULES = [
-      { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'РЕЙДЫ: Циклы (1 бой в каждой, переход только при победе; на первой неделе auto-open стран), Фарм 100%, Акционный , Сильный Босс', version: '6.1' },
+      { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Циклы, фарм, акционный режим и сильный босс. Старт боя — через Companion.', version: '6.19' },
       { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.5' },
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.8' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы + одиночная', version: '1.3.21' },
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Автозапись, выбор приёмов, ход за 10 секунд, несколько стратегий', version: '2.4' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.4' }
     ];
 
 
