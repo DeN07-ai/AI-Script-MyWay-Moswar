@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.22
+// @version      3.24
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.7' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.8' }
     ];
 
 
@@ -24393,7 +24393,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.7 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.8 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24403,7 +24403,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.7');
+      console.log('[MODULE_arena] v2.8');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -24426,31 +24426,73 @@ body.mw-helper-tip-on .simple-tooltip {
           { id: 4, name: 'Ноги' }
       ];
       const ZONE_BY_NAME = { 'Голова': 1, 'Торс': 2, 'Пах': 3, 'Ноги': 4 };
-      // Наборы подобраны по правилам и двум живым боям, не как универсальный рецепт.
+      // Ровно пять приёмов на режим. Ставятся до записи и после неё не меняются.
+      // Глухая оборона не стоит рядом с Тараном и натиском: первые четыре хода она режет урон обеих сторон.
+      // Допинг не стоит рядом с Запасом прочности: свой запас растёт, и запас на 7-м ходе может не включиться.
+      // Берсерк не стоит рядом с Пластырем: лечение поднимает жизни выше порога.
       const STRATS = {
           rampart: {
-              title: 'Таран и Закалка',
-              buffs: [17, 8, 3, 19, 11, 12, 2, 16, 18],
+              title: 'Закалка и Таран',
+              buffs: [17, 8, 3, 19, 11],
+              reserve: [13, 18, 2],
               plan: 'stubborn',
-              hint: 'Долгий бой: броня растёт, серия блоков, пробой на третьем ударе'
-          },
-          fortress: {
-              title: 'Длинная защита',
-              buffs: [17, 8, 2, 12, 11, 15, 16, 3, 7],
-              plan: 'cover',
-              hint: 'Блоки, автоблок и уклонение, если соперник бьёт дольше'
+              hint: 'Броня, серия блоков, пробой на третьем ударе и таран в это окно'
           },
           early: {
               title: 'Ранний удар',
-              buffs: [19, 18, 20, 17, 3, 8, 11, 12],
+              buffs: [19, 18, 3, 13, 20],
+              reserve: [11, 6],
               plan: 'early',
-              hint: 'Таран и натиск в первые ходы, пока броня ещё слабая'
+              hint: 'Таран и натиск в первые ходы, пробой, если зону закрыли'
+          },
+          knockout: {
+              title: 'Нокаут',
+              buffs: [6, 18, 19, 20, 11],
+              reserve: [13, 21],
+              plan: 'knockout',
+              hint: 'Два попадания подряд, затем удар сквозь блок'
+          },
+          fortress: {
+              title: 'Длинная защита',
+              buffs: [17, 8, 2, 12, 11],
+              reserve: [13, 22, 4],
+              plan: 'cover',
+              hint: 'Броня, серия блоков, автоблок и уворот на длинный бой'
           },
           mirror: {
-              title: 'Зеркало первых ходов',
-              buffs: [7, 2, 8, 12, 3, 17, 11, 16],
+              title: 'Зеркало',
+              buffs: [7, 2, 8, 22, 23],
+              reserve: [12, 13, 17],
+              plan: 'mirror',
+              hint: 'Первые ходы зеркалом, дальше автоблок, чужая сила и ответ'
+          },
+          deaf: {
+              title: 'Глухая оборона',
+              buffs: [15, 17, 13, 8, 11],
+              reserve: [2, 12, 16],
               plan: 'cover',
-              hint: 'Первые ходы зеркалом и страховкой, дальше серия блоков'
+              hint: 'Первые четыре хода тише, затем броня и срез лечения'
+          },
+          heal: {
+              title: 'Лечение',
+              buffs: [9, 14, 5, 17, 11],
+              reserve: [8, 13, 2],
+              plan: 'cover',
+              hint: 'Пластырь, допинг и списание, чужое лечение срезается'
+          },
+          berserk: {
+              title: 'Берсерк',
+              buffs: [10, 3, 4, 17, 11],
+              reserve: [8, 13, 6],
+              plan: 'stubborn',
+              hint: 'Ниже 30% жизни удар сильнее, пробой и рост урона к длинному бою'
+          },
+          heavy: {
+              title: 'Запас прочности',
+              buffs: [16, 17, 8, 3, 11],
+              reserve: [13, 2, 12],
+              plan: 'stubborn',
+              hint: 'На седьмой ход, если у соперника больше жизней'
           }
       };
 
@@ -24580,11 +24622,14 @@ body.mw-helper-tip-on .simple-tooltip {
           return m ? m[1] : '';
       }
       function liveState() {
-          let s = { id: '', attacks: [], lastLog: '', opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          let s = { id: '', attacks: [], outcomes: [], lastLog: '', plan: '', buffs: [], opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
           try { s = Object.assign(s, JSON.parse(sessionStorage.getItem(LS_LIVE) || '{}')); } catch (e) { }
           const id = fightId();
-          if (s.id !== id) s = { id: id, attacks: [], lastLog: '', buffs: loadPicked(), opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
-          if (!s.buffs || !s.buffs.length) s.buffs = loadPicked();
+          const saved = loadPicked();
+          if (s.id !== id) s = { id: id, attacks: [], outcomes: [], lastLog: '', plan: saved.plan, buffs: saved.buffs, opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          if (!s.buffs || !s.buffs.length) s.buffs = saved.buffs;
+          if (!s.plan) s.plan = saved.plan;
+          if (!s.outcomes) s.outcomes = [];
           return s;
       }
       function saveLive(s) { try { sessionStorage.setItem(LS_LIVE, JSON.stringify(s)); } catch (e) { } }
@@ -24604,25 +24649,37 @@ body.mw-helper-tip-on .simple-tooltip {
           const text = logText();
           const oppHits = { 1: 0, 2: 0, 3: 0, 4: 0 };
           const blocked = { 1: 0, 2: 0, 3: 0, 4: 0 };
+          let ourOutcome = '';
           const zoneRe = '(Голова|Торс|Пах|Ноги)';
           if (me && opp) {
               const reOpp = new RegExp(escapeRe(opp) + '[\\s\\S]{0,40}→[\\s\\S]{0,40}' + escapeRe(me) + '[\\s\\S]{0,20}:\\s*' + zoneRe, 'g');
               const reMe = new RegExp(escapeRe(me) + '[\\s\\S]{0,40}→[\\s\\S]{0,40}' + escapeRe(opp) + '[\\s\\S]{0,24}:\\s*' + zoneRe + '\\s*—\\s*(БЛОК|ПОПАДАНИЕ|КРИТ|МИМО)', 'g');
               let m;
               while ((m = reOpp.exec(text))) { const id = ZONE_BY_NAME[m[1]]; if (id) oppHits[id]++; }
-              while ((m = reMe.exec(text))) { if (m[2] === 'БЛОК') { const id = ZONE_BY_NAME[m[1]]; if (id) blocked[id]++; } }
+              while ((m = reMe.exec(text))) {
+                  const id = ZONE_BY_NAME[m[1]];
+                  if (m[2] === 'БЛОК') {
+                      if (id) blocked[id]++;
+                      ourOutcome = 'block';
+                  } else if (m[2] === 'МИМО') {
+                      ourOutcome = 'miss';
+                  } else {
+                      ourOutcome = 'hit';
+                  }
+              }
           }
-          return { text: text, oppHits: oppHits, blocked: blocked };
+          return { text: text, oppHits: oppHits, blocked: blocked, ourOutcome: ourOutcome };
       }
 
-      function savePicked(picked) {
-          try { sessionStorage.setItem(LS_BUFFS, JSON.stringify(picked || [])); } catch (e) { }
+      function savePicked(picked, plan) {
+          try { sessionStorage.setItem(LS_BUFFS, JSON.stringify({ buffs: picked || [], plan: plan || '' })); } catch (e) { }
       }
       function loadPicked() {
           try {
-              const list = JSON.parse(sessionStorage.getItem(LS_BUFFS) || '[]');
-              return Array.isArray(list) ? list : [];
-          } catch (e) { return []; }
+              const raw = JSON.parse(sessionStorage.getItem(LS_BUFFS) || '{}');
+              if (Array.isArray(raw)) return { buffs: raw, plan: '' };
+              return { buffs: Array.isArray(raw.buffs) ? raw.buffs : [], plan: raw.plan || '' };
+          } catch (e) { return { buffs: [], plan: '' }; }
       }
       function hasBuff(list, num) {
           return (list || []).indexOf('arena_item' + num) >= 0;
@@ -24635,33 +24692,43 @@ body.mw-helper-tip-on .simple-tooltip {
               live.opp[id] = (Number(live.opp[id]) || 0) + (scanned.oppHits[id] || 0);
               live.blocked[id] = (Number(live.blocked[id]) || 0) + (scanned.blocked[id] || 0);
           });
+          if (scanned.ourOutcome) live.outcomes = (live.outcomes || []).concat(scanned.ourOutcome).slice(-12);
           saveLive(live);
       }
       function pickZones(plan, live) {
           const buffs = live.buffs || [];
-          const stubborn = hasBuff(buffs, 3) || plan === 'stubborn';
-          const earlyHit = hasBuff(buffs, 19) || hasBuff(buffs, 18) || hasBuff(buffs, 20) || plan === 'early';
+          const usePlan = live.plan || plan;
+          const stubborn = hasBuff(buffs, 3) || usePlan === 'stubborn';
+          const knockout = !stubborn && (usePlan === 'knockout' || hasBuff(buffs, 6));
           const turn = (live.attacks || []).length;
           const opp = live.opp || {};
           const blocked = live.blocked || {};
+          const outcomes = live.outcomes || [];
           const ranked = ZONES.slice().sort((a, b) => (opp[b.id] || 0) - (opp[a.id] || 0) || a.id - b.id);
-          // Пока соперник не раскрылся, закрываем торс и пах: в живых боях били именно туда, когда верх был закрыт.
           const def = (opp[ranked[0].id] || 0) > 0 ? [ranked[0].id, ranked[1].id] : [2, 3];
           const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
+          const shut = ZONES.slice().sort((a, b) => (blocked[b.id] || 0) - (blocked[a.id] || 0) || a.id - b.id);
           const last = turn ? live.attacks[turn - 1] : 0;
           let run = 0;
           for (let i = turn - 1; i >= 0 && live.attacks[i] === last; i--) run++;
           let atk;
-          if (stubborn && last && run < 3) {
+          if (knockout) {
+              const prev = outcomes.slice(-2);
+              const twoHits = prev.length === 2 && prev[0] === 'hit' && prev[1] === 'hit';
+              if (twoHits && (blocked[shut[0].id] || 0) > 0) atk = shut[0].id;
+              else if (last && outcomes[outcomes.length - 1] === 'block') atk = (open.find(z => z.id !== last) || open[0]).id;
+              else atk = (open[0] || ZONES[2]).id;
+              if (!turn) atk = 3;
+          } else if (stubborn && last && run < 3) {
               atk = last;
-          } else if (earlyHit && turn < 4) {
-              atk = [4, 1, 3, 2][turn];
           } else if (stubborn) {
-              atk = (open.filter(z => z.id !== last)[0] || open[0]).id;
+              atk = turn ? (open.find(z => z.id !== last) || open[0]).id : 3;
+          } else if (usePlan === 'early' && turn < 4) {
+              atk = [4, 1, 3, 2][turn];
           } else {
               atk = open[0].id;
               if (last && atk === last && (blocked[last] || 0) > 0 && open[1]) atk = open[1].id;
-              if (!turn) atk = 4;
+              if (!turn) atk = 3;
           }
           return { atk: atk, def: def };
       }
@@ -24673,6 +24740,12 @@ body.mw-helper-tip-on .simple-tooltip {
               return new Date(n * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
           } catch (e) { return ''; }
       }
+      function nextJoinPhrase(when) {
+          const text = String(when || '').trim();
+          if (!text) return 'Жду расписание Арены.';
+          if (/^\d{1,2}:\d{2}$/.test(text)) return 'Следующая запись в ' + text + '.';
+          return 'Следующая запись ' + text.replace(/^в\s+/i, '') + '.';
+      }
       function windowLine(sched, canJoin, isQueued) {
           sched = sched || {};
           const fightAt = sched.fightStartTime || clockOf(sched.fightStartsAt);
@@ -24681,7 +24754,7 @@ body.mw-helper-tip-on .simple-tooltip {
           if (isQueued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
           if (canJoin && sched.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
           const when = openAt || label;
-          if (when) return 'Следующая запись в ' + when + '.';
+          if (when) return nextJoinPhrase(when);
           return 'Жду расписание Арены.';
       }
       function serverNowLabel() {
@@ -24697,7 +24770,7 @@ body.mw-helper-tip-on .simple-tooltip {
           if (data && data.queued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
           if (sch.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
           const when = sch.nextJoinLabel || (!sch.open ? clockOf(sch.refreshAt) : '');
-          if (when) return 'Следующая запись в ' + when + '.';
+          if (when) return nextJoinPhrase(when);
           return 'Жду расписание Арены.';
       }
       async function fetchArenaStatus(force) {
@@ -24751,14 +24824,14 @@ body.mw-helper-tip-on .simple-tooltip {
               if (Number(amounts && amounts[code]) > 0) have.push(BUFF_NAMES[num]);
               else miss.push(BUFF_NAMES[num]);
           });
-          if (!amounts) return 'Сумку ещё не вижу. Старт откроет Арену и проверит приёмы.';
-          if (!miss.length) return 'В сумке все 5 приёмов режима «' + strat.title + '».';
-          return 'Нет в сумке: ' + miss.join(', ') + '. Возьму замену из списка режима.';
+          if (!amounts) return 'Сумку ещё не вижу. Приёмы поставлю до записи.';
+          if (!miss.length) return 'К записи готовы 5 приёмов режима «' + strat.title + '».';
+          return 'Нет в сумке: ' + miss.join(', ') + '. Возьму запас этого же режима.';
       }
 
       function chooseBuffs(amounts) {
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
-          const order = strat.buffs.concat([17, 8, 3, 19, 11, 12, 2, 16, 18, 7, 20, 23, 1, 5, 21, 15]);
+          const order = strat.buffs.concat(strat.reserve || []);
           const picked = [];
           for (const num of order) {
               const code = 'arena_item' + num;
@@ -25024,7 +25097,7 @@ body.mw-helper-tip-on .simple-tooltip {
               const sig = picked.join(',');
               if (picked.length && A.prepared !== sig) {
                   applyBuffs(obj, picked);
-                  savePicked(picked);
+                  savePicked(picked, (STRATS[cfg.strategy] || STRATS.rampart).plan);
                   A.prepared = sig;
                   const names = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', ');
                   aLog('Приёмы для записи: ' + names + '. ' + bagReport(obj.boostAmounts));
@@ -25065,9 +25138,14 @@ body.mw-helper-tip-on .simple-tooltip {
                   return;
               }
               const picked = cfg.autoBuffs ? chooseBuffs(obj.boostAmounts) : (obj.selectedBuffs || []);
+              if (cfg.autoBuffs && picked.length < 1) {
+                  aLog('Приёмы не выбраны. Без них запись не отправляю');
+                  setPhase('wait_window', A.windowLine);
+                  return;
+              }
               if (cfg.autoBuffs) {
                   applyBuffs(obj, picked);
-                  savePicked(picked);
+                  savePicked(picked, (STRATS[cfg.strategy] || STRATS.rampart).plan);
               }
               A.joinLock = true;
               A.busy = true;
@@ -25249,9 +25327,11 @@ body.mw-helper-tip-on .simple-tooltip {
       function paintStatus() {
           const el = $('#mw-arena-status');
           if (!el) return;
+          if (ui.panel && !ui.panel.isConnected) document.body.appendChild(ui.panel);
           const main = statusMain();
           const sub = A.detail || '';
-          if (el.dataset.main === main && el.dataset.sub === sub) return;
+          const shown = (el.firstChild && el.firstChild.textContent) || '';
+          if (el.dataset.main === main && el.dataset.sub === sub && shown === main) return;
           el.dataset.main = main;
           el.dataset.sub = sub;
           el.replaceChildren();
