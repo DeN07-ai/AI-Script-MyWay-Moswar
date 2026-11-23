@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.19
+// @version      3.22
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.4' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.7' }
     ];
 
 
@@ -24393,7 +24393,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.4 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.7 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24403,13 +24403,14 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.4');
+      console.log('[MODULE_arena] v2.7');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
       const LS_HIST = 'MYWAY_ARENA_HISTORY_V1';
       const LS_LIVE = 'MYWAY_ARENA_LIVE_V1';
       const LS_RUN = 'MYWAY_ARENA_RUN_V1';
+      const LS_BUFFS = 'MYWAY_ARENA_BUFFS_V1';
 
       const BUFF_NAMES = {
           1: 'Взвешивание', 2: 'Двойная страховка', 3: 'Упорный!', 4: 'Весомый аргумент', 5: 'Дай списать!',
@@ -24494,6 +24495,15 @@ body.mw-helper-tip-on .simple-tooltip {
           detail: '',
           stepSent: false,
           lastChase: 0,
+          joinHold: 0,
+          joinLock: false,
+          busyAt: 0,
+          lastStatusAt: 0,
+          server: null,
+          kickTimer: 0,
+          clockWatch: null,
+          clockEl: null,
+          lastClockTick: 0,
           windowLine: 'Расписание ещё не прочитано.'
       };
       try {
@@ -24570,10 +24580,11 @@ body.mw-helper-tip-on .simple-tooltip {
           return m ? m[1] : '';
       }
       function liveState() {
-          let s = { id: '', attacks: [], opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          let s = { id: '', attacks: [], lastLog: '', opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
           try { s = Object.assign(s, JSON.parse(sessionStorage.getItem(LS_LIVE) || '{}')); } catch (e) { }
           const id = fightId();
-          if (s.id !== id) s = { id: id, attacks: [], opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          if (s.id !== id) s = { id: id, attacks: [], lastLog: '', buffs: loadPicked(), opp: { 1: 0, 2: 0, 3: 0, 4: 0 }, blocked: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+          if (!s.buffs || !s.buffs.length) s.buffs = loadPicked();
           return s;
       }
       function saveLive(s) { try { sessionStorage.setItem(LS_LIVE, JSON.stringify(s)); } catch (e) { } }
@@ -24604,28 +24615,53 @@ body.mw-helper-tip-on .simple-tooltip {
           return { text: text, oppHits: oppHits, blocked: blocked };
       }
 
-      function pickZones(plan, live, scanned) {
-          const opp = scanned.oppHits;
-          const blocked = scanned.blocked;
-          const rankedOpp = ZONES.slice().sort((a, b) => (opp[b.id] || 0) - (opp[a.id] || 0) || a.id - b.id);
-          const def = [rankedOpp[0].id, rankedOpp[1].id];
-          const attacks = live.attacks || [];
-          const last = attacks.length ? attacks[attacks.length - 1] : 0;
+      function savePicked(picked) {
+          try { sessionStorage.setItem(LS_BUFFS, JSON.stringify(picked || [])); } catch (e) { }
+      }
+      function loadPicked() {
+          try {
+              const list = JSON.parse(sessionStorage.getItem(LS_BUFFS) || '[]');
+              return Array.isArray(list) ? list : [];
+          } catch (e) { return []; }
+      }
+      function hasBuff(list, num) {
+          return (list || []).indexOf('arena_item' + num) >= 0;
+      }
+      function rememberTurn(live, scanned) {
+          const text = (scanned && scanned.text) || '';
+          if (!text || text === live.lastLog) return;
+          live.lastLog = text.slice(0, 500);
+          [1, 2, 3, 4].forEach(id => {
+              live.opp[id] = (Number(live.opp[id]) || 0) + (scanned.oppHits[id] || 0);
+              live.blocked[id] = (Number(live.blocked[id]) || 0) + (scanned.blocked[id] || 0);
+          });
+          saveLive(live);
+      }
+      function pickZones(plan, live) {
+          const buffs = live.buffs || [];
+          const stubborn = hasBuff(buffs, 3) || plan === 'stubborn';
+          const earlyHit = hasBuff(buffs, 19) || hasBuff(buffs, 18) || hasBuff(buffs, 20) || plan === 'early';
+          const turn = (live.attacks || []).length;
+          const opp = live.opp || {};
+          const blocked = live.blocked || {};
+          const ranked = ZONES.slice().sort((a, b) => (opp[b.id] || 0) - (opp[a.id] || 0) || a.id - b.id);
+          // Пока соперник не раскрылся, закрываем торс и пах: в живых боях били именно туда, когда верх был закрыт.
+          const def = (opp[ranked[0].id] || 0) > 0 ? [ranked[0].id, ranked[1].id] : [2, 3];
+          const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
+          const last = turn ? live.attacks[turn - 1] : 0;
           let run = 0;
-          for (let i = attacks.length - 1; i >= 0 && attacks[i] === last; i--) run++;
-          let atk = 3;
-          if (plan === 'early' && attacks.length < 3) {
-              atk = [3, 1, 4][attacks.length];
-          } else if (plan === 'cover') {
-              const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
-              atk = open[0].id;
-              if (def.indexOf(atk) >= 0 && open[1]) atk = open[1].id;
+          for (let i = turn - 1; i >= 0 && live.attacks[i] === last; i--) run++;
+          let atk;
+          if (stubborn && last && run < 3) {
+              atk = last;
+          } else if (earlyHit && turn < 4) {
+              atk = [4, 1, 3, 2][turn];
+          } else if (stubborn) {
+              atk = (open.filter(z => z.id !== last)[0] || open[0]).id;
           } else {
-              if (last && run < 3) atk = last;
-              else {
-                  const open = ZONES.slice().sort((a, b) => (blocked[a.id] || 0) - (blocked[b.id] || 0) || a.id - b.id);
-                  atk = (open[0].id === last && open[1]) ? open[1].id : open[0].id;
-              }
+              atk = open[0].id;
+              if (last && atk === last && (blocked[last] || 0) > 0 && open[1]) atk = open[1].id;
+              if (!turn) atk = 4;
           }
           return { atk: atk, def: def };
       }
@@ -24647,6 +24683,63 @@ body.mw-helper-tip-on .simple-tooltip {
           const when = openAt || label;
           if (when) return 'Следующая запись в ' + when + '.';
           return 'Жду расписание Арены.';
+      }
+      function serverNowLabel() {
+          const el = document.getElementById('servertime');
+          const text = el && (el.textContent || '').trim();
+          if (text && /^\d{1,2}:\d{2}/.test(text)) return text.slice(0, 5);
+          const now = A.server && A.server.schedule && A.server.schedule.now;
+          return now ? clockOf(now) : '';
+      }
+      function serverWindowLine(data) {
+          const sch = (data && data.schedule) || {};
+          const fightAt = sch.fightStartTime || clockOf(sch.fightStartsAt);
+          if (data && data.queued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
+          if (sch.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
+          const when = sch.nextJoinLabel || (!sch.open ? clockOf(sch.refreshAt) : '');
+          if (when) return 'Следующая запись в ' + when + '.';
+          return 'Жду расписание Арены.';
+      }
+      async function fetchArenaStatus(force) {
+          if (!force && A.statusPromise) return A.statusPromise;
+          if (!force && A.server && Date.now() - A.lastStatusAt < 2000) return A.server;
+          const run = (async () => {
+              const res = await fetch('/alley/arena-status/?queued=0', { credentials: 'same-origin', cache: 'no-store' });
+              const data = await res.json();
+              if (!data || !data.schedule) return A.server;
+              A.server = data;
+              A.lastStatusAt = Date.now();
+              A.windowLine = serverWindowLine(data);
+              return data;
+          })();
+          if (!force) A.statusPromise = run;
+          try {
+              return await run;
+          } catch (e) {
+              return A.server;
+          } finally {
+              if (A.statusPromise === run) A.statusPromise = null;
+          }
+      }
+      function releaseStuckBusy() {
+          if (A.busy && A.busyAt && Date.now() - A.busyAt > 8000) {
+              A.busy = false;
+              A.busyAt = 0;
+          }
+      }
+      function watchServerClock() {
+          const el = document.getElementById('servertime');
+          if (!el || A.clockEl === el) return;
+          if (A.clockWatch) { try { A.clockWatch.disconnect(); } catch (e) { } }
+          A.clockEl = el;
+          A.clockWatch = new MutationObserver(() => {
+              if (!isLive()) return;
+              const now = Date.now();
+              if (now - A.lastClockTick < 1000) return;
+              A.lastClockTick = now;
+              arenaTick();
+          });
+          A.clockWatch.observe(el, { attributes: true, childList: true, characterData: true, subtree: true });
       }
       function bagReport(amounts) {
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
@@ -24758,7 +24851,8 @@ body.mw-helper-tip-on .simple-tooltip {
           return document.querySelector('input[name="' + name + '"][value="' + value + '"]');
       }
       function decisionSeconds() {
-          const text = (document.body.innerText || '').replace(/\s+/g, ' ');
+          const root = document.querySelector('.fight-arena') || document.querySelector('.blindfight');
+          const text = ((root && root.innerText) || '').replace(/\s+/g, ' ');
           const m = text.match(/Тик-так:\s*(\d+)/);
           return m ? Number(m[1]) : null;
       }
@@ -24777,8 +24871,9 @@ body.mw-helper-tip-on .simple-tooltip {
               return;
           }
           const live = liveState();
+          rememberTurn(live, scanned);
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
-          const pick = pickZones(strat.plan, live, scanned);
+          const pick = pickZones(strat.plan, live);
           const w = pageWindow();
           const jq = w.jQuery || w.$;
           function setBox(name, value) {
@@ -24852,7 +24947,8 @@ body.mw-helper-tip-on .simple-tooltip {
           }
           if (!choosing) return;
           A.busy = true;
-          try { selectAndSend(); } catch (e) { aLog('Ошибка хода: ' + e); A.busy = false; }
+          A.busyAt = Date.now();
+          try { selectAndSend(); } catch (e) { aLog('Ошибка хода: ' + e); A.busy = false; A.busyAt = 0; }
       }
 
       function syncLobbyCounters() {
@@ -24890,22 +24986,35 @@ body.mw-helper-tip-on .simple-tooltip {
       }
 
       async function arenaLobbyTick() {
+          releaseStuckBusy();
           if (A.busy) return;
+          let data = null;
+          try { data = await fetchArenaStatus(false); } catch (e) { data = A.server; }
+          if (isLive() && data && data.fightUrl) {
+              aLog('Бой создан, открываю ринг');
+              location.href = data.fightUrl;
+              return;
+          }
+          const haveServer = !!(data && data.schedule);
+          const serverOpen = haveServer && !!data.schedule.open && data.schedule.enabled !== false;
+          const serverQueued = !!(data && data.queued);
+          if (haveServer) A.windowLine = serverWindowLine(data);
           const obj = apObj();
           if (!obj) {
-              A.windowLine = 'Окно Арены ещё не открыто. Старт сам зайдёт в Закоулки.';
+              if (!haveServer) A.windowLine = 'Окно Арены ещё не открыто. Старт сам зайдёт в Закоулки.';
               paintStatus();
               if (isLive()) ensureArenaOpen();
               return;
           }
           syncLobbyCounters();
           const sched = obj.arenaSchedule || {};
-          const canJoin = !!obj.canJoin;
-          const isQueued = !!obj.isQueued;
-          const tickets = Number(obj.playerTicketsAmount);
+          const alpineOpen = !!obj.canJoin && !!sched.open;
+          const isQueued = serverQueued || !!obj.isQueued;
+          const windowOpen = haveServer ? serverOpen : alpineOpen;
+          const tickets = (data && typeof data.tickets === 'number') ? data.tickets : Number(obj.playerTicketsAmount);
           A.bag = obj.boostAmounts || null;
-          A.windowLine = windowLine(sched, canJoin, isQueued);
-          paintCounters(isNaN(tickets) ? null : tickets, canJoin, isQueued);
+          if (!haveServer) A.windowLine = windowLine(sched, !!obj.canJoin, isQueued);
+          paintCounters(isNaN(tickets) ? null : tickets, windowOpen, isQueued);
           paintModes();
 
           if (!isLive()) return;
@@ -24915,6 +25024,7 @@ body.mw-helper-tip-on .simple-tooltip {
               const sig = picked.join(',');
               if (picked.length && A.prepared !== sig) {
                   applyBuffs(obj, picked);
+                  savePicked(picked);
                   A.prepared = sig;
                   const names = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', ');
                   aLog('Приёмы для записи: ' + names + '. ' + bagReport(obj.boostAmounts));
@@ -24923,13 +25033,15 @@ body.mw-helper-tip-on .simple-tooltip {
 
           if (cfg.autoReward && obj.canTakeReward && typeof obj.getReward === 'function') {
               A.busy = true;
+              A.busyAt = Date.now();
               try { obj.getReward(); aLog('Забираю личный приз'); } catch (e) { }
-              setTimeout(() => { A.busy = false; }, 2500);
+              setTimeout(() => { A.busy = false; A.busyAt = 0; }, 2500);
               return;
           }
 
           if (isQueued) {
-              setPhase('wait_fight', 'в очереди, бой в ' + (sched.fightStartTime || ''));
+              const fightAt = (data && data.schedule && data.schedule.fightStartTime) || sched.fightStartTime || '';
+              setPhase('wait_fight', 'в очереди, бой в ' + fightAt);
               if (Date.now() - A.lastNavAt > 4000) {
                   A.lastNavAt = Date.now();
                   try { await pollFightUrl(); } catch (e) { }
@@ -24937,7 +25049,11 @@ body.mw-helper-tip-on .simple-tooltip {
               return;
           }
 
-          if (cfg.autoJoin && canJoin && sched.open && isLive()) {
+          if (cfg.autoJoin && windowOpen && isLive()) {
+              if (A.joinLock || (A.joinHold && Date.now() < A.joinHold)) {
+                  setPhase('wait_window', A.windowLine);
+                  return;
+              }
               if (stats.fights >= cfg.maxFightsWeek) {
                   setPhase('cooldown', 'лимит недели');
                   aLog('Лимит боёв ' + cfg.maxFightsWeek + ' исчерпан');
@@ -24949,24 +25065,47 @@ body.mw-helper-tip-on .simple-tooltip {
                   return;
               }
               const picked = cfg.autoBuffs ? chooseBuffs(obj.boostAmounts) : (obj.selectedBuffs || []);
-              if (cfg.autoBuffs) applyBuffs(obj, picked);
+              if (cfg.autoBuffs) {
+                  applyBuffs(obj, picked);
+                  savePicked(picked);
+              }
+              A.joinLock = true;
               A.busy = true;
+              A.busyAt = Date.now();
               setPhase('joining');
               aLog('Запись: ' + picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', '));
               try {
-                  const data = await joinQueue(picked);
-                  if (data && (data.result === 1 || data.tickets != null && data.buffs)) {
-                      aLog('В очереди. Бой в ' + (data.fightStartTime || '') + '. Билетов: ' + data.tickets);
-                      tgArena('Записан. Бой в ' + (data.fightStartTime || ''));
+                  const joined = await joinQueue(picked);
+                  const queuedOk = joined && Number(joined.result) === 1 && !!(joined.fightStartTime || joined.fightStartsAt || typeof joined.tickets === 'number');
+                  if (queuedOk) {
+                      aLog('В очереди. Бой в ' + (joined.fightStartTime || '') + '. Билетов: ' + joined.tickets);
+                      tgArena('Записан. Бой в ' + (joined.fightStartTime || ''));
                       try { await pollFightUrl(); } catch (e) { }
                       setPhase('wait_fight', 'запись прошла');
+                      setTimeout(() => { A.joinLock = false; }, 20000);
                   } else {
-                      aLog('Запись не подтвердилась: ' + ((data && (data.error || data.title)) || 'пустой ответ'));
+                      let already = false;
+                      try {
+                          const again = await fetchArenaStatus(true);
+                          already = !!(again && again.queued);
+                      } catch (e) { }
+                      if (already) {
+                          aLog('Запись уже есть, второй раз не отправляю');
+                          setPhase('wait_fight', A.windowLine);
+                          setTimeout(() => { A.joinLock = false; }, 20000);
+                      } else {
+                          A.joinLock = false;
+                          A.joinHold = Date.now() + 15000;
+                          const why = (joined && (joined.error || joined.title || joined.raw)) || 'нет времени боя';
+                          aLog('Запись не подтвердилась: ' + String(why).slice(0, 80));
+                          setPhase('wait_window', A.windowLine);
+                      }
                   }
               } catch (e) {
+                  A.joinLock = false;
                   aLog('Ошибка записи: ' + e);
               }
-              setTimeout(() => { A.busy = false; }, 3000);
+              setTimeout(() => { A.busy = false; A.busyAt = 0; }, 3000);
               return;
           }
 
@@ -25006,20 +25145,31 @@ body.mw-helper-tip-on .simple-tooltip {
       async function arenaTick() {
           try {
               if (stats.weekKey !== weekKeyNow()) { stats.weekKey = weekKeyNow(); stats.wins = 0; stats.fights = 0; saveStats(); }
+              watchServerClock();
+              releaseStuckBusy();
               if (onFightPage()) { arenaFightTick(); return; }
+              let data = null;
+              try { data = await fetchArenaStatus(false); } catch (e) { data = A.server; }
+              if (isLive() && data && data.fightUrl && !/\/fight\/\d+/.test(location.pathname || '')) {
+                  aLog('Идёт бой, открываю ринг');
+                  location.href = data.fightUrl;
+                  return;
+              }
               if (await chaseFight()) return;
               if (/^\/alley\/?$/.test(location.pathname) || document.querySelector('.battle2025')) {
                   await arenaLobbyTick();
                   return;
               }
-              if (isLive() && (A.phase === 'joining' || A.phase === 'wait_fight' || A.phase === 'fighting') && Date.now() - A.lastNavAt > 12000) {
+              if (isLive() && Date.now() - A.lastNavAt > 12000) {
                   A.lastNavAt = Date.now();
-                  aLog('Возврат в Закоулки');
+                  const open = data && data.schedule && data.schedule.open;
+                  aLog(open ? 'Окно открыто, иду в Закоулки' : 'Возврат в Закоулки, жду окно записи');
                   location.href = '/alley/';
               }
           } catch (e) {
               console.error('[Арена] Ошибка тика:', e);
               A.busy = false;
+              A.busyAt = 0;
           }
       }
 
@@ -25122,6 +25272,8 @@ body.mw-helper-tip-on .simple-tooltip {
           parts.push('🎁 ' + stats.wins + '/35');
           if (isQueued) parts.push('в очереди');
           else if (canJoin) parts.push('открыто');
+          const clock = serverNowLabel();
+          if (clock) parts.push('сервер ' + clock);
           A.detail = parts.join(' · ');
           paintStatus();
       }
@@ -25168,6 +25320,9 @@ body.mw-helper-tip-on .simple-tooltip {
           e.stopPropagation();
           A.run = 'run';
           A.busy = false;
+          A.busyAt = 0;
+          A.joinLock = false;
+          A.joinHold = 0;
           A.phase = 'wait_window';
           saveRun();
           paintButtons();
@@ -25203,6 +25358,8 @@ body.mw-helper-tip-on .simple-tooltip {
           onAbort: () => {
               A.run = 'idle';
               saveRun();
+              if (A.kickTimer) { clearTimeout(A.kickTimer); A.kickTimer = 0; }
+              if (A.clockWatch) { try { A.clockWatch.disconnect(); } catch (e) { } A.clockWatch = null; }
               ModuleSessionRegistry.clearIntervals('arena');
               const p = document.getElementById('mw-arena-panel');
               if (p) p.remove();
@@ -25216,6 +25373,15 @@ body.mw-helper-tip-on .simple-tooltip {
           }
       });
       ModuleSessionRegistry.trackInterval('arena', () => { arenaTick(); }, 400, 'main');
+      const arenaStep = () => {
+          if (A.run === 'idle' && !document.getElementById('mw-arena-panel')) return;
+          arenaTick();
+          A.kickTimer = setTimeout(arenaStep, document.hidden ? 1000 : 500);
+      };
+      A.kickTimer = setTimeout(arenaStep, 500);
+      document.addEventListener('visibilitychange', () => {
+          if (!document.hidden && isLive()) arenaTick();
+      });
       arenaTick();
       aLog(A.run === 'run' ? 'Старт включён' : STRATS[cfg.strategy].title);
   };
