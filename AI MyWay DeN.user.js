@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.27
+// @version      3.28
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.10' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.11' }
     ];
 
 
@@ -24418,7 +24418,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.10 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.11 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24428,7 +24428,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.10');
+      console.log('[MODULE_arena] v2.11');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -25199,8 +25199,8 @@ body.mw-helper-tip-on .simple-tooltip {
                   return;
               }
               const picked = cfg.autoBuffs ? chooseBuffs(A.bag) : (obj.selectedBuffs || []);
-              if (cfg.autoBuffs && picked.length < 1) {
-                  aLog('Приёмы не выбраны. Без них запись не отправляю');
+              if (cfg.autoBuffs && !A.bag) {
+                  aLog('Сумку ещё не вижу, запись на следующем проходе');
                   setPhase('wait_window', A.windowLine);
                   return;
               }
@@ -25212,7 +25212,8 @@ body.mw-helper-tip-on .simple-tooltip {
               A.busy = true;
               A.busyAt = Date.now();
               setPhase('joining');
-              aLog('Запись: ' + picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', '));
+              const pickedNames = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c);
+              aLog(pickedNames.length ? ('Запись: ' + pickedNames.join(', ')) : 'Запись без приёмов: в сумке их нет');
               try {
                   const joined = await joinQueue(picked);
                   const queuedOk = joined && Number(joined.result) === 1 && !!(joined.fightStartTime || joined.fightStartsAt || typeof joined.tickets === 'number');
