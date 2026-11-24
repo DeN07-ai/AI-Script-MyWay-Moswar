@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.28
+// @version      3.29
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.11' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.12' }
     ];
 
 
@@ -24418,7 +24418,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.11 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.12 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24428,7 +24428,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.11');
+      console.log('[MODULE_arena] v2.12');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -24709,6 +24709,11 @@ body.mw-helper-tip-on .simple-tooltip {
       function hasBuff(list, num) {
           return (list || []).indexOf('arena_item' + num) >= 0;
       }
+      function fightPlanOf(buffs) {
+          if (hasBuff(buffs, 3)) return 'stubborn';
+          if (hasBuff(buffs, 6)) return 'knockout';
+          return 'bare';
+      }
       function rememberTurn(live, scanned) {
           const text = (scanned && scanned.text) || '';
           if (!text || text === live.lastLog) return;
@@ -24739,11 +24744,24 @@ body.mw-helper-tip-on .simple-tooltip {
           }
           return Object.keys(armor).length ? armor : null;
       }
+      function bareAttack(last, blocked, armor) {
+          const prefer = { 3: 0, 4: 1, 2: 2, 1: 3 };
+          const ranked = ZONES.slice().sort((a, b) => {
+              const blocks = (blocked[a.id] || 0) - (blocked[b.id] || 0);
+              if (blocks) return blocks;
+              const aa = armor && armor[a.id] != null ? armor[a.id] : 50;
+              const ab = armor && armor[b.id] != null ? armor[b.id] : 50;
+              if (aa !== ab) return aa - ab;
+              return prefer[a.id] - prefer[b.id];
+          });
+          const rest = last ? ranked.filter(z => z.id !== last) : ranked;
+          return (rest[0] || ranked[0] || ZONES[2]).id;
+      }
       function pickZones(plan, live) {
           const buffs = live.buffs || [];
-          const usePlan = live.plan || plan;
-          const stubborn = hasBuff(buffs, 3) || usePlan === 'stubborn';
-          const knockout = !stubborn && (usePlan === 'knockout' || hasBuff(buffs, 6));
+          const style = fightPlanOf(buffs);
+          const stubborn = style === 'stubborn';
+          const knockout = style === 'knockout';
           const turn = (live.attacks || []).length;
           const opp = live.opp || {};
           const blocked = live.blocked || {};
@@ -24770,10 +24788,12 @@ body.mw-helper-tip-on .simple-tooltip {
               atk = twoHits && covered ? covered.id : otherThan(weakest, last);
           } else if (stubborn && last && run < 3) {
               atk = last;
-          } else {
+          } else if (stubborn) {
               atk = otherThan(weakest, last);
+          } else {
+              atk = bareAttack(last, blocked, armor);
           }
-          return { atk: atk, def: def };
+          return { atk: atk, def: def, style: style };
       }
 
       function clockOf(sec) {
@@ -24886,6 +24906,7 @@ body.mw-helper-tip-on .simple-tooltip {
               else miss.push(BUFF_NAMES[num]);
           });
           if (!amounts) return 'Сумку ещё не вижу. Приёмы поставлю до записи.';
+          if (!chooseBuffs(amounts).length) return 'Приёмов нет. В бою бью в открытую зону и не повторяю место.';
           if (!miss.length) return 'К записи готовы 5 приёмов режима «' + strat.title + '».';
           return 'Нет в сумке: ' + miss.join(', ') + '. Возьму запас этого же режима.';
       }
@@ -25026,7 +25047,7 @@ body.mw-helper-tip-on .simple-tooltip {
           const defOk = pick.def.every(id => setBox('blindfight-defence', 'defence_' + id));
           const atkOk = setBox('blindfight-attack', 'attack_' + pick.atk);
           const zn = (id) => (ZONES.find(z => z.id === id) || {}).name || id;
-          const line = 'Ход: удар в ' + zn(pick.atk) + ', блок ' + pick.def.map(zn).join(' + ');
+          const line = (pick.style === 'bare' ? ((live.buffs && live.buffs.length) ? 'Без пробоя. ' : 'Без приёмов. ') : '') + 'Ход: удар в ' + zn(pick.atk) + ', блок ' + pick.def.map(zn).join(' + ');
           setTimeout(() => {
               const defenceCount = document.querySelectorAll('[name="blindfight-defence"]:checked').length;
               const attackCount = document.querySelectorAll('[name="blindfight-attack"]:checked').length;
@@ -25158,7 +25179,7 @@ body.mw-helper-tip-on .simple-tooltip {
               const sig = picked.join(',');
               if (picked.length && A.prepared !== sig) {
                   applyBuffs(obj, picked);
-                  savePicked(picked, (STRATS[cfg.strategy] || STRATS.rampart).plan);
+                  savePicked(picked, fightPlanOf(picked));
                   A.prepared = sig;
                   const names = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c).join(', ');
                   aLog('Приёмы для записи: ' + names + '. ' + bagReport(A.bag));
@@ -25206,7 +25227,7 @@ body.mw-helper-tip-on .simple-tooltip {
               }
               if (cfg.autoBuffs) {
                   applyBuffs(obj, picked);
-                  savePicked(picked, (STRATS[cfg.strategy] || STRATS.rampart).plan);
+                  savePicked(picked, fightPlanOf(picked));
               }
               A.joinLock = true;
               A.busy = true;
