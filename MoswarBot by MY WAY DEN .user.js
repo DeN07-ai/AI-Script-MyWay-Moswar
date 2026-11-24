@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.29
+// @version      3.30
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -573,7 +573,7 @@
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
       { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
-      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.12' }
+      { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.13' }
     ];
 
 
@@ -24418,7 +24418,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
 
   /* ==========================================================================
-     МОДУЛЬ «АРЕНА» v2.12 — бой 1на1 по живой разметке 23.11.2026
+     МОДУЛЬ «АРЕНА» v2.13 — бой 1на1 по живой разметке 23.11.2026
      Лобби: .battle2025 на /alley/. Запись: POST /fight/ buffs[].
      Ход: input.blindfight-item-input, затем groupFightMakeStep().
      Окно решения около 10 секунд («Тик-так»). Итог — слово «Победители».
@@ -24428,7 +24428,7 @@ body.mw-helper-tip-on .simple-tooltip {
           ModuleSessionRegistry.restartIntervals('arena');
           return;
       }
-      console.log('[MODULE_arena] v2.12');
+      console.log('[MODULE_arena] v2.13');
 
       const LS_CFG = 'MYWAY_ARENA_CFG_V1';
       const LS_STATS = 'MYWAY_ARENA_STATS_V1';
@@ -24565,6 +24565,8 @@ body.mw-helper-tip-on .simple-tooltip {
           joinHold: 0,
           joinLock: false,
           busyAt: 0,
+          healTrip: false,
+          healHold: 0,
           lastStatusAt: 0,
           server: null,
           kickTimer: 0,
@@ -25140,6 +25142,92 @@ body.mw-helper-tip-on .simple-tooltip {
           return false;
       }
 
+      function arenaSleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+      }
+      function arenaHp() {
+          const bar = document.getElementById('playerHpBar');
+          if (!bar) return null;
+          const width = String(bar.style.width || '').match(/(\d+)/);
+          if (width) return Number(width[1]);
+          const text = String(bar.textContent || '').match(/(\d+)\s*%/);
+          return text ? Number(text[1]) : null;
+      }
+      function healButton() {
+          return [...document.querySelectorAll('button.button, a.button, .button')].find(el => /вылечиться/i.test(el.textContent || '')) || null;
+      }
+      async function clickPlusHeal() {
+          const open = healButton();
+          if (open) {
+              open.click();
+              return true;
+          }
+          const plus = document.querySelector('i.plus-icon[onclick*="showHPAlert"]');
+          if (!plus) return false;
+          plus.click();
+          await arenaSleep(800);
+          const btn = healButton();
+          if (!btn) return false;
+          btn.click();
+          return true;
+      }
+      function healTripOn() {
+          try { return sessionStorage.getItem('MYWAY_ARENA_HEAL_V1') === '1' || sessionStorage.getItem('MYWAY_ARENA_HEAL_V1') === 'drank'; }
+          catch (e) { return false; }
+      }
+      function markHealTrip(state) {
+          A.healTrip = state !== '';
+          try {
+              if (!state) sessionStorage.removeItem('MYWAY_ARENA_HEAL_V1');
+              else sessionStorage.setItem('MYWAY_ARENA_HEAL_V1', state);
+          } catch (e) { }
+      }
+      async function raiseHpBeforeJoin(hp) {
+          if (healTripOn()) {
+              if (/^\/alley\/?$/.test(location.pathname) && Date.now() - A.lastNavAt > 8000) markHealTrip('');
+              else return false;
+          }
+          if (Date.now() < (A.healHold || 0)) {
+              setPhase('wait_window', 'Лечусь: ' + hp + '%');
+              return false;
+          }
+          aLog('Здоровье ' + hp + '%. Перед записью лечусь');
+          setPhase('wait_window', 'Лечусь: ' + hp + '%');
+          const plusWorked = await clickPlusHeal();
+          await arenaSleep(plusWorked ? 1400 : 300);
+          const nowHp = arenaHp();
+          if (nowHp == null || nowHp >= 80) {
+              if (nowHp != null) aLog('Здоровье ' + nowHp + '%. Можно записываться');
+              return true;
+          }
+          markHealTrip('1');
+          A.lastNavAt = Date.now();
+          aLog('Здоровье ' + nowHp + '%. Плюс не хватило, иду пить микстуру');
+          location.href = '/player/';
+          return false;
+      }
+      async function finishHealTrip() {
+          let drank = false;
+          try { drank = sessionStorage.getItem('MYWAY_ARENA_HEAL_V1') === 'drank'; } catch (e) { }
+          const mix = document.getElementById('inventory-mikstura-btn');
+          if (!drank && mix) {
+              markHealTrip('drank');
+              aLog('Пью микстуру');
+              mix.click();
+              await arenaSleep(1600);
+          } else if (!mix) {
+              aLog('Микстуры на персонаже нет. Пробую плюс ещё раз');
+              await clickPlusHeal();
+              await arenaSleep(1200);
+          }
+          const hp = arenaHp();
+          markHealTrip('');
+          if (hp != null && hp < 80) A.healHold = Date.now() + 20000;
+          A.lastNavAt = Date.now();
+          aLog(hp != null ? ('После лечения здоровье ' + hp + '%. Возвращаюсь в Закоулки') : 'Возвращаюсь в Закоулки');
+          location.href = '/alley/';
+      }
+
       async function arenaLobbyTick() {
           releaseStuckBusy();
           if (A.busy) return;
@@ -25218,6 +25306,11 @@ body.mw-helper-tip-on .simple-tooltip {
                   aLog('Нет билета — запись пропущена');
                   setPhase('cooldown', 'нет билета');
                   return;
+              }
+              const hp = arenaHp();
+              if (hp != null && hp < 80) {
+                  const ready = await raiseHpBeforeJoin(hp);
+                  if (!ready) return;
               }
               const picked = cfg.autoBuffs ? chooseBuffs(A.bag) : (obj.selectedBuffs || []);
               if (cfg.autoBuffs && !A.bag) {
@@ -25317,6 +25410,10 @@ body.mw-helper-tip-on .simple-tooltip {
                   return;
               }
               if (await chaseFight()) return;
+              if (isLive() && (A.healTrip || healTripOn()) && /^\/player\/?$/.test(location.pathname)) {
+                  await finishHealTrip();
+                  return;
+              }
               if (/^\/alley\/?$/.test(location.pathname) || document.querySelector('.battle2025')) {
                   await arenaLobbyTick();
                   return;
