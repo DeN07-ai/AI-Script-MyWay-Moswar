@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.34
+// @version      3.35
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -21216,6 +21216,7 @@ body.mw-helper-tip-on .simple-tooltip {
       { id: 'arena_heal', group: 'arena', menu: 'Арена: режим Лечение', done: 'Арена: Лечение', module: 'arena', select: 'arena-strategy', value: 'heal', ru: ['арена лечение'] },
       { id: 'arena_berserk', group: 'arena', menu: 'Арена: режим Берсерк', done: 'Арена: Берсерк', module: 'arena', select: 'arena-strategy', value: 'berserk', ru: ['арена берсерк'] },
       { id: 'arena_heavy', group: 'arena', menu: 'Арена: режим Запас прочности', done: 'Арена: Запас прочности', module: 'arena', select: 'arena-strategy', value: 'heavy', ru: ['арена запас'] },
+      { id: 'arena_plain', group: 'arena', menu: 'Арена: режим без усилений', done: 'Арена: без усилений', module: 'arena', select: 'arena-strategy', value: 'plain', ru: ['арена без'] },
       { id: 'arena_join', group: 'arena', menu: 'Арена: автозапись вкл или выкл', done: 'Арена: автозапись', module: 'arena', check: 'arena-cfg-autojoin', ru: ['арена запись'] },
       { id: 'arena_buffs', group: 'arena', menu: 'Арена: приёмы вкл или выкл', done: 'Арена: приёмы', module: 'arena', check: 'arena-cfg-autobuffs', ru: ['арена приёмы'] },
       { id: 'arena_prize', group: 'arena', menu: 'Арена: забирать приз вкл или выкл', done: 'Арена: приз', module: 'arena', check: 'arena-cfg-autoreward', ru: ['арена приз'] },
@@ -24879,6 +24880,13 @@ body.mw-helper-tip-on .simple-tooltip {
               reserve: [13, 2, 12],
               plan: 'stubborn',
               hint: 'На седьмой ход, если у соперника больше жизней'
+          },
+          plain: {
+              title: 'Без усилений',
+              buffs: [],
+              reserve: [],
+              plan: 'plain',
+              hint: 'В бой без приёмов. Удар ищет открытую зону и не стоит в падающей'
           }
       };
 
@@ -25204,22 +25212,32 @@ body.mw-helper-tip-on .simple-tooltip {
           }
           return Object.keys(armor).length ? armor : null;
       }
-      function bareAttack(last, blocked, armor) {
-          const prefer = { 3: 0, 4: 1, 2: 2, 1: 3 };
-          const ranked = ZONES.slice().sort((a, b) => {
-              const blocks = (blocked[a.id] || 0) - (blocked[b.id] || 0);
-              if (blocks) return blocks;
-              const aa = armor && armor[a.id] != null ? armor[a.id] : 50;
-              const ab = armor && armor[b.id] != null ? armor[b.id] : 50;
-              if (aa !== ab) return aa - ab;
-              return prefer[a.id] - prefer[b.id];
-          });
-          const rest = last ? ranked.filter(z => z.id !== last) : ranked;
-          return (rest[0] || ranked[0] || ZONES[2]).id;
+      function bareAttack(last, blocked, armor, attacks) {
+          const order = [1, 4, 2, 3];
+          let lowest = 0;
+          if (armor) {
+              lowest = order.slice().sort((a, b) => {
+                  const aa = armor[a] != null ? armor[a] : 100;
+                  const ab = armor[b] != null ? armor[b] : 100;
+                  return aa - ab;
+              })[0];
+          }
+          let pool = order.filter(id => id !== last);
+          if (!pool.length) pool = order.slice();
+          const minBlocks = Math.min.apply(null, pool.map(id => blocked[id] || 0));
+          let fresh = pool.filter(id => (blocked[id] || 0) === minBlocks);
+          if (lowest) {
+              const open = fresh.filter(id => id !== lowest);
+              if (open.length) fresh = open;
+          }
+          const seen = {};
+          (attacks || []).forEach((id, i) => { seen[id] = i; });
+          fresh.sort((a, b) => (seen[a] == null ? -1 : seen[a]) - (seen[b] == null ? -1 : seen[b]));
+          return fresh[0] || pool[0] || 4;
       }
       function pickZones(plan, live) {
           const buffs = live.buffs || [];
-          const style = fightPlanOf(buffs);
+          const style = plan === 'plain' ? 'plain' : fightPlanOf(buffs);
           const stubborn = style === 'stubborn';
           const knockout = style === 'knockout';
           const turn = (live.attacks || []).length;
@@ -25251,7 +25269,7 @@ body.mw-helper-tip-on .simple-tooltip {
           } else if (stubborn) {
               atk = otherThan(weakest, last);
           } else {
-              atk = bareAttack(last, blocked, armor);
+              atk = bareAttack(last, blocked, armor, live.attacks || []);
           }
           return { atk: atk, def: def, style: style };
       }
@@ -25275,7 +25293,7 @@ body.mw-helper-tip-on .simple-tooltip {
           const openAt = clockOf(sched.refreshAt);
           const label = sched.nextJoinLabel || (openAt ? ('сегодня в ' + openAt) : '');
           if (isQueued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
-          if (canJoin && sched.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
+          if (canJoin && sched.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + ((STRATS[cfg.strategy] || {}).plan === 'plain' ? '. Записываюсь без усилений.' : '. Беру приёмы и записываюсь.');
           const when = openAt || label;
           if (when) return nextJoinPhrase(when);
           return 'Жду расписание Арены.';
@@ -25291,7 +25309,7 @@ body.mw-helper-tip-on .simple-tooltip {
           const sch = (data && data.schedule) || {};
           const fightAt = sch.fightStartTime || clockOf(sch.fightStartsAt);
           if (data && data.queued) return 'В очереди. Бой в ' + (fightAt || 'ближайшее окно') + '.';
-          if (sch.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + '. Беру приёмы и записываюсь.';
+          if (sch.open) return 'Запись открыта' + (fightAt ? ('. Бой в ' + fightAt) : '') + ((STRATS[cfg.strategy] || {}).plan === 'plain' ? '. Записываюсь без усилений.' : '. Беру приёмы и записываюсь.');
           const when = sch.nextJoinLabel || (!sch.open ? clockOf(sch.refreshAt) : '');
           if (when) return nextJoinPhrase(when);
           return 'Жду расписание Арены.';
@@ -25357,6 +25375,7 @@ body.mw-helper-tip-on .simple-tooltip {
       }
       function bagReport(amounts) {
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          if (strat.plan === 'plain') return 'Режим без усилений. Приёмы не беру.';
           const want = strat.buffs.slice(0, 5);
           const have = [];
           const miss = [];
@@ -25373,6 +25392,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
       function chooseBuffs(amounts) {
           const strat = STRATS[cfg.strategy] || STRATS.rampart;
+          if (strat.plan === 'plain') return [];
           const order = strat.buffs.concat(strat.reserve || []);
           const picked = [];
           for (const num of order) {
@@ -25516,7 +25536,7 @@ body.mw-helper-tip-on .simple-tooltip {
           const defOk = pick.def.every(id => setBox('blindfight-defence', 'defence_' + id));
           const atkOk = setBox('blindfight-attack', 'attack_' + pick.atk);
           const zn = (id) => (ZONES.find(z => z.id === id) || {}).name || id;
-          const line = (pick.style === 'bare' ? ((live.buffs && live.buffs.length) ? 'Без пробоя. ' : 'Без приёмов. ') : '') + 'Ход: удар в ' + zn(pick.atk) + ', блок ' + pick.def.map(zn).join(' + ');
+          const line = ((pick.style === 'plain' || (pick.style === 'bare' && !(live.buffs && live.buffs.length))) ? 'Без усилений. ' : (pick.style === 'bare' ? 'Без пробоя. ' : '')) + 'Ход: удар в ' + zn(pick.atk) + ', блок ' + pick.def.map(zn).join(' + ');
           setTimeout(() => {
               const defenceCount = document.querySelectorAll('[name="blindfight-defence"]:checked').length;
               const attackCount = document.querySelectorAll('[name="blindfight-attack"]:checked').length;
@@ -25731,7 +25751,14 @@ body.mw-helper-tip-on .simple-tooltip {
 
           if (!isLive()) return;
 
-          if (cfg.autoBuffs && !isQueued) {
+          if ((STRATS[cfg.strategy] || {}).plan === 'plain' && !isQueued) {
+              if (A.prepared !== 'plain') {
+                  applyBuffs(obj, []);
+                  savePicked([], 'plain');
+                  A.prepared = 'plain';
+                  aLog('Режим без усилений: приёмы не беру.');
+              }
+          } else if (cfg.autoBuffs && !isQueued) {
               const picked = chooseBuffs(A.bag);
               const sig = picked.join(',');
               if (picked.length && A.prepared !== sig) {
@@ -25781,22 +25808,23 @@ body.mw-helper-tip-on .simple-tooltip {
                   const ready = await raiseHpBeforeJoin(hp);
                   if (!ready) return;
               }
-              const picked = cfg.autoBuffs ? chooseBuffs(A.bag) : (obj.selectedBuffs || []);
-              if (cfg.autoBuffs && !A.bag) {
+              const plainMode = (STRATS[cfg.strategy] || {}).plan === 'plain';
+              const picked = plainMode ? [] : (cfg.autoBuffs ? chooseBuffs(A.bag) : (obj.selectedBuffs || []));
+              if (cfg.autoBuffs && !plainMode && !A.bag) {
                   aLog('Сумку ещё не вижу, запись на следующем проходе');
                   setPhase('wait_window', A.windowLine);
                   return;
               }
-              if (cfg.autoBuffs) {
+              if (plainMode || cfg.autoBuffs) {
                   applyBuffs(obj, picked);
-                  savePicked(picked, fightPlanOf(picked));
+                  savePicked(picked, plainMode ? 'plain' : fightPlanOf(picked));
               }
               A.joinLock = true;
               A.busy = true;
               A.busyAt = Date.now();
               setPhase('joining');
               const pickedNames = picked.map(c => BUFF_NAMES[Number(String(c).replace('arena_item', ''))] || c);
-              aLog(pickedNames.length ? ('Запись: ' + pickedNames.join(', ')) : 'Запись без приёмов: в сумке их нет');
+              aLog(pickedNames.length ? ('Запись: ' + pickedNames.join(', ')) : 'Запись без усилений');
               try {
                   const joined = await joinQueue(picked);
                   const queuedOk = joined && Number(joined.result) === 1 && !!(joined.fightStartTime || joined.fightStartsAt || typeof joined.tickets === 'number');
