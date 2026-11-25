@@ -26,6 +26,8 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -295,6 +297,59 @@ static AXUIElementRef copyFrontmostApp(void) {
     return (AXUIElementRef)app;
 }
 
+static pid_t pidOfElement(AXUIElementRef el) {
+    pid_t got = 0;
+    if (!el) return 0;
+    if (AXUIElementGetPid(el, &got) != kAXErrorSuccess) return 0;
+    return got;
+}
+
+/* NSApplicationActivateIgnoringOtherApps = 2.
+ * AXRaise часто не делает Chrome передним, и клик по HID попадает в другое окно. */
+static void activateChrome(pid_t pid) {
+    if (pid <= 0) return;
+    Class cls = (Class)objc_getClass("NSRunningApplication");
+    if (!cls) return;
+    SEL withPid = sel_registerName("runningApplicationWithProcessIdentifier:");
+    SEL activate = sel_registerName("activateWithOptions:");
+    id (*getApp)(id, SEL, pid_t) = (id (*)(id, SEL, pid_t))objc_msgSend;
+    signed char (*doAct)(id, SEL, unsigned long) = (signed char (*)(id, SEL, unsigned long))objc_msgSend;
+    id app = getApp((id)cls, withPid, pid);
+    if (app) doAct(app, activate, 2UL);
+}
+
+static CGEventSourceRef hidSource(void) {
+    static CGEventSourceRef src = NULL;
+    if (!src) src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+    return src;
+}
+
+/* Событие в общий поток мыши. Chrome принимает его как настоящий клик
+ * только так: доставка «в процесс» до кнопки на странице не доходит. */
+static void postMouseHid(CGEventType type, CGPoint point, int clickState) {
+    CGEventRef ev = CGEventCreateMouseEvent(hidSource(), type, point, kCGMouseButtonLeft);
+    if (!ev) return;
+    if (clickState) CGEventSetIntegerValueField(ev, kCGMouseEventClickState, clickState);
+    CGEventPost(kCGHIDEventTap, ev);
+    CFRelease(ev);
+}
+
+/* Ждём, пока Chrome реально станет передним приложением.
+ * Одного AXRaise мало: событие мыши уходит тому окну, которое уже активно. */
+static int waitUntilFrontmost(pid_t want, int timeoutMs) {
+    int waited = 0;
+    if (want <= 0) return 0;
+    while (waited <= timeoutMs) {
+        AXUIElementRef front = copyFrontmostApp();
+        pid_t got = pidOfElement(front);
+        if (front) CFRelease(front);
+        if (got == want) return 1;
+        usleep(20000);
+        waited += 20;
+    }
+    return 0;
+}
+
 /* Постrealistичной цепочки в глобальных координатах + возврат курсора. */
 static void postClickChain(CGPoint target) {
     CGEventRef probe = CGEventCreate(NULL);
@@ -487,33 +542,59 @@ static int doClick(double clientX, double clientY, double dpr, double cssW, doub
         /* Запоминаем, в каком приложении работал пользователь, чтобы вернуть фокус. */
         prevApp = copyFrontmostApp();
 
-        /* Активируем окно, чтобы клик не был «съеден» сменой фокуса. */
+        /* Выводим именно процесс Chrome, а не «кто сейчас активен».
+         * Событие ниже уходит в этот процесс, даже если фокус был в другом окне. */
+        activateChrome(pid);
+        if (app) AXUIElementSetAttributeValue(app, kAXFrontmostAttribute, kCFBooleanTrue);
         AXUIElementPerformAction(win, kAXRaiseAction);
         AXUIElementSetAttributeValue(win, kAXMainAttribute, kCFBooleanTrue);
         AXUIElementSetAttributeValue(win, kAXFocusedAttribute, kCFBooleanTrue);
+        (void)waitUntilFrontmost(pid, 400);
+
+        /* После вывода окна геометрия могла сдвинуться — считаем точку заново.
+         * Если повторное чтение не удалось, остаётся уже проверенная точка. */
+        {
+            CGPoint freshOrigin;
+            CGSize freshSize;
+            if (attrPointRel(area, kAXPositionAttribute, &freshOrigin) &&
+                attrSizeRel(area, kAXSizeAttribute, &freshSize)) {
+                double freshZoomX = 1.0, freshZoomY = 1.0, freshScale;
+                CGPoint freshTarget;
+                freshScale = displayScaleForPoint(freshOrigin);
+                computeZoom(freshSize, cssW, cssH, dpr, freshScale, &freshZoomX, &freshZoomY);
+                freshTarget.x = freshOrigin.x + clientX * freshZoomX;
+                freshTarget.y = freshOrigin.y + clientY * freshZoomY;
+                if (freshTarget.x >= freshOrigin.x - 2 && freshTarget.y >= freshOrigin.y - 2 &&
+                    freshTarget.x <= freshOrigin.x + freshSize.width + 2 &&
+                    freshTarget.y <= freshOrigin.y + freshSize.height + 2) {
+                    vpOrigin = freshOrigin;
+                    vpSize = freshSize;
+                    zoomX = freshZoomX;
+                    zoomY = freshZoomY;
+                    scale = freshScale;
+                    target = freshTarget;
+                }
+            }
+        }
 
         /* Позиция курсора ДО клика — восстанавливаем после, чтобы не мешать работе. */
         CGEventRef probe = CGEventCreate(NULL);
         CGPoint saved = probe ? CGEventGetLocation(probe) : CGPointZero;
         if (probe) CFRelease(probe);
 
-        /* Цепочка «наведение → нажатие → отпускание»: без move-событий игра
-         * не собирает доказательство человеческого действия. */
-        CGEventRef move = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, target, kCGMouseButtonLeft);
-        if (move) { CGEventPost(kCGHIDEventTap, move); CFRelease(move); }
+        /* Цепочка «наведение → нажатие → отпускание» в активное окно.
+         * Доставка только в процесс Chrome страницу не нажимает:
+         * кнопка остаётся обычной, fightPending не появляется. */
+        postMouseHid(kCGEventMouseMoved, target, 0);
         usleep(30000);
-
-        CGEventRef down = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, target, kCGMouseButtonLeft);
-        if (down) { CGEventSetIntegerValueField(down, kCGMouseEventClickState, 1); CGEventPost(kCGHIDEventTap, down); CFRelease(down); }
+        postMouseHid(kCGEventLeftMouseDown, target, 1);
         usleep(80000);
-
-        CGEventRef up = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseUp, target, kCGMouseButtonLeft);
-        if (up) { CGEventSetIntegerValueField(up, kCGMouseEventClickState, 1); CGEventPost(kCGHIDEventTap, up); CFRelease(up); }
-        usleep(20000);
+        postMouseHid(kCGEventLeftMouseUp, target, 1);
+        /* Фокус не возвращаем, пока Chrome не примет отпускание кнопки. */
+        usleep(400000);
 
         /* Возврат курсора на прежнее место. */
-        CGEventRef back = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, saved, kCGMouseButtonLeft);
-        if (back) { CGEventPost(kCGHIDEventTap, back); CFRelease(back); }
+        postMouseHid(kCGEventMouseMoved, saved, 0);
 
         mode = 1;
     } else {
@@ -525,7 +606,7 @@ out:
     if (fail) {
         printf("{\"ok\":false,\"mode\":\"ax\",\"error\":\"%s\"}\n", fail);
     } else {
-        printf("{\"ok\":%s,\"mode\":\"ax\",\"viewport\":{\"x\":%.2f,\"y\":%.2f,\"w\":%.2f,\"h\":%.2f},"
+        printf("{\"ok\":%s,\"mode\":\"ax\",\"deliver\":\"hid\",\"viewport\":{\"x\":%.2f,\"y\":%.2f,\"w\":%.2f,\"h\":%.2f},"
                "\"point\":{\"x\":%.2f,\"y\":%.2f},\"zoom\":%.4f,\"scale\":%.3f,"
                "\"window\":\"%s\",\"error\":null}\n",
                mode ? "true" : "false",

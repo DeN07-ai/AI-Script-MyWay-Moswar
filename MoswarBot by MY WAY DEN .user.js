@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.30
+// @version      3.31
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -561,7 +561,7 @@
 
   const CORE_KEY = 'moswar_allinone_core_v1';
   const MODULES = [
-      { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Циклы, фарм, акционный режим и сильный босс. Старт боя — через Companion.', version: '6.19' },
+      { id: 'raids', name: 'Рейды', icon: '<img src="/@/images/obj/travelcoin.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Циклы, фарм, акционный режим и сильный босс. Старт боя — через Companion.', version: '6.27' },
       { id: 'rat', name: 'Крысопровод', icon: '🐀', desc: 'Автокрысы +акция (руда/дроп) +двойные спуски +тёмный тоннель +лабуба', version: '1.9.5' },
       { id: 'neft', name: 'Нефтепровод', icon: '⛽', desc: 'Автонефть +шникерсы+партбиллеты+акция+мини игры+патруль', version: '3.8' },
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы + одиночная', version: '1.3.21' },
@@ -3480,6 +3480,7 @@
               const chatid = document.getElementById('mw-set-chatid').value.trim();
               ADMIN.tgToken = token;
               ADMIN.tgChatId = chatid;
+              initTelegramControl();
               const span = saveSettingsBtn.querySelector('span');
               const oldText = span.textContent;
               span.textContent = 'Сохранено!';
@@ -3760,10 +3761,9 @@
   const BotModules = {
 
   raids: function() {
-      // v6.19
+      // v6.27
       if (document.getElementById('raidbot-panel')) { return; }
-      console.log('[MODULE_raids] v6.19');
-
+      console.log('[MODULE_raids] v6.27');
 
       /* ---------------- УТИЛИТЫ ---------------- */
 
@@ -3930,45 +3930,56 @@
                 return "no-button";
             }
 
-            try {
-                if (typeof btn.scrollIntoView === "function") {
-                    btn.scrollIntoView({ behavior: "instant", block: "nearest" });
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const point = await waitStableBossPoint(btn);
+                if (!point) {
+                    botLog("[BossStart] Кнопка не на экране — не кликаю мимо");
+                    return "no-button";
                 }
-            } catch (_) {}
+                btn = point.btn;
+                const clientX = point.x;
+                const clientY = point.y;
+                const dpr = Number(window.devicePixelRatio) || 1;
 
-            const rect = btn.getBoundingClientRect();
-            if (!rect || rect.width <= 0 || rect.height <= 0) {
-                botLog("[BossStart] Кнопка не имеет видимых размеров, кликать некуда");
-                return "no-button";
-            }
-
-            const clientX = Math.round(rect.left + rect.width / 2);
-            const clientY = Math.round(rect.top + rect.height / 2);
-            const dpr = Number(window.devicePixelRatio) || 1;
-
-            const state = await checkCompanion(false);
-            if (!state.clickReady) {
-                if (state.ok && isWindowsClient()) {
-                    updateUIStatus("Companion запущен, но не видит окно игры. " +
-                        "Запустите companion\\start-companion-win.bat и войдите в игру в открывшемся окне.");
-                } else {
-                    updateUIStatus("Companion недоступен — бой не запускаю. " + companionLaunchHint());
+                const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                const mark = [
+                    nonce, clientX, clientY, dpr,
+                    Math.round(window.innerWidth || 0),
+                    Math.round(window.innerHeight || 0),
+                    (document.title || "").replace(/\|/g, " ")
+                ].join("|");
+                document.documentElement.setAttribute("data-mw-click", mark);
+                document.documentElement.setAttribute("data-mw-click-result", "");
+                updateUIStatus("Жду аппаратный клик…");
+                const started = Date.now();
+                let result = "";
+                while (Date.now() - started < 8000) {
+                    result = document.documentElement.getAttribute("data-mw-click-result") || "";
+                    if (result.indexOf(nonce + ",") === 0) break;
+                    await sleep(150);
                 }
+                document.documentElement.removeAttribute("data-mw-click");
+                if (result.indexOf(nonce + ",ok") === 0) {
+                    const bits = result.split(",");
+                    botLog("[BossStart] Аппаратный клик выполнен через Companion (точка: " +
+                        (bits[2] || clientX) + "," + (bits[3] || clientY) + ")");
+                    return "ok";
+                }
+                if (result === nonce + ",off") {
+                    botLog("[BossStart] Кнопка уехала с экрана — жду, пока встанет на место");
+                    await sleep(500);
+                    btn = getBossButton() || btn;
+                    continue;
+                }
+                botLog("[BossStart] Companion не нажал кнопку: " + (result || "нет ответа"));
+                updateUIStatus(result
+                    ? "Аппаратный клик не выполнен — бой не запускаю"
+                    : "Companion не увидел клик. Перезапустите MyWay Moswar Companion.");
                 return "no-companion";
             }
-
-            const comp = await companionClick(clientX, clientY, dpr, companionHint(btn));
-            if (comp && comp.ok && comp.data && comp.data.success) {
-                botLog("[BossStart] Аппаратный клик выполнен через Companion (режим: " +
-                    comp.data.mode + ", точка: " + clientX + "," + clientY + ")");
-                return "ok";
-            }
-
-            companionState.checkedAt = 0; // следующий старт проверит статус заново
-            botLog("[BossStart] Companion отверг клик: " +
-                JSON.stringify((comp && (comp.error || comp.data)) || "нет ответа"));
-            updateUIStatus("Аппаратный клик не выполнен — бой не запускаю");
-            return "no-companion";
+            botLog("[BossStart] Кнопка так и не встала на место — бой не запускаю");
+            updateUIStatus("Кнопка уехала с экрана — бой не запускаю");
+            return "no-button";
         }
 
        /* ---------------- ULTRA SAFE HOOKS ---------------- */
@@ -4573,12 +4584,56 @@
       async function waitCountryChanged(prevCountry, timeout = 8000) {
           const start = Date.now();
           while (Date.now() - start < timeout) {
-              if (currentCountry !== prevCountry) {
-                  return true;
-              }
+              const sel = document.getElementById("travel-2-country");
+              const selId = sel ? parseInt(sel.value, 10) : NaN;
+              if (sel && selId === currentCountry && selId !== prevCountry) return true;
               await sleep(200);
           }
           return false;
+      }
+
+      /* Кнопка могла сдвинуться, пока дорисовывался футер. Клик только когда
+       * центр два замера подряд стоит на месте. */
+      async function waitStableBossPoint(btn) {
+          const start = Date.now();
+          let prev = null;
+          let stableFor = 0;
+          let scrolled = false;
+          while (Date.now() - start < 4000) {
+              const live = (btn && btn.isConnected && isAvailableBossButton(btn)) ? btn : getBossButton();
+              if (!live) {
+                  prev = null;
+                  stableFor = 0;
+                  await sleep(120);
+                  continue;
+              }
+              btn = live;
+              const rect = btn.getBoundingClientRect();
+              const inView = rect && rect.width > 20 && rect.height > 20 &&
+                  rect.top >= 8 && rect.left >= 0 &&
+                  rect.bottom <= window.innerHeight - 4 && rect.right <= window.innerWidth;
+              if (!inView) {
+                  if (!scrolled && typeof btn.scrollIntoView === "function") {
+                      try { btn.scrollIntoView({ behavior: "instant", block: "nearest" }); } catch (_) {}
+                      scrolled = true;
+                  }
+                  prev = null;
+                  stableFor = 0;
+                  await sleep(180);
+                  continue;
+              }
+              const x = Math.round(rect.left + rect.width / 2);
+              const y = Math.round(rect.top + rect.height / 2);
+              if (prev && Math.abs(prev.x - x) <= 2 && Math.abs(prev.y - y) <= 2) {
+                  stableFor += 120;
+                  if (stableFor >= 480) return { btn, x, y };
+              } else {
+                  stableFor = 0;
+              }
+              prev = { x, y };
+              await sleep(120);
+          }
+          return null;
       }
 
       /* ---------------- ДОСТУПНОСТЬ СТРАН ---------------- */
@@ -4704,6 +4759,7 @@
       async function fightAI() {
           if (!botEnabled || botPaused) return;
           if (!location.href.includes("/fight/")) return;
+          lastActionTime = Date.now();
 
           if (exitFightIfEnded()) return;
 
@@ -4777,8 +4833,14 @@
           const direct = document.querySelector('button[onclick*="startFight"]');
           if (isAvailableBossButton(direct)) return direct;
 
+          const byText = [...document.querySelectorAll("button")].find(b =>
+              isAvailableBossButton(b) && isRaidFightButton(b));
+          if (byText) return byText;
+
+          /* Кнопка модуля ИИ. Настоящий клик по ней перехватывается выше
+           * и уходит в Worldtour2.startFight. */
           return [...document.querySelectorAll("button")].find(b =>
-              isAvailableBossButton(b) && isRaidFightButton(b)) || null;
+              isAvailableBossButton(b) && /скип\s*боя/i.test((b.textContent || "").replace(/\s+/g, " "))) || null;
       }
 
       // Ожидание именно боевой кнопки (после reroll футер перерисовывается)
@@ -4884,6 +4946,8 @@
 
           if (joined.includes(RAID_FIGHT_DENIED_TEXT)) return "server_denied";
           if (joined.includes("сетев") || joined.includes("network")) return "network";
+          if (joined.includes("слишком занят")) return "busy";
+          if (detail === "click did not reach the button") return "no_click";
           if (detail === "game released start without entering fight") return "no_transition";
           return "unknown";
       }
@@ -4895,6 +4959,10 @@
                   return "сервер отклонил запуск боя";
               case "network":
                   return "сетевая ошибка запроса старта боя";
+              case "busy":
+                  return "персонаж ещё в бою";
+              case "no_click":
+                  return "клик не дошёл до кнопки";
               case "no_transition":
                   return "игра отпустила кнопку, но бой не начался";
               default:
@@ -4923,6 +4991,7 @@
       async function waitForFightStart(budgetMs) {
           const deadline = Date.now() + budgetMs;
           let btn = getBossButton();
+          let sawBusy = false;
           let releasedAt = null;
 
           while (Date.now() < deadline) {
@@ -4942,15 +5011,16 @@
               if (!btn || !btn.isConnected) btn = getBossButton() || btn;
 
               const busy = bossStartInFlight(btn);
-              if (!busy) {
-                  // Игра отпустила кнопку, но боя нет. Дожидаемся короткого grace-периода:
-                  // успешный ответ может сменить страницу чуть позже release.
+              if (busy) {
+                  sawBusy = true;
+                  releasedAt = null;
+              } else if (sawBusy) {
+                  /* Кнопка сначала занялась стартом и потом отпустила его.
+                   * Если боя так и нет — это отказ, а не «клик не дошёл». */
                   if (releasedAt === null) releasedAt = Date.now();
                   if (Date.now() - releasedAt > 2000) {
                       return { status: "rejected", detail: "game released start without entering fight" };
                   }
-              } else {
-                  releasedAt = null;
               }
 
               // Страница ушла с /travel2/ и это не бой — значит старт не состоялся,
@@ -4963,6 +5033,9 @@
           }
 
           drainRaidAlerts();
+          if (!sawBusy) {
+              return { status: "timeout", detail: "click did not reach the button" };
+          }
           return { status: "timeout", detail: "confirmation budget expired" };
       }
 
@@ -4995,32 +5068,6 @@
 
       async function startBossFight(options) {
           const allowPreReroll = options?.allowPreReroll ?? true;
-
-          if (useAIMode()) {
-              const store = getRaidStore();
-              if (!store || typeof window.pvpStartAndSkipFight !== 'function') return "rejected";
-              await waitTravelReady();
-              await humanPause(400, 900);
-              if (allowPreReroll && (mode === "cycle" || mode === "farm")) {
-                  if (useTop20 && ticketCounters.top20 >= 30) {
-                      await store.roll(true);
-                      await waitAfterReroll();
-                  }
-                  if (useRoll && ticketCounters.roll >= 30) {
-                      await store.roll(false);
-                      await waitAfterReroll();
-                  }
-              }
-              const c = store.countries?.find(x => x.id === currentCountry);
-              sessionStorage.setItem('raid_skip_pending', JSON.stringify({
-                  country: currentCountry,
-                  oldPoints: c?.currentPoints ?? 0
-              }));
-              lastFightCountry = currentCountry;
-              window.pvpStartAndSkipFight();
-              updateUIStatus("ИИ: бой запущен (страна " + currentCountry + ")");
-              return "started";
-          }
 
           await waitTravelReady();
           await humanPause(400, 900);
@@ -5162,11 +5209,17 @@
               return outcome.status;
           }
 
+          if (reason === "busy") {
+              bossStartBlockedUntil = Date.now() + 15000;
+              updateUIStatus("Персонаж ещё в бою — жду 15 с и повторю");
+              return "blocked";
+          }
+
           bossStartFailures++;
           bossStartBlockedUntil = Date.now() + 8000;
           updateUIStatus(outcome.status === "rejected"
               ? "Игра отказала в старте боя: " + raidRejectionLabel(reason)
-              : "Старт боя не подтверждён");
+              : "Старт боя не подтверждён: " + raidRejectionLabel(reason));
           return outcome.status;
       }
 
@@ -5207,14 +5260,43 @@
 
       /* ---------------- МЕЛЬДОНИЙ ---------------- */
 
-      function getBestMeldValue() {
-          const spans = document.querySelectorAll(".travel-amount.travel-amount--tugrick");
+      /* Акционный дроп — видимый блок доп. награды.
+       * Блок на экране, даже с цифрой 0: перебираем и нападаем.
+       * Блока нет — следующая страна. */
+      function getVisibleEventDrop() {
+          const blocks = document.querySelectorAll(".worldtour__footer-reward.travel2-event-drop");
           let best = 0;
-          spans.forEach(sp => {
-              const v = parseInt(sp.textContent.replace(/[^\d]/g, ""), 10);
-              if (!isNaN(v) && v > best) best = v;
+          let visible = false;
+          blocks.forEach(block => {
+              const st = window.getComputedStyle ? getComputedStyle(block) : null;
+              if (!st || st.display === "none" || st.visibility === "hidden") return;
+              visible = true;
+              block.querySelectorAll(".travel-amount.travel-amount--tugrick").forEach(sp => {
+                  const v = parseInt((sp.textContent || "").replace(/[^\d]/g, ""), 10);
+                  if (!isNaN(v) && v > best) best = v;
+              });
           });
-          return best;
+          return { visible, best };
+      }
+
+      /* Блок доп. награды приходит вместе с ответом страницы и часто
+       * появляется позже селектора. Пока его нет, это ещё не «дропа нет». */
+      async function waitForMeldDrop(timeoutMs) {
+          const limit = timeoutMs || 9000;
+          const grace = Math.min(6000, limit);
+          const start = Date.now();
+          let countrySeenAt = 0;
+          while (Date.now() - start < limit) {
+              const sel = document.getElementById("travel-2-country");
+              const selId = sel ? parseInt(sel.value, 10) : NaN;
+              const countryReady = !!(sel && selId === currentCountry);
+              if (countryReady && !countrySeenAt) countrySeenAt = Date.now();
+              const drop = getVisibleEventDrop();
+              if (countryReady && drop.visible) return drop;
+              if (countryReady && countrySeenAt && Date.now() - countrySeenAt >= grace) return drop;
+              await sleep(200);
+          }
+          return getVisibleEventDrop();
       }
 
       async function gotoNextCountryInMeld(withLoopLogic) {
@@ -5278,25 +5360,23 @@
           await waitTravelReady();
 
           updateUICountry();
-          updateUIStatus("Акционный: страна " + currentCountry);
+          updateUIStatus("Акционный: страна " + currentCountry + " — жду дроп");
 
-          // ===== ПРОВЕРКА НАГРАДЫ =====
+          const drop = await waitForMeldDrop();
+          if (!drop.visible) {
+              updateUIStatus("Акционный: дроп так и не появился в стране " + currentCountry + " — следующая страна");
+              await gotoNextCountryInMeld(true);
+              return;
+          }
+
           const offer = getOfferGlory();
           if (offer === null) {
               updateUIStatus("Акционный: нет награды в стране " + currentCountry + " — пропуск");
               await gotoNextCountryInMeld(true);
               return;
           }
-          // =============================
 
-          const spans = document.querySelectorAll(".travel-amount.travel-amount--tugrick");
-          if (spans.length === 0) {
-              updateUIStatus("Нет блока Мельдония — следующая страна");
-              await gotoNextCountryInMeld(true);
-              return;
-          }
-
-          let best = getBestMeldValue();
+          const best = drop.best;
 
           if (best >= eventThreshold) {
               updateUIStatus("Акционный " + best + " ≥ " + eventThreshold + " — бой");
@@ -5346,9 +5426,14 @@
           /* Дроп после смены противника перечитываем СРАЗУ, в этом же вызове:
            * следующая итерация mainLoop уже не делает goToCountry, но ждать
            * две секунды нет смысла — DOM после waitAfterReroll актуален. */
-          best = getBestMeldValue();
-          if (best >= eventThreshold) {
-              updateUIStatus("Акционный после смены " + best + " ≥ " + eventThreshold + " — бой");
+          const after = await waitForMeldDrop(5000);
+          if (!after.visible) {
+              updateUIStatus("Акционный: после смены дроп не виден — следующая страна");
+              await gotoNextCountryInMeld(true);
+              return;
+          }
+          if (after.best >= eventThreshold) {
+              updateUIStatus("Акционный после смены " + after.best + " ≥ " + eventThreshold + " — бой");
               await startBossFight({ allowPreReroll: false });
           }
       }
@@ -5571,7 +5656,7 @@
 
               // 1.5) Игра сама ведёт запуск боя (подтверждение ещё не завершено).
               // Не мешаем навигацией, лечением и прочими действиями — просто дожидаемся итога.
-              if (!useAIMode() && bossStartInFlight(getBossButton())) {
+              if (bossStartInFlight(getBossButton())) {
                   const pending = await waitForFightStart(12000);
                   if (pending.status === "started") {
                       fightState = "start";
@@ -5599,14 +5684,14 @@
               }
 
               // 2) Если бой закончился — выйти (только без ИИ: в ИИ боем управляет skip())
-              if (!useAIMode() && exitFightIfEnded()) {
+              if (exitFightIfEnded()) {
                   await hardPause(); // после выхода из боя даём прогрузиться
                   loopBusy = false;
                   return;
               }
 
               // 3) В бою — fightAI (только без ИИ)
-              if (!useAIMode() && location.href.includes("/fight/")) {
+              if (location.href.includes("/fight/")) {
                   await fightAI();
                   await globalPause();
                   loopBusy = false;
@@ -5821,7 +5906,8 @@
                   return;
               }
 
-              // Бой (startBossFight при ИИ использует skip() через API)
+              // Бой. И в обычном режиме, и при включённом ИИ кнопка нажимается
+              // настоящим кликом: сервер не принимает запуск без него.
               updateUIStatus("Готовлю бой: страна " + currentCountry);
               await humanPause(600, 1000);
 
@@ -5988,6 +6074,13 @@
 
       ModuleSessionRegistry.trackInterval('raids', () => {
           if (!botEnabled || botPaused) return;
+          /* Бой длиннее 30 с — это нормальная работа. Уход на кругосветку
+           * в этот момент оставляет персонажа «занятым», и следующий клик
+           * игра отклоняет: «Вы слишком заняты, чтобы драться». */
+          if (inFightNow() || fightState === "start" || fightState === "attack") {
+              lastActionTime = Date.now();
+              return;
+          }
           // Не уходить со страницы, пока игра ведёт запуск боя:
           // навигация обрывает асинхронное подтверждение старта.
           if (bossStartInFlight(getBossButton())) return;
@@ -8551,6 +8644,7 @@
                   saveFlags();
                   updateButtonsVisual();
                   setStatus("Финальный бой завершён — бот остановлен (обычный режим)");
+                  try { Utils.sendTelegram('⛽ <b>Нефтепровод:</b> финальный бой завершён, модуль остановлен'); } catch (e) {}
               }
               return;
           }
@@ -11999,6 +12093,7 @@ ${ticketsBlockHtml()}
           RT.cycles = RT.cycles || { runsDone: 0, wantRuns: null, justExited: false };
           RT.cycles.runsDone = (RT.cycles.runsDone || 0) + 1;
           log(`цикл: завершён. Всего: ${RT.cycles.runsDone}`);
+          try { Utils.sendTelegram('🕳️ <b>Подземка:</b> цикл завершён. Всего: ' + RT.cycles.runsDone); } catch (e) {}
 
           // Сброс
           RT.americaBossDefeated = false;
@@ -16964,8 +17059,9 @@ style="
     position: unset;
     background-color: transparent;
     width: 100%;
-    height: 100%;
+    height: auto;
     display: flex;
+    align-items: center;
     justify-content: center;
     gap: 8px;
   "
@@ -19812,6 +19908,7 @@ body.mw-helper-tip-on .simple-tooltip {
                   clearRun();
                   runState = null;
                   logLine('Готово');
+                  try { Utils.sendTelegram('🛒 <b>Закупка ТЦ:</b> список закуплен'); } catch (e) {}
               } else if (!aborted && left) {
                   persistRun();
               }
@@ -20939,6 +21036,8 @@ body.mw-helper-tip-on .simple-tooltip {
   // --- TELEGRAM CONTROL MODULE ---
   function initTelegramControl() {
       if (!ADMIN.tgToken || !ADMIN.tgChatId) return;
+      if (initTelegramControl.started) return;
+      initTelegramControl.started = true;
 
       const scheduledTasks = []; // { time: number, command: string, executed: bool }
 
@@ -21044,12 +21143,13 @@ body.mw-helper-tip-on .simple-tooltip {
   }
 
   function handleTgCommand(text) {
-      let rawText = text.trim();
+      let rawText = text.trim().replace(/@[A-Za-z0-9_]+/g, '');
       let parts = rawText.split(/\s+/);
       if (parts.length === 0) return;
 
       const myName = (authState.playerName || 'Unknown').toLowerCase();
       let firstWord = parts[0].toLowerCase().replace(':', '');
+      const ruCmd = ['старт','запуск','поехали','начать','стоп','остановить','хватит','пауза','включить','активировать','выключить','деактивировать','переключить','статус','инфо','помощь','команды','список','модули','пинг','обновить','перезагрузка','фуллдоп','фд','допы','таймер','план','ии','ai'];
 
       // Проверка адресата команды
       let isForMe = false;
@@ -21061,6 +21161,8 @@ body.mw-helper-tip-on .simple-tooltip {
           parts.shift(); // Убираем префикс имени
       } else if (parts[0].startsWith('/')) {
           isForMe = true; // Общая команда без обращения (выполняют все)
+      } else if (ruCmd.includes(firstWord)) {
+          isForMe = true; // Команда по-русски, без имени и без слэша
       }
 
       if (!isForMe) return;
@@ -21081,6 +21183,7 @@ body.mw-helper-tip-on .simple-tooltip {
           'выключить': '/disable', 'деактивировать': '/disable', 'disable': '/disable',
           'переключить': '/toggle', 'toggle': '/toggle',
           'статус': '/status', 'инфо': '/status', 'status': '/status',
+          'помощь': '/help', 'команды': '/help', 'help': '/help',
           'список': '/list', 'модули': '/list', 'list': '/list',
           'пинг': '/ping', 'ping': '/ping',
           'обновить': '/reload', 'перезагрузка': '/reload', 'reload': '/reload',
@@ -21092,6 +21195,7 @@ body.mw-helper-tip-on .simple-tooltip {
       const ARG_MAP = {
           // Modules
           'рейды': 'raids', 'рейд': 'raids', 'кругосветка': 'raids',
+          'арена': 'arena', 'arena': 'arena',
           'крыса': 'rat', 'крысопровод': 'rat', 'метро': 'rat',
           'нефть': 'neft', 'нефтепровод': 'neft',
           'подземка': 'dungeon', 'данж': 'dungeon',
@@ -21178,9 +21282,22 @@ body.mw-helper-tip-on .simple-tooltip {
           'flag': { start: 'flag-start', pause: 'flag-pause', stop: 'flag-stop', name: '🏳️ Автофлаг' },
           'satellite': { start: 'sat-start', stop: 'sat-stop', name: '🛰️ Спутники' },
           'tcshop': { start: 'tcshop-start', pause: 'tcshop-pause', stop: 'tcshop-stop', name: '🛒 Закупка ТЦ' },
-          'omon': { start: 'omon-start', pause: null, stop: 'omon-stop', name: '🛡 ОМОН' }
+          'omon': { start: 'omon-start', pause: null, stop: 'omon-stop', name: '🛡 ОМОН' },
+          'arena': { start: 'arena-start', pause: 'arena-pause', stop: 'arena-stop', name: '🥊 Арена' }
       };
 
+      if (cmd === '/help') return reply(
+          '📋 <b>Команды</b>\n' +
+          'пинг — проверка связи\n' +
+          'статус — что запущено\n' +
+          'список — модули и коды\n' +
+          'старт арена — также пауза и стоп\n' +
+          'старт рейды / крыса / нефть / подземка / флаг / спутники / закупка / омон\n' +
+          'включить арена — показать модуль, выключить — спрятать\n' +
+          'фуллдоп все — полный запуск\n' +
+          'таймер +10m старт флаг — отложенная команда\n' +
+          'В начале можно писать имя персонажа или «все».'
+      );
       if (cmd === '/ping') return reply(`Pong! 🤖 <b>${authState.playerName}</b> на связи.`);
       if (cmd === '/reload') { reply('🔄 Перезагружаю страницу...'); return location.reload(); }
 
@@ -21481,7 +21598,7 @@ body.mw-helper-tip-on .simple-tooltip {
               reply(`✅ Модуль <b>${moduleDef.name}</b> включен.`);
           } else {
               // Stop logic
-              const stopMap = { 'raids': 'bot-stop', 'rat': 'ratbot-stop', 'neft': 'neftbot-stop', 'dungeon': 'dg-stop', 'satellite': 'sat-stop', 'flag': 'flag-stop', 'omon': 'omon-stop' };
+              const stopMap = { 'raids': 'bot-stop', 'rat': 'ratbot-stop', 'neft': 'neftbot-stop', 'dungeon': 'dg-stop', 'satellite': 'sat-stop', 'flag': 'flag-stop', 'omon': 'omon-stop', 'arena': 'arena-stop' };
               const btnId = stopMap[modKey];
               if (btnId) { const btn = document.getElementById(btnId); if (btn) btn.click(); }
               if (modKey === 'fubugs') { const p = document.getElementById('fubugs-panel'); if (p) { const btn = p.querySelector('button'); if (btn && btn.textContent.includes('Остановить')) btn.click(); } }
@@ -21518,13 +21635,15 @@ body.mw-helper-tip-on .simple-tooltip {
           if (!btnId) return reply(`⚠️ Команда ${cmd} не поддерживается для ${cfg.name}`);
 
           const btn = document.getElementById(btnId);
-      if (btn) {
+          if (btn) {
               btn.click();
-              reply(`✅ Выполнено: <b>${cmd} ${cfg.name}</b>`);
+              return reply(`✅ Выполнено: <b>${cmd} ${cfg.name}</b>`);
           } else {
-              reply(`❌ Панель модуля <b>${cfg.name}</b> не найдена. Включите галочку в главном меню.`);
+              return reply(`❌ Панель модуля <b>${cfg.name}</b> не найдена. Включите галочку в главном меню.`);
           }
       }
+
+      return reply('Не понял команду. Напиши «помощь».');
   }
 
   // === МОДУЛЬ: ИГРА НА ВЫЛЕТ (SQUID GAME 2026) ===
@@ -24527,7 +24646,7 @@ body.mw-helper-tip-on .simple-tooltip {
           autoBuffs: true,
           strategy: 'rampart',
           maxFightsWeek: 50,
-          tgNotify: false
+          tgNotify: true
       };
       try { Object.assign(cfg, JSON.parse(localStorage.getItem(LS_CFG) || '{}')); } catch (e) { }
       if (!STRATS[cfg.strategy]) cfg.strategy = 'rampart';
@@ -25592,6 +25711,7 @@ body.mw-helper-tip-on .simple-tooltip {
           paintButtons();
           paintStatus();
           aLog('Старт. ' + (STRATS[cfg.strategy] || STRATS.rampart).title);
+          tgArena('Старт. ' + (STRATS[cfg.strategy] || STRATS.rampart).title);
           ensureArenaOpen();
           arenaTick();
       };
@@ -25603,6 +25723,7 @@ body.mw-helper-tip-on .simple-tooltip {
           paintButtons();
           paintStatus();
           aLog('Пауза. ' + A.windowLine);
+          tgArena('Пауза');
       };
       $('#arena-stop').onclick = (e) => {
           e.stopPropagation();
@@ -25613,6 +25734,7 @@ body.mw-helper-tip-on .simple-tooltip {
           paintButtons();
           paintStatus();
           aLog('Стоп');
+          tgArena('Стоп');
       };
       paintButtons();
       paintModes();

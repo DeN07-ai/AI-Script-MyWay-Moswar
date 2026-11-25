@@ -66,6 +66,7 @@ function ensureClicker() {
             '-framework', 'ApplicationServices',
             '-framework', 'CoreGraphics',
             '-framework', 'CoreFoundation',
+            '-framework', 'AppKit',
             '-Wall', '-O2', SRC_C, '-o', CLICKER,
         ], { stdio: 'pipe' });
         log('Нативный кликер готов:', CLICKER);
@@ -365,6 +366,81 @@ const server = http.createServer((req, res) => {
     send(404, { ok: false, error: 'not_found' });
 });
 
+function osascript(source) {
+    return new Promise((resolve) => {
+        execFile('osascript', ['-e', source], { timeout: 4000 }, (err, stdout) => {
+            resolve(err ? '' : String(stdout || '').trim());
+        });
+    });
+}
+
+function chromeJs(code) {
+    return osascript(
+        'tell application "Google Chrome"\n' +
+        'if (count of windows) = 0 then return ""\n' +
+        'tell active tab of front window\n' +
+        'return execute javascript "' + code + '"\n' +
+        'end tell\nend tell'
+    );
+}
+
+/* Координаты из метки успевают устареть: страница прокручивается.
+ * Перед нажатием читаем кнопку заново и не кликаем, если её не видно. */
+function readLiveBossPoint() {
+    const js = '(function(){var list=document.querySelectorAll("#content .worldtour__footer-actions button, button");var b=null;for(var i=0;i<list.length;i++){var t=(list[i].textContent||"").replace(/\\s+/g," ");if(/\\u0430\\u0442\\u0430\\u043a\\u043e\\u0432\\u0430\\u0442\\u044c/i.test(t)&&!list[i].disabled&&list[i].offsetParent){b=list[i];break;}}if(!b)return "";var r=b.getBoundingClientRect();if(r.width<20||r.height<20)return "";if(r.top<8||r.left<0||r.bottom>window.innerHeight-4||r.right>window.innerWidth)return "off";return [Math.round(r.left+r.width/2),Math.round(r.top+r.height/2),window.devicePixelRatio||1,Math.round(window.innerWidth),Math.round(window.innerHeight)].join("|");})()';
+    return chromeJs(js.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+}
+
+function writeClickResult(mark) {
+    const js = 'document.documentElement.removeAttribute(\\"data-mw-click\\");' +
+        'document.documentElement.setAttribute(\\"data-mw-click-result\\",\\"' + mark + '\\");';
+    return chromeJs(js);
+}
+
+/* Страница не ходит на 127.0.0.1: запрос туда из Chrome зависает, пока VPN
+ * выключен, и клик не отправляется. Метка на странице читается снаружи. */
+let domPollBusy = false;
+async function pollDomClick() {
+    if (!IS_MAC || domPollBusy) return;
+    domPollBusy = true;
+    try {
+        const raw = await osascript(
+            'tell application "Google Chrome"\n' +
+            'if (count of windows) = 0 then return ""\n' +
+            'tell active tab of front window\n' +
+            'return execute javascript "document.documentElement.getAttribute(\\"data-mw-click\\") || \\"\\""\n' +
+            'end tell\nend tell'
+        );
+        if (!raw || raw.indexOf('|') < 0) return;
+        const parts = raw.split('|');
+        if (parts.length < 6) return;
+        const nonce = parts[0];
+        const live = await readLiveBossPoint();
+        if (!live || live === 'off') {
+            await writeClickResult(nonce + ',off');
+            return;
+        }
+        const liveParts = live.split('|');
+        const r = await handleClick({
+            clientX: Number(liveParts[0]),
+            clientY: Number(liveParts[1]),
+            dpr: Number(liveParts[2]) || Number(parts[3]) || 2,
+            cssWidth: Number(liveParts[3]) || Number(parts[4]) || 0,
+            cssHeight: Number(liveParts[4]) || Number(parts[5]) || 0,
+            hint: parts.slice(6).join('|'),
+            url: ''
+        });
+        const mark = nonce + ',' + (r && r.success ? 'ok' : 'err') + ',' + liveParts[0] + ',' + liveParts[1];
+        await writeClickResult(mark);
+        if (r && r.success) log('✔ Клик по метке страницы');
+        else warn('Клик по метке не выполнен:', r && r.error);
+    } catch (e) {
+        warn('Опрос метки клика:', e.message);
+    } finally {
+        domPollBusy = false;
+    }
+}
+
 function main() {
     if (IS_MAC) ensureClicker();
     server.listen(PORT, '127.0.0.1', () => {
@@ -373,6 +449,7 @@ function main() {
         log(`Платформа: ${process.platform} (${process.arch})`);
         log(`Статус: http://127.0.0.1:${PORT}/status`);
         log('==================================================');
+        if (IS_MAC) setInterval(pollDomClick, 400);
     });
     server.on('error', (e) => {
         if (e.code === 'EADDRINUSE') {
