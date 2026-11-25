@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.33
+// @version      3.34
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -21156,6 +21156,231 @@ body.mw-helper-tip-on .simple-tooltip {
       } catch(e) { console.error('[MoswarBot] Update check error', e); }
   }
 
+  const TG_REMOTE = [
+      { id: 'raids_start', group: 'raids', menu: 'Запустить рейды', done: 'Рейды: старт', module: 'raids', click: 'bot-start', ru: ['рейды старт'] },
+      { id: 'raids_pause', group: 'raids', menu: 'Пауза рейдов', done: 'Рейды: пауза', module: 'raids', click: 'bot-pause', ru: ['рейды пауза'] },
+      { id: 'raids_stop', group: 'raids', menu: 'Остановить рейды', done: 'Рейды: стоп', module: 'raids', click: 'bot-stop', ru: ['рейды стоп'] },
+      { id: 'raids_cycle', group: 'raids', menu: 'Режим рейдов: циклы', done: 'Рейды: циклы', module: 'raids', radio: 'mode-cycle', ru: ['рейды циклы'] },
+      { id: 'raids_farm', group: 'raids', menu: 'Режим рейдов: фарм 100%', done: 'Рейды: фарм', module: 'raids', radio: 'mode-farm', ru: ['рейды фарм'] },
+      { id: 'raids_event', group: 'raids', menu: 'Режим рейдов: акционный', done: 'Рейды: акция', module: 'raids', radio: 'mode-meld', ru: ['рейды акция'] },
+      { id: 'raids_strong', group: 'raids', menu: 'Режим рейдов: сильный босс', done: 'Рейды: сильный босс', module: 'raids', radio: 'mode-strong', ru: ['рейды сильный'] },
+      { id: 'rat_start', group: 'rat', menu: 'Запустить крысопровод', done: 'Крысы: старт', module: 'rat', click: 'ratbot-start', ru: ['крыса старт'] },
+      { id: 'rat_pause', group: 'rat', menu: 'Пауза крысопровода', done: 'Крысы: пауза', module: 'rat', click: 'ratbot-pause', ru: ['крыса пауза'] },
+      { id: 'rat_stop', group: 'rat', menu: 'Остановить крысопровод', done: 'Крысы: стоп', module: 'rat', click: 'ratbot-stop', ru: ['крыса стоп'] },
+      { id: 'rat_normal', group: 'rat', menu: 'Крысы: обычный режим', done: 'Крысы: обычный режим', module: 'rat', radio: 'rat-mode-normal', ru: ['крыса обычный'] },
+      { id: 'rat_event', group: 'rat', menu: 'Крысы: акционный режим', done: 'Крысы: акция', module: 'rat', radio: 'rat-mode-action', ru: ['крыса акция'] },
+      { id: 'rat_dark', group: 'rat', menu: 'Крысы: темный тоннель', done: 'Крысы: темный тоннель', module: 'rat', radio: 'rat-mode-dark', ru: ['крыса тоннель'] },
+      { id: 'rat_fly', group: 'rat', menu: 'Крысы: лабуба Летучик', done: 'Крысы: Летучик переключен', module: 'rat', click: 'rat-labubu-letuchik', ru: ['крыса летучик'] },
+      { id: 'neft_start', group: 'neft', menu: 'Запустить нефтепровод', done: 'Нефть: старт', module: 'neft', click: 'neftbot-start', ru: ['нефть старт'] },
+      { id: 'neft_pause', group: 'neft', menu: 'Пауза нефтепровода', done: 'Нефть: пауза', module: 'neft', click: 'neftbot-pause', ru: ['нефть пауза'] },
+      { id: 'neft_stop', group: 'neft', menu: 'Остановить нефтепровод', done: 'Нефть: стоп', module: 'neft', click: 'neftbot-stop', ru: ['нефть стоп'] },
+      { id: 'neft_normal', group: 'neft', menu: 'Нефть: обычный режим', done: 'Нефть: обычный режим', module: 'neft', radio: 'neft-mode-normal', ru: ['нефть обычный'] },
+      { id: 'neft_event', group: 'neft', menu: 'Нефть: акционный режим', done: 'Нефть: акция', module: 'neft', radio: 'neft-mode-festive', ru: ['нефть акция'] },
+      { id: 'neft_tickets', group: 'neft', menu: 'Нефть: партбилеты вкл или выкл', done: 'Нефть: партбилеты', module: 'neft', check: 'neft-use-tickets', ru: ['нефть билеты'] },
+      { id: 'neft_snickers', group: 'neft', menu: 'Нефть: шникерсы вкл или выкл', done: 'Нефть: шникерсы', module: 'neft', check: 'neft-use-snickers', ru: ['нефть шникерс'] },
+      { id: 'neft_buba', group: 'neft', menu: 'Нефть: буба Нефтяник', done: 'Нефть: Нефтяник переключен', module: 'neft', click: 'neft-labubu-neftyanik', ru: ['нефть буба'] },
+      { id: 'dg_start', group: 'dungeon', menu: 'Запустить подземку', done: 'Подземка: старт', module: 'dungeon', click: 'dg-start', ru: ['подземка старт'] },
+      { id: 'dg_pause', group: 'dungeon', menu: 'Пауза подземки', done: 'Подземка: пауза', module: 'dungeon', click: 'dg-pause', ru: ['подземка пауза'] },
+      { id: 'dg_stop', group: 'dungeon', menu: 'Остановить подземку', done: 'Подземка: стоп', module: 'dungeon', click: 'dg-stop', ru: ['подземка стоп'] },
+      { id: 'dg_solo', group: 'dungeon', menu: 'Подземка: пойти в соло', done: 'Подземка: соло', module: 'dungeon', click: 'dg-solo-go', ru: ['подземка соло'] },
+      { id: 'dg_solo_ticket', group: 'dungeon', menu: 'Подземка: использовать соло-билет', done: 'Подземка: соло-билет', module: 'dungeon', click: 'dg-ticket-solo-use', ru: ['подземка билет соло'] },
+      { id: 'dg_group_ticket', group: 'dungeon', menu: 'Подземка: использовать групповой билет', done: 'Подземка: групповой билет', module: 'dungeon', click: 'dg-ticket-group-use', ru: ['подземка билет группа'] },
+      { id: 'flag_start', group: 'flag', menu: 'Запустить автофлаг', done: 'Флаг: старт', module: 'flag', click: 'flag-start', ru: ['флаг старт'] },
+      { id: 'flag_pause', group: 'flag', menu: 'Пауза автофлага', done: 'Флаг: пауза', module: 'flag', click: 'flag-pause', ru: ['флаг пауза'] },
+      { id: 'flag_stop', group: 'flag', menu: 'Остановить автофлаг', done: 'Флаг: стоп', module: 'flag', click: 'flag-stop', ru: ['флаг стоп'] },
+      { id: 'sat_start', group: 'satellite', menu: 'Запустить спутники', done: 'Спутники: старт', module: 'satellite', click: 'sat-start', ru: ['спутники старт'] },
+      { id: 'sat_pause', group: 'satellite', menu: 'Пауза спутников', done: 'Спутники: пауза', module: 'satellite', click: 'sat-pause', ru: ['спутники пауза'] },
+      { id: 'sat_stop', group: 'satellite', menu: 'Остановить спутники', done: 'Спутники: стоп', module: 'satellite', click: 'sat-stop', ru: ['спутники стоп'] },
+      { id: 'sat_copy', group: 'satellite', menu: 'Спутники: копировать план на все', done: 'Спутники: план скопирован', module: 'satellite', click: 'sat-copy-plan', ru: ['спутники копировать'] },
+      { id: 'sat_reset', group: 'satellite', menu: 'Спутники: сбросить план текущего', done: 'Спутники: план сброшен', module: 'satellite', click: 'sat-reset-plan', ru: ['спутники сброс'] },
+      { id: 'sat_paid', group: 'satellite', menu: 'Спутники: этот круг уже оплачен', done: 'Спутники: круг отмечен оплаченным', module: 'satellite', click: 'sat-lock-spend', ru: ['спутники оплачен'] },
+      { id: 'shop_start', group: 'tcshop', menu: 'Запустить закупку', done: 'Закупка: старт', module: 'tcshop', click: 'tcshop-start', ru: ['закупка старт'] },
+      { id: 'shop_pause', group: 'tcshop', menu: 'Пауза закупки', done: 'Закупка: пауза', module: 'tcshop', click: 'tcshop-pause', ru: ['закупка пауза'] },
+      { id: 'shop_stop', group: 'tcshop', menu: 'Остановить закупку', done: 'Закупка: стоп', module: 'tcshop', click: 'tcshop-stop', ru: ['закупка стоп'] },
+      { id: 'shop_scan', group: 'tcshop', menu: 'Закупка: считать витрину', done: 'Закупка: читаю витрину', module: 'tcshop', click: 'tcshop-scan', ru: ['закупка витрина'] },
+      { id: 'shop_mix', group: 'tcshop', menu: 'Закупка: тугрики в микстуры', done: 'Закупка: тугрики в микстуры', module: 'tcshop', click: 'tcshop-tug2mix', ru: ['закупка микстуры'] },
+      { id: 'shop_clear', group: 'tcshop', menu: 'Закупка: сбросить список', done: 'Закупка: список сброшен', module: 'tcshop', click: 'tcshop-clear', ru: ['закупка сброс'] },
+      { id: 'shop_kiosk', group: 'tcshop', menu: 'Закупка: вкладка киоск', done: 'Закупка: киоск', module: 'tcshop', click: 'tcshop-tab-pharmacy', ru: ['закупка киоск'] },
+      { id: 'shop_gifts', group: 'tcshop', menu: 'Закупка: вкладка подарки', done: 'Закупка: подарки', module: 'tcshop', click: 'tcshop-tab-gifts', ru: ['закупка подарки'] },
+      { id: 'omon_start', group: 'omon', menu: 'Запустить субботний ОМОН', done: 'ОМОН: старт', module: 'omon', click: 'omon-start', ru: ['омон старт'] },
+      { id: 'omon_stop', group: 'omon', menu: 'Остановить субботний ОМОН', done: 'ОМОН: стоп', module: 'omon', click: 'omon-stop', ru: ['омон стоп'] },
+      { id: 'arena_start', group: 'arena', menu: 'Запустить арену', done: 'Арена: старт', module: 'arena', click: 'arena-start', ru: ['арена старт'] },
+      { id: 'arena_pause', group: 'arena', menu: 'Пауза арены', done: 'Арена: пауза', module: 'arena', click: 'arena-pause', ru: ['арена пауза'] },
+      { id: 'arena_stop', group: 'arena', menu: 'Остановить арену', done: 'Арена: стоп', module: 'arena', click: 'arena-stop', ru: ['арена стоп'] },
+      { id: 'arena_rampart', group: 'arena', menu: 'Арена: режим Закалка и Таран', done: 'Арена: Закалка и Таран', module: 'arena', select: 'arena-strategy', value: 'rampart', ru: ['арена таран'] },
+      { id: 'arena_early', group: 'arena', menu: 'Арена: режим Ранний удар', done: 'Арена: Ранний удар', module: 'arena', select: 'arena-strategy', value: 'early', ru: ['арена ранний'] },
+      { id: 'arena_knockout', group: 'arena', menu: 'Арена: режим Нокаут', done: 'Арена: Нокаут', module: 'arena', select: 'arena-strategy', value: 'knockout', ru: ['арена нокаут'] },
+      { id: 'arena_fortress', group: 'arena', menu: 'Арена: режим Длинная защита', done: 'Арена: Длинная защита', module: 'arena', select: 'arena-strategy', value: 'fortress', ru: ['арена защита'] },
+      { id: 'arena_mirror', group: 'arena', menu: 'Арена: режим Зеркало', done: 'Арена: Зеркало', module: 'arena', select: 'arena-strategy', value: 'mirror', ru: ['арена зеркало'] },
+      { id: 'arena_deaf', group: 'arena', menu: 'Арена: режим Глухая оборона', done: 'Арена: Глухая оборона', module: 'arena', select: 'arena-strategy', value: 'deaf', ru: ['арена глухая'] },
+      { id: 'arena_heal', group: 'arena', menu: 'Арена: режим Лечение', done: 'Арена: Лечение', module: 'arena', select: 'arena-strategy', value: 'heal', ru: ['арена лечение'] },
+      { id: 'arena_berserk', group: 'arena', menu: 'Арена: режим Берсерк', done: 'Арена: Берсерк', module: 'arena', select: 'arena-strategy', value: 'berserk', ru: ['арена берсерк'] },
+      { id: 'arena_heavy', group: 'arena', menu: 'Арена: режим Запас прочности', done: 'Арена: Запас прочности', module: 'arena', select: 'arena-strategy', value: 'heavy', ru: ['арена запас'] },
+      { id: 'arena_join', group: 'arena', menu: 'Арена: автозапись вкл или выкл', done: 'Арена: автозапись', module: 'arena', check: 'arena-cfg-autojoin', ru: ['арена запись'] },
+      { id: 'arena_buffs', group: 'arena', menu: 'Арена: приёмы вкл или выкл', done: 'Арена: приёмы', module: 'arena', check: 'arena-cfg-autobuffs', ru: ['арена приёмы'] },
+      { id: 'arena_prize', group: 'arena', menu: 'Арена: забирать приз вкл или выкл', done: 'Арена: приз', module: 'arena', check: 'arena-cfg-autoreward', ru: ['арена приз'] },
+      { id: 'arena_notify', group: 'arena', menu: 'Арена: сообщения в Telegram вкл или выкл', done: 'Арена: уведомления', module: 'arena', check: 'arena-cfg-tg', ru: ['арена уведомления'] },
+      { id: 'bugs_start', group: 'fubugs', menu: 'Запустить Фу-Баги', done: 'Фу-Баги: старт', module: 'fubugs', bugs: 'start', ru: ['баги старт'] },
+      { id: 'bugs_stop', group: 'fubugs', menu: 'Остановить Фу-Баги', done: 'Фу-Баги: стоп', module: 'fubugs', bugs: 'stop', ru: ['баги стоп'] },
+      { id: 'squid_on', group: 'squid', menu: 'Запустить Игру на вылет', done: 'Игра на вылет: старт', module: 'squid', squid: 'on', ru: ['вылет старт'] },
+      { id: 'squid_off', group: 'squid', menu: 'Остановить Игру на вылет', done: 'Игра на вылет: стоп', module: 'squid', squid: 'off', ru: ['вылет стоп'] },
+      { id: 'fd_all', group: 'fulldope', menu: 'Фулл Доп: активировать всё', done: '', fd: 'all', ru: ['доп все'] },
+      { id: 'fd_dopes', group: 'fulldope', menu: 'Фулл Доп: все допинги', done: '', fd: 'dopes', ru: ['доп допинги'] },
+      { id: 'fd_pets', group: 'fulldope', menu: 'Фулл Доп: питомцы', done: '', fd: 'pets', ru: ['доп питомцы'] },
+      { id: 'fd_garage', group: 'fulldope', menu: 'Фулл Доп: весь гараж', done: '', fd: 'garage', ru: ['доп гараж'] },
+      { id: 'fd_air', group: 'fulldope', menu: 'Фулл Доп: воздух и вода', done: '', fd: 'garage_air', ru: ['доп воздух'] },
+      { id: 'fd_cosmo', group: 'fulldope', menu: 'Фулл Доп: космодром', done: '', fd: 'cosmo', ru: ['доп космос'] },
+      { id: 'fd_labubu', group: 'fulldope', menu: 'Фулл Доп: лабубу', done: '', fd: 'labubu', ru: ['доп лабубу'] },
+      { id: 'fd_misc', group: 'fulldope', menu: 'Фулл Доп: разное', done: '', fd: 'misc', ru: ['доп разное'] },
+      { id: 'fd_robot', group: 'fulldope', menu: 'Фулл Доп: робот', done: '', fd: 'robot', ru: ['доп робот'] },
+      { id: 'fd_cubes', group: 'fulldope', menu: 'Фулл Доп: москвополия', done: '', fd: 'moscowpoly', ru: ['доп кубики'] },
+      { id: 'fd_expert', group: 'fulldope', menu: 'Фулл Доп: диванный эксперт', done: '', fd: 'expert', ru: ['доп эксперт'] },
+      { id: 'fd_natal', group: 'fulldope', menu: 'Фулл Доп: натальная карта', done: '', fd: 'natal', ru: ['доп натальная'] }
+  ];
+  const TG_REMOTE_BY_ID = {};
+  const TG_REMOTE_PHRASE = {};
+  TG_REMOTE.forEach(item => {
+      TG_REMOTE_BY_ID[item.id] = item;
+      (item.ru || []).forEach(phrase => { TG_REMOTE_PHRASE[phrase] = item; });
+  });
+  const TG_HELP_SECTION = {
+      raids: 'raids', rat: 'rat', neft: 'neft', dungeon: 'dungeon', flag: 'flag',
+      satellite: 'satellite', tcshop: 'tcshop', omon: 'omon', arena: 'arena',
+      fubugs: 'fubugs', squid: 'squid', fulldope: 'fulldope', uluchshator: 'ai', ai: 'ai',
+      'вылет': 'squid', 'игра': 'squid'
+  };
+  const TG_HELP_TITLE = {
+      raids: 'Рейды', rat: 'Крысопровод', neft: 'Нефтепровод', dungeon: 'Подземка',
+      flag: 'Автофлаг', satellite: 'Спутники', tcshop: 'Закупка', omon: 'ОМОН',
+      arena: 'Арена', fubugs: 'Фу-Баги', squid: 'Игра на вылет', fulldope: 'Фулл Доп', ai: 'ИИ'
+  };
+  const TG_AI_LINES = [
+      'ии лечение', 'ии фарм 10', 'ии патруль 10', 'ии крыса', 'ии сникерс', 'ии одиночка',
+      'ии статы', 'ии шаурма', 'ии метро', 'ии зодиак', 'ии цыганка', 'ии сири', 'ии депс',
+      'ии пахан', 'ии противостояние', 'ии хаот', 'ии банк', 'ии оборотень', 'ии бомбила',
+      'ии заправка', 'ии поездки', 'ии самолеты', 'ии мусор', 'ии обмен', 'ии сертификаты',
+      'ии доза', 'ии смурф'
+  ];
+  function tgFindRemote(words) {
+      const head = String(words[0] || '').replace(/^\//, '');
+      if (TG_REMOTE_BY_ID[head]) return TG_REMOTE_BY_ID[head];
+      const all = words.join(' ');
+      if (TG_REMOTE_PHRASE[all]) return TG_REMOTE_PHRASE[all];
+      const three = words.slice(0, 3).join(' ');
+      if (TG_REMOTE_PHRASE[three]) return TG_REMOTE_PHRASE[three];
+      const two = words.slice(0, 2).join(' ');
+      if (TG_REMOTE_PHRASE[two]) return TG_REMOTE_PHRASE[two];
+      return null;
+  }
+  function tgFireChange(el) {
+      try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+  }
+  async function tgOpenModule(id) {
+      if (!id) return;
+      if (!getPanelEl(id)) {
+          const state = loadState();
+          state[id] = true;
+          saveState(state);
+          if (BotModules[id]) {
+              try { BotModules[id](); } catch (e) {}
+          }
+          await Utils.sleep(400);
+      }
+      try { showPanel(id); } catch (e) {}
+  }
+  function tgRemoteHelp(section) {
+      const blocks = [];
+      const pushGroup = (group) => {
+          let msg = '<b>' + (TG_HELP_TITLE[group] || group) + '</b>\n';
+          if (group === 'ai') {
+              TG_AI_LINES.forEach(line => { msg += line + '\n'; });
+              blocks.push(msg);
+              return;
+          }
+          TG_REMOTE.filter(item => item.group === group).forEach(item => {
+              msg += (item.ru && item.ru[0] ? item.ru[0] : item.id) + ' — ' + item.menu + '\n';
+          });
+          blocks.push(msg);
+      };
+      if (section) {
+          if (!TG_HELP_TITLE[section]) return ['Неизвестный раздел. Напиши: помощь арена'];
+          pushGroup(section);
+          return blocks;
+      }
+      blocks.push(
+          '📋 <b>Команды</b>\n' +
+          'Полный перечень по модулям: помощь арена, помощь рейды, помощь крыса, помощь нефть, помощь подземка, помощь флаг, помощь спутники, помощь закупка, помощь омон, помощь баги, помощь вылет, помощь фуллдоп, помощь ии\n' +
+          'Общие: пинг, статус, список, обновить, включить, выключить, таймер +10m старт флаг'
+      );
+      Object.keys(TG_HELP_TITLE).forEach(pushGroup);
+      const packed = [];
+      let buf = '';
+      blocks.forEach(part => {
+          if ((buf + '\n' + part).length > 3500) {
+              if (buf) packed.push(buf);
+              buf = part;
+          } else {
+              buf = buf ? (buf + '\n' + part) : part;
+          }
+      });
+      if (buf) packed.push(buf);
+      return packed;
+  }
+  async function tgRunRemote(item) {
+      const say = (msg) => { try { Utils.sendTelegram(msg); } catch (e) {} };
+      try {
+          if (item.module) await tgOpenModule(item.module);
+          if (item.click) {
+              const el = document.getElementById(item.click);
+              if (!el) return say('⚠️ Кнопка не найдена. Открой модуль командой: включить');
+              el.click();
+              return say('✅ ' + item.done);
+          }
+          if (item.radio) {
+              const el = document.getElementById(item.radio);
+              if (!el) return say('⚠️ Панель модуля не открыта.');
+              el.checked = true;
+              tgFireChange(el);
+              return say('✅ ' + item.done);
+          }
+          if (item.check) {
+              const el = document.getElementById(item.check);
+              if (!el) return say('⚠️ Панель модуля не открыта.');
+              el.checked = !el.checked;
+              tgFireChange(el);
+              return say('✅ ' + item.done + (el.checked ? ': включено' : ': выключено'));
+          }
+          if (item.select) {
+              const el = document.getElementById(item.select);
+              if (!el) return say('⚠️ Панель модуля не открыта.');
+              el.value = item.value;
+              tgFireChange(el);
+              return say('✅ ' + item.done);
+          }
+          if (item.bugs) {
+              const panel = document.getElementById('fubugs-panel');
+              const btn = panel && Array.from(panel.querySelectorAll('button')).find(b => /Запустить|Остановить/.test(b.textContent || ''));
+              if (!btn) return say('⚠️ Панель Фу-Багов не открыта.');
+              const running = /Остановить/.test(btn.textContent || '');
+              if (item.bugs === 'start' && running) return say('ℹ️ Фу-Баги уже запущены.');
+              if (item.bugs === 'stop' && !running) return say('ℹ️ Фу-Баги уже остановлены.');
+              btn.click();
+              return say('✅ ' + item.done);
+          }
+          if (item.squid) {
+              const btn = document.getElementById('mw-squid-toggle-btn');
+              if (!btn) return say('⚠️ Панель Игры на вылет не открыта.');
+              const running = /Остановить/.test(btn.textContent || '');
+              if (item.squid === 'on' && running) return say('ℹ️ Игра на вылет уже запущена.');
+              if (item.squid === 'off' && !running) return say('ℹ️ Игра на вылет уже остановлена.');
+              btn.click();
+              return say('✅ ' + item.done);
+          }
+      } catch (e) {
+          say('⚠️ Команда не выполнилась.');
+      }
+  }
+
   function handleTgCommand(text) {
       let rawText = text.trim().replace(/@[A-Za-z0-9_]+/g, '');
       let parts = rawText.split(/\s+/);
@@ -21220,6 +21445,8 @@ body.mw-helper-tip-on .simple-tooltip {
           'ии': 'uluchshator', 'uluchshator': 'uluchshator',
           'фуллдоп': 'fulldope', 'фд': 'fulldope', 'допы': 'fulldope', 'fulldope': 'fulldope',
           'омон': 'omon', 'субботний': 'omon',
+          'око': 'omniscience', 'провидение': 'omniscience',
+          'эксперт': 'expert', 'натальная': 'natal', 'натал': 'natal',
 
           // FD args
           'все': 'all', 'всё': 'all',
@@ -21274,6 +21501,14 @@ body.mw-helper-tip-on .simple-tooltip {
           words[1] = ARG_MAP[words[1]];
       }
 
+      const remote = tgFindRemote(words);
+      if (remote && remote.fd) {
+          words = ['/fd', remote.fd];
+      } else if (remote) {
+          tgRunRemote(remote);
+          return;
+      }
+
       const cmd = words[0];
       const arg = words[1];
       const arg2 = words.slice(2).join(' '); // Rest of the string
@@ -21294,24 +21529,17 @@ body.mw-helper-tip-on .simple-tooltip {
           'neft': { start: 'neftbot-start', pause: 'neftbot-pause', stop: 'neftbot-stop', name: '⛽ Нефтепровод' },
           'dungeon': { start: 'dg-start', pause: 'dg-pause', stop: 'dg-stop', name: '🕳️ Подземка' },
           'flag': { start: 'flag-start', pause: 'flag-pause', stop: 'flag-stop', name: '🏳️ Автофлаг' },
-          'satellite': { start: 'sat-start', stop: 'sat-stop', name: '🛰️ Спутники' },
+          'satellite': { start: 'sat-start', pause: 'sat-pause', stop: 'sat-stop', name: '🛰️ Спутники' },
           'tcshop': { start: 'tcshop-start', pause: 'tcshop-pause', stop: 'tcshop-stop', name: '🛒 Закупка ТЦ' },
           'omon': { start: 'omon-start', pause: null, stop: 'omon-stop', name: '🛡 ОМОН' },
           'arena': { start: 'arena-start', pause: 'arena-pause', stop: 'arena-stop', name: '🥊 Арена' }
       };
 
-      if (cmd === '/help') return reply(
-          '📋 <b>Команды</b>\n' +
-          'пинг — проверка связи\n' +
-          'статус — что запущено\n' +
-          'список — модули и коды\n' +
-          'старт арена — также пауза и стоп\n' +
-          'старт рейды / крыса / нефть / подземка / флаг / спутники / закупка / омон\n' +
-          'включить арена — показать модуль, выключить — спрятать\n' +
-          'фуллдоп все — полный запуск\n' +
-          'таймер +10m старт флаг — отложенная команда\n' +
-          'В начале можно писать имя персонажа или «все».'
-      );
+      if (cmd === '/help') {
+          const section = TG_HELP_SECTION[arg] || TG_HELP_SECTION[words[1]] || '';
+          tgRemoteHelp(section).forEach(part => reply(part));
+          return;
+      }
       if (cmd === '/ping') return reply(`Pong! 🤖 <b>${authState.playerName}</b> на связи.`);
       if (cmd === '/reload') { reply('🔄 Перезагружаю страницу...'); return location.reload(); }
 
