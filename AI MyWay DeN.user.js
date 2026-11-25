@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI MyWay DeN
 // @namespace    MyWay.Moswar
-// @version      3.32
+// @version      3.33
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -841,14 +841,28 @@
           };
       },
       sendTelegram: async (msg) => {
-          if (!ADMIN.tgToken || !ADMIN.tgChatId) return;
+          const token = String(ADMIN.tgToken || '').trim();
+          const chat = String(ADMIN.tgChatId || '').trim();
+          const text = String(msg || '');
+          if (!token || !chat || !text) return;
+          const url = 'https://api.telegram.org/bot' + token + '/sendMessage';
+          const post = (body) => crossFetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+              body: body
+          });
           try {
-              await crossFetch(`https://api.telegram.org/bot${ADMIN.tgToken}/sendMessage`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chat_id: ADMIN.tgChatId, text: msg, parse_mode: 'HTML' })
-              });
-          } catch (e) { console.error('TG Log Error:', e); }
+              const res = await post(new URLSearchParams({
+                  chat_id: chat,
+                  text: text,
+                  parse_mode: 'HTML'
+              }).toString());
+              if (res && res.ok) return;
+              await post(new URLSearchParams({
+                  chat_id: chat,
+                  text: text.replace(/<[^>]+>/g, '')
+              }).toString());
+          } catch (e) { console.error('TG Log Error'); }
       }
   };
 
@@ -24737,9 +24751,106 @@ body.mw-helper-tip-on .simple-tooltip {
               }
           }
       }
+      function escTg(s) {
+          return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      function tgFightKey(id) {
+          return id ? ('MYWAY_ARENA_TG_FIGHT:' + id) : '';
+      }
       function tgArena(msg) {
-          if (!cfg.tgNotify) return;
-          try { Utils.sendTelegram('🥊 <b>Арена:</b> ' + msg); } catch (e) { }
+          if (!cfg.tgNotify || !msg) return Promise.resolve();
+          try { return Utils.sendTelegram('🥊 <b>Арена</b>\n' + msg); } catch (e) { return Promise.resolve(); }
+      }
+      function saveArenaBoard(board) {
+          if (!board || (!board.place && board.tickets == null)) return;
+          try { sessionStorage.setItem('MYWAY_ARENA_BOARD_V1', JSON.stringify(board)); } catch (e) { }
+      }
+      function boardFromHtml(html) {
+          const text = String(html || '');
+          const place = (text.match(/Место:\s*<b>([^<]+)<\/b>/) || [])[1] || '';
+          const points = (text.match(/Очки:\s*<b[^>]*>([^<]+)<\/b>/) || [])[1] || '';
+          const series = (text.match(/Серия:\s*<b>([^<]+)<\/b>/) || [])[1] || '';
+          const fights = (text.match(/Бои:\s*<b>([^<]+)<\/b>/) || [])[1] || '';
+          const tickets = (text.match(/playerTicketsAmount:\s*(\d+)/) || [])[1];
+          if (!place && tickets == null) return null;
+          return {
+              place: place.trim(),
+              points: points.trim(),
+              series: series.trim(),
+              fights: fights.trim(),
+              tickets: tickets == null ? '' : tickets
+          };
+      }
+      function readArenaBoard() {
+          let board = null;
+          document.querySelectorAll('.battle2025-ratings-header-current-place').forEach(el => {
+              const t = (el.innerText || '').replace(/\s+/g, ' ');
+              const m = t.match(/Место:\s*([^\s·]+)\s*·\s*Очки:\s*([^\s·]+)\s*·\s*Серия:\s*([^\s·]+)\s*·\s*Бои:\s*(\S+)/);
+              if (!m) return;
+              board = { place: m[1], points: m[2], series: m[3], fights: m[4], tickets: '' };
+          });
+          document.querySelectorAll('.fight-ticket').forEach(el => {
+              const m = ((el.innerText || '').replace(/\s+/g, ' ').trim()).match(/(\d+)\s*билет/);
+              if (m && board) board.tickets = m[1];
+              else if (m && !board) board = { place: '', points: '', series: '', fights: '', tickets: m[1] };
+          });
+          if (board) saveArenaBoard(board);
+          return board;
+      }
+      async function arenaBoard() {
+          const live = readArenaBoard();
+          if (live && live.place) return live;
+          try {
+              const res = await fetch('/alley/', { credentials: 'same-origin', cache: 'no-store' });
+              const parsed = boardFromHtml(await res.text());
+              if (parsed && (parsed.place || parsed.tickets !== '')) {
+                  saveArenaBoard(parsed);
+                  return parsed;
+              }
+          } catch (e) { }
+          try { return JSON.parse(sessionStorage.getItem('MYWAY_ARENA_BOARD_V1') || 'null'); } catch (e) { return null; }
+      }
+      function arenaResultText(info, board) {
+          const lines = [
+              '<b>' + escTg(info.result) + '</b>',
+              escTg(info.me || 'Ты') + ' против ' + escTg(info.opp || 'соперник')
+          ];
+          if (info.pts) lines.push('Очки за бой: ' + escTg(info.pts));
+          if (info.title) lines.push('Режим: ' + escTg(info.title));
+          if (board && board.tickets !== '' && board.tickets != null) lines.push('🎫 Билеты: ' + escTg(board.tickets));
+          const bits = [];
+          if (board && board.place) bits.push('🏆 Место: ' + escTg(board.place));
+          if (board && board.points) bits.push('⭐ Очки: ' + escTg(board.points));
+          if (board && board.series !== '' && board.series != null) bits.push('🔥 Серия: ' + escTg(board.series));
+          if (board && board.fights) bits.push('⚔️ Бои: ' + escTg(board.fights));
+          if (bits.length) lines.push(bits.join(' · '));
+          return lines.join('\n');
+      }
+      let arenaTgBusy = false;
+      async function flushArenaTelegram() {
+          if (arenaTgBusy) return;
+          let pending = null;
+          try { pending = JSON.parse(sessionStorage.getItem('MYWAY_ARENA_TG_PENDING') || 'null'); } catch (e) { }
+          if (!pending || !pending.result) return;
+          const key = tgFightKey(pending.id);
+          try {
+              if (key && sessionStorage.getItem(key) === '1') {
+                  sessionStorage.removeItem('MYWAY_ARENA_TG_PENDING');
+                  return;
+              }
+          } catch (e) { }
+          arenaTgBusy = true;
+          try {
+              const board = await arenaBoard();
+              await tgArena(arenaResultText(pending, board));
+              try {
+                  if (key) sessionStorage.setItem(key, '1');
+                  sessionStorage.removeItem('MYWAY_ARENA_TG_PENDING');
+              } catch (e) { }
+          } catch (e) {
+          } finally {
+              arenaTgBusy = false;
+          }
       }
 
       function arenaStack() {
@@ -25088,11 +25199,13 @@ body.mw-helper-tip-on .simple-tooltip {
 
       function handleResult() {
           if (A.resultHandled) return;
+          const id = fightId();
+          const sentKey = tgFightKey(id);
+          try { if (sentKey && sessionStorage.getItem(sentKey) === '1') return; } catch (e) { }
           const text = (document.body.innerText || '').replace(/\s+/g, ' ');
           if (!/Победители/.test(text)) return;
           A.resultHandled = true;
           const g1 = (document.querySelector('.group1') || {}).innerText || '';
-          const g2 = (document.querySelector('.group2') || {}).innerText || '';
           let result = 'Поражение';
           if (/\(1\/1\)/.test(g1)) result = 'Победа';
           else if (/ничья/i.test(text)) result = 'Ничья';
@@ -25101,23 +25214,30 @@ body.mw-helper-tip-on .simple-tooltip {
           const wins = (text.match(/(\d+)\s*из\s*35\s*побед/) || [])[1];
           if (week) stats.fights = Number(week) || stats.fights;
           if (wins) stats.wins = Number(wins) || stats.wins;
+          const me = sideName('.group1') || 'Ты';
+          const opp = sideName('.group2') || 'соперник';
+          const title = (STRATS[cfg.strategy] || {}).title || '';
           stats.lastResult = result + (pts ? ' ' + pts : '');
           saveStats();
           rememberHistory({
-              id: fightId(),
+              id: id,
               at: new Date().toISOString(),
               result: result,
               points: pts,
               strategy: cfg.strategy,
-              me: sideName('.group1'),
-              opp: sideName('.group2'),
+              me: me,
+              opp: opp,
               log: logText().slice(0, 1500)
           });
           aLog('Итог: ' + stats.lastResult + '. Боёв за неделю: ' + stats.fights);
-          tgArena(stats.lastResult);
+          try {
+              sessionStorage.setItem('MYWAY_ARENA_TG_PENDING', JSON.stringify({
+                  id: id, result: result, pts: pts, me: me, opp: opp, title: title
+              }));
+          } catch (e) { }
+          flushArenaTelegram();
           try { sessionStorage.removeItem(LS_LIVE); } catch (e) { }
           setTimeout(() => {
-              A.resultHandled = false;
               if (!/\/alley\/?$/.test(location.pathname)) location.href = '/alley/';
               setPhase('wait_window', 'после боя');
           }, 4000);
@@ -25210,17 +25330,18 @@ body.mw-helper-tip-on .simple-tooltip {
           const btn = choiceButton();
           const text = (btn && btn.innerText) || '';
           const choosing = /Выбери/.test(text);
+          const finished = /Победители/.test(document.body.innerText || '');
           if (!choosing) A.stepSent = false;
           A.phase = 'fighting';
           A.windowLine = choosing
               ? ('Ход' + (tick != null ? (' · ' + tick) : ''))
-              : (/Победители/.test(document.body.innerText || '') ? 'Итог боя' : (tick != null ? ('Тик-так ' + tick) : 'Бой'));
+              : (finished ? 'Итог боя' : (tick != null ? ('Тик-так ' + tick) : 'Бой'));
           try { paintStatus(); } catch (e) { }
-          if (!isLive() || A.busy || A.stepSent) return;
-          if (/Победители/.test(document.body.innerText || '')) {
-              handleResult();
+          if (finished) {
+              if (isLive()) handleResult();
               return;
           }
+          if (!isLive() || A.busy || A.stepSent) return;
           if (!choosing) return;
           A.busy = true;
           A.busyAt = Date.now();
@@ -25228,6 +25349,7 @@ body.mw-helper-tip-on .simple-tooltip {
       }
 
       function syncLobbyCounters() {
+          readArenaBoard();
           const text = (document.body.innerText || '').replace(/\s+/g, ' ');
           const fights = text.match(/Бои:\s*(\d+)\s*\/\s*(\d+)/);
           const wins = text.match(/Выиграно\s+боев\s*(\d+)\s*из\s*(\d+)/i);
@@ -25517,6 +25639,7 @@ body.mw-helper-tip-on .simple-tooltip {
 
       async function arenaTick() {
           try {
+              flushArenaTelegram();
               if (stats.weekKey !== weekKeyNow()) { stats.weekKey = weekKeyNow(); stats.wins = 0; stats.fights = 0; saveStats(); }
               watchServerClock();
               releaseStuckBusy();
@@ -25550,8 +25673,98 @@ body.mw-helper-tip-on .simple-tooltip {
           }
       }
 
+      function bindArenaFrame(panel, header) {
+          const LS = 'MYWAY_ARENA_FRAME_V1';
+          panel.style.display = 'flex';
+          panel.style.flexDirection = 'column';
+          panel.style.minWidth = '300px';
+          panel.style.minHeight = '240px';
+          panel.style.maxWidth = '96vw';
+          panel.style.maxHeight = '92vh';
+          panel.style.overflow = 'hidden';
+          const body = panel.querySelector('.panel-body');
+          if (body) {
+              body.style.overflow = 'auto';
+              body.style.flex = '1 1 auto';
+              body.style.minHeight = '0';
+          }
+          try {
+              const saved = JSON.parse(localStorage.getItem(LS) || 'null');
+              if (saved && saved.w && saved.h) {
+                  panel.style.width = Math.max(300, saved.w) + 'px';
+                  panel.style.height = Math.max(240, saved.h) + 'px';
+                  panel.style.left = saved.x + 'px';
+                  panel.style.top = saved.y + 'px';
+                  panel.style.right = 'auto';
+              }
+          } catch (e) {}
+          if (!panel.querySelector('.arena-resize')) {
+              const grip = document.createElement('div');
+              grip.className = 'arena-resize';
+              grip.title = 'Изменить размер';
+              grip.style.cssText = 'position:absolute;right:2px;bottom:2px;width:18px;height:18px;cursor:nwse-resize;z-index:5;border-right:3px solid rgba(140,90,40,0.7);border-bottom:3px solid rgba(140,90,40,0.7);border-radius:0 0 14px 0;';
+              panel.appendChild(grip);
+          }
+          const grip = panel.querySelector('.arena-resize');
+          let mode = '';
+          let ox = 0, oy = 0, startW = 0, startH = 0;
+          const save = () => {
+              const r = panel.getBoundingClientRect();
+              try {
+                  localStorage.setItem(LS, JSON.stringify({
+                      x: Math.round(r.left), y: Math.round(r.top),
+                      w: Math.round(r.width), h: Math.round(r.height)
+                  }));
+              } catch (e) {}
+          };
+          header.style.cursor = 'move';
+          header.addEventListener('mousedown', (e) => {
+              if (e.button !== 0) return;
+              if (e.target.closest('.mw-panel-chrome, button, input, select, a, label, .arena-resize')) return;
+              mode = 'move';
+              const r = panel.getBoundingClientRect();
+              ox = e.clientX - r.left;
+              oy = e.clientY - r.top;
+              e.preventDefault();
+          });
+          grip.addEventListener('mousedown', (e) => {
+              if (e.button !== 0) return;
+              mode = 'size';
+              const r = panel.getBoundingClientRect();
+              ox = e.clientX;
+              oy = e.clientY;
+              startW = r.width;
+              startH = r.height;
+              panel.style.left = r.left + 'px';
+              panel.style.top = r.top + 'px';
+              panel.style.right = 'auto';
+              panel.style.width = r.width + 'px';
+              panel.style.height = r.height + 'px';
+              e.preventDefault();
+              e.stopPropagation();
+          });
+          document.addEventListener('mousemove', (e) => {
+              if (mode === 'move') {
+                  panel.style.left = (e.clientX - ox) + 'px';
+                  panel.style.top = (e.clientY - oy) + 'px';
+                  panel.style.right = 'auto';
+              } else if (mode === 'size') {
+                  const w = Math.max(300, Math.min(window.innerWidth * 0.96, startW + (e.clientX - ox)));
+                  const h = Math.max(240, Math.min(window.innerHeight * 0.92, startH + (e.clientY - oy)));
+                  panel.style.width = w + 'px';
+                  panel.style.height = h + 'px';
+              }
+          });
+          document.addEventListener('mouseup', () => {
+              if (!mode) return;
+              mode = '';
+              save();
+          });
+      }
+
       const ui = Utils.createPanel('mw-arena-panel', '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span> Арена', { moduleId: 'arena' });
       if (!ui) return;
+      bindArenaFrame(ui.panel, ui.header);
       ui.body.innerHTML = `
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button id="arena-start" class="mw-btn" style="flex:1;">▶ Старт</button>
