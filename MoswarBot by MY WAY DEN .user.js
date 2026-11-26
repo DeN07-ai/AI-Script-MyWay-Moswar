@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MoswarBot by MY WAY DEN
 // @namespace    MY WAY
-// @version      3.35
+// @version      3.36
 // @author       MyWay DeN
 // @description  Модульный скрипт для moswar.ru: рейды, крысы, нефть, подземка, флаг, спутники, ИИ, Фулл Доп, закупка ТЦ, Фу-Баги, ОМОН, Око Провидения, Арена
 // @match        https://*.moswar.ru/*
@@ -567,12 +567,12 @@
       { id: 'dungeon', name: 'Подземка', icon: '<img src="/@/images/pers/obama.png" title="">', desc: 'групповая подземка авто+циклы + одиночная', version: '1.3.21' },
       { id: 'flag', name: 'Автофлаг', icon: '<img src="/@/images/obj/flag.png">', desc: 'Автозапись на противостояние (Флаг). Перехват таймера, авто-переход в закоулки. Не мешает другим модулям.', version: '4.3' },
       { id: 'satellite', name: 'Спутники', icon: '<img src="/@/images/loc/satellite/satellite_1.png" style="width:20px;height:20px;vertical-align:middle;filter:scaleX(-1);">', desc: 'Строительство, защита меда, живая витрина', version: '3.1' },
-      { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Помощник: задания и мелочи на любой странице', version: '4.28' },
+      { id: 'uluchshator', name: 'ИИ', icon: '🧠', desc: 'Помощник: задания и мелочи на любой странице', version: '4.29' },
       { id: 'fulldope', name: 'Фулл Доп', icon: '💉', desc: 'Активация всех допов, питомцев, бонусов и запуски', version: '2.13' },
       { id: 'tcshop', name: 'Закупка ТЦ', icon: '<span class="tcshop-ico"><img class="tcshop-gun" src="/@/images/obj/fight_item/weapon102.png" alt=""><img class="tcshop-val" src="/@/images/obj/gift49.png" alt=""><img class="tcshop-pers" src="/@/images/pers/man10_eyes.gif" alt=""><img class="tcshop-mix" src="/@/images/obj/drugs4.png" alt=""><img class="tcshop-mask" src="/@/images/obj/gift75.png" alt=""></span>', desc: 'Киоск и подарки: список, сколько купить, Старт закупает план', version: '1.9' },
       { id: 'fubugs', name: 'Фу-Баги', icon: '<img src="/@/images/obj/bugquest/bag1_4.png" style="width:20px;height:20px;vertical-align:middle;">', desc: 'Автоматически открывает рюкзаки КОМП, забирает награду, нормализует баги', version: '1.0' },
       { id: 'omon', name: 'Субботний ОМОН', icon: '<img src="/@/images/pers/man119.png" style="background: transparent url(/@/images/pers/man119_eyes.gif) no-repeat center bottom; background-size: contain; width: 28px; height: 28px; object-fit: contain;">', desc: 'ОМОН + каски/орехи + fallback-способность на 61-м ходу, стеклянная панель, лог действий', version: '3.1' },
-      { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.0' },
+      { id: 'omniscience', name: 'Око Провидения', icon: '👁️', desc: 'Панель абилок при их скрытии в групповом бою', version: '1.4' },
       { id: 'arena', name: 'Арена', icon: '<span class="arena-ico"><img src="/@/images/loc/buba/bubas/103_large.png" alt=""></span>', desc: 'Старт, пауза, стоп. Запись в окно, приёмы режима, ход по таймеру.', version: '2.13' }
     ];
 
@@ -1568,6 +1568,12 @@
   html[data-mw-theme="dark"] .omni-ability-item {
     background: rgba(0,0,0,0.24) !important;
     border-color: rgba(209,148,92,0.18) !important;
+  }
+  html[data-mw-theme="dark"] .omni-ability-label {
+    color: #f3ece2 !important;
+  }
+  html[data-mw-theme="dark"] .omni-ability-label.is-fallback {
+    color: #ffca28 !important;
   }
 
   /* ---------- Спутники: тост ---------- */
@@ -18252,6 +18258,240 @@ utils_.init();
           }, 800);
       })();
 
+      // Фулл кости: только на странице питомца, пульс и счётчик пока идёт кормление
+      (function () {
+          const BONE_ST = '2549';
+          const GAP_MS = 40;
+          const CSS_ID = 'mw-pet-feed-css';
+          const LABEL = 'фулл кости';
+          let job = null;
+          let gen = 0;
+
+          function sleep(ms) {
+              return new Promise((resolve) => setTimeout(resolve, ms));
+          }
+
+          function plain(value) {
+              return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+
+          function notify(title, text) {
+              console.log('[ИИ/Кости]', title, text || '');
+              try {
+                  const w = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+                  if (typeof w.showAlert === 'function') w.showAlert(title, text || '');
+              } catch (_) {}
+          }
+
+          function injectCss() {
+              if (document.getElementById(CSS_ID)) return;
+              const style = document.createElement('style');
+              style.id = CSS_ID;
+              style.textContent = ''
+                  + '@keyframes mwPetFeedPulse{0%,100%{filter:brightness(1);box-shadow:0 0 0 0 rgba(46,204,113,.7);}'
+                  + '50%{filter:brightness(1.18);box-shadow:0 0 0 8px rgba(46,204,113,0);}}'
+                  + '.mw-pet-feed-btn.is-on{animation:mwPetFeedPulse .8s ease-in-out infinite;}'
+                  + '#mw-pet-feed-count{margin-top:4px;text-align:center;font:700 14px/1.2 Arial,sans-serif;color:#1d7a3a;}';
+              (document.head || document.documentElement).appendChild(style);
+          }
+
+          function readBones(root) {
+              const map = new Map();
+              root.querySelectorAll('img[data-st="' + BONE_ST + '"][data-id]').forEach((img) => {
+                  const id = img.getAttribute('data-id');
+                  if (!id) return;
+                  const countText = (img.parentElement && img.parentElement.querySelector('.count') || {}).textContent || '';
+                  const digits = String(countText).replace(/\D/g, '');
+                  const count = digits ? parseInt(digits, 10) : 1;
+                  if (count > (map.get(id) || 0)) map.set(id, count);
+              });
+              return [...map.entries()]
+                  .map(([id, count]) => ({ id: id, count: count }))
+                  .sort((a, b) => b.count - a.count);
+          }
+
+          function paint(el) {
+              if (!el) return;
+              const c = el.querySelector('.c');
+              if (c) c.textContent = LABEL;
+              el.classList.remove('disabled');
+          }
+
+          function feedCount() {
+              return document.getElementById('mw-pet-feed-count');
+          }
+
+          function showCount(n, visible) {
+              const box = feedCount();
+              if (!box) return;
+              if (!visible) {
+                  box.hidden = true;
+                  box.textContent = '';
+                  return;
+              }
+              box.hidden = false;
+              box.textContent = String(n);
+          }
+
+          function paintPet(petId, on) {
+              document.querySelectorAll('.pet-info [data-mw-feed="1"][data-pet="' + petId + '"]').forEach((node) => {
+                  node.classList.toggle('is-on', !!on);
+                  paint(node);
+              });
+          }
+
+          function bind(el, petId) {
+              el.dataset.mwFeed = '1';
+              el.dataset.pet = String(petId);
+              if (el.dataset.mwBound === '1') {
+                  paint(el);
+                  return;
+              }
+              el.dataset.mwBound = '1';
+              el.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClick(el);
+              });
+              paint(el);
+          }
+
+          function mountTrain() {
+              const match = location.pathname.match(/\/petarena\/train\/(\d+)/);
+              if (!match) return;
+              const row = document.querySelector('.pet-info table.buttons tr');
+              if (!row) return;
+              let btn = row.querySelector('[data-mw-feed="1"]');
+              if (!btn) {
+                  const td = document.createElement('td');
+                  btn = document.createElement('div');
+                  btn.className = 'button mw-pet-feed-btn';
+                  btn.innerHTML = '<span class="f"><i class="rl"></i><i class="bl"></i><i class="brc"></i><div class="c"></div></span>';
+                  const count = document.createElement('div');
+                  count.id = 'mw-pet-feed-count';
+                  count.hidden = true;
+                  td.appendChild(btn);
+                  td.appendChild(count);
+                  row.appendChild(td);
+              }
+              bind(btn, match[1]);
+          }
+
+          function clearVoliere() {
+              document.querySelectorAll('.mw-pet-feed').forEach((el) => el.remove());
+          }
+
+          function isNoBones(blob) {
+              return /не найден|не существует|отсутств|не хватает|недостаточно|закончил|инвентар/.test(blob);
+          }
+
+          async function feedOnce(petId, foodId) {
+              const res = await fetch('/petarena/feedpet/' + petId + '/' + foodId + '/', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: {
+                      'Accept': 'application/json, text/javascript, */*; q=0.01',
+                      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                      'X-Requested-With': 'XMLHttpRequest'
+                  },
+                  body: ''
+              });
+              const text = await res.text();
+              try { return JSON.parse(text); } catch (_) { return null; }
+          }
+
+          async function boneStacks(petId) {
+              if (location.pathname.indexOf('/petarena/train/' + petId) !== -1) {
+                  const live = readBones(document);
+                  if (live.length) return live;
+              }
+              const res = await fetch('/petarena/train/' + petId + '/', { credentials: 'include' });
+              if (!res.ok) throw new Error('страница питомца не открылась');
+              const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+              return readBones(doc);
+          }
+
+          async function onClick(el) {
+              const petId = el.dataset.pet;
+              if (!petId) return;
+              if (job && job.petId === petId) {
+                  job.stop = true;
+                  return;
+              }
+              let stacks = [];
+              try {
+                  stacks = await boneStacks(petId);
+              } catch (err) {
+                  notify(LABEL, err && err.message || 'Не удалось открыть питомца.');
+                  return;
+              }
+              if (!stacks.length) {
+                  notify(LABEL, 'Косточек нет.');
+                  return;
+              }
+              if (job) job.stop = true;
+              const my = { petId: petId, stop: false, id: ++gen };
+              job = my;
+              paintPet(petId, true);
+              showCount(0, true);
+              let eaten = 0;
+              let reason = '';
+              let detail = '';
+              let stackPos = 0;
+              while (!my.stop && job === my && stackPos < stacks.length) {
+                  const stack = stacks[stackPos];
+                  if (!stack) {
+                      stackPos++;
+                      continue;
+                  }
+                  const data = await feedOnce(petId, stack.id);
+                  if (job !== my || my.stop) break;
+                  if (!data) {
+                      reason = 'игра ответила не тем форматом';
+                      break;
+                  }
+                  const alert = data.alerts && data.alerts[0];
+                  const title = plain(alert && alert.title);
+                  const text = plain(alert && (alert.text || alert.message));
+                  const blob = (title + ' ' + text + ' ' + plain(data.error)).toLowerCase();
+                  if (/ошибка/i.test(title) || data.error) {
+                      console.log('[ИИ/Кости]', petId, title || 'ошибка', text);
+                      detail = text || title;
+                      if (isNoBones(blob)) {
+                          stackPos++;
+                          if (stackPos >= stacks.length) reason = 'кости кончились';
+                          continue;
+                      }
+                      reason = 'отказ';
+                      break;
+                  }
+                  eaten++;
+                  showCount(eaten, true);
+                  await sleep(GAP_MS);
+              }
+              if (!reason) reason = my.stop || job !== my ? 'остановлено' : 'готово';
+              paintPet(petId, false);
+              showCount(eaten, eaten > 0);
+              if (job === my) job = null;
+              else return;
+              notify(LABEL, 'Съедено костей: ' + eaten + '. ' + reason + (detail ? '. ' + detail : '') + '.');
+          }
+
+          function scan() {
+              injectCss();
+              clearVoliere();
+              mountTrain();
+          }
+
+          let timer = 0;
+          const obs = new MutationObserver(() => {
+              clearTimeout(timer);
+              timer = setTimeout(scan, 200);
+          });
+          obs.observe(document.documentElement, { childList: true, subtree: true });
+          scan();
+      })();
+
       // [MOD] Меню помощника — стиль хаба (стекло, круглые иконки)
       (function () {
           const CSS = `
@@ -24371,11 +24611,121 @@ body.mw-helper-tip-on .simple-tooltip {
       }
   };
 
+  function bindOmniscienceFrame(panel) {
+      if (!panel || panel._omniFrameBound) return;
+      panel._omniFrameBound = true;
+
+      const LS = 'MYWAY_OMNISCIENCE_FRAME_V1';
+      const MIN_W = 240;
+      const MIN_H = 160;
+      const header = panel.firstElementChild;
+      panel.style.display = 'flex';
+      panel.style.flexDirection = 'column';
+      panel.style.minWidth = MIN_W + 'px';
+      panel.style.minHeight = MIN_H + 'px';
+      panel.style.maxWidth = '96vw';
+      panel.style.maxHeight = '92vh';
+      panel.style.overflow = 'hidden';
+      const body = panel.querySelector('.panel-body');
+      if (body) {
+          body.style.overflow = 'auto';
+          body.style.flex = '1 1 auto';
+          body.style.minHeight = '0';
+      }
+      try {
+          const saved = JSON.parse(localStorage.getItem(LS) || 'null');
+          if (saved && saved.w && saved.h) {
+              panel.style.width = Math.max(MIN_W, saved.w) + 'px';
+              panel.style.height = Math.max(MIN_H, saved.h) + 'px';
+              panel.style.left = saved.x + 'px';
+              panel.style.top = saved.y + 'px';
+              panel.style.right = 'auto';
+          }
+      } catch (e) {}
+
+      let grip = panel.querySelector('.omni-resize');
+      if (!grip) {
+          grip = document.createElement('div');
+          grip.className = 'omni-resize';
+          grip.title = 'Изменить размер';
+          grip.style.cssText = 'position:absolute;right:2px;bottom:2px;width:18px;height:18px;cursor:nwse-resize;z-index:5;border-right:3px solid rgba(140,90,40,0.7);border-bottom:3px solid rgba(140,90,40,0.7);border-radius:0 0 18px 0;';
+          panel.appendChild(grip);
+      }
+
+      let mode = '';
+      let ox = 0, oy = 0, startW = 0, startH = 0;
+      const save = () => {
+          const r = panel.getBoundingClientRect();
+          try {
+              localStorage.setItem(LS, JSON.stringify({
+                  x: Math.round(r.left), y: Math.round(r.top),
+                  w: Math.round(r.width), h: Math.round(r.height)
+              }));
+          } catch (e) {}
+      };
+      const keepOnScreen = () => {
+          const r = panel.getBoundingClientRect();
+          const left = Math.min(window.innerWidth - 48, Math.max(48 - r.width, r.left));
+          const top = Math.min(window.innerHeight - 36, Math.max(0, r.top));
+          panel.style.left = left + 'px';
+          panel.style.top = top + 'px';
+          panel.style.right = 'auto';
+      };
+
+      if (header) {
+          header.style.cursor = 'move';
+          header.addEventListener('mousedown', (e) => {
+              if (e.button !== 0) return;
+              if (e.target.closest('.mw-panel-chrome, .omni-resize')) return;
+              mode = 'move';
+              const r = panel.getBoundingClientRect();
+              ox = e.clientX - r.left;
+              oy = e.clientY - r.top;
+              e.preventDefault();
+          });
+      }
+      grip.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          mode = 'size';
+          const r = panel.getBoundingClientRect();
+          ox = e.clientX;
+          oy = e.clientY;
+          startW = r.width;
+          startH = r.height;
+          panel.style.left = r.left + 'px';
+          panel.style.top = r.top + 'px';
+          panel.style.right = 'auto';
+          panel.style.width = r.width + 'px';
+          panel.style.height = r.height + 'px';
+          e.preventDefault();
+          e.stopPropagation();
+      });
+      document.addEventListener('mousemove', (e) => {
+          if (mode === 'move') {
+              panel.style.left = (e.clientX - ox) + 'px';
+              panel.style.top = (e.clientY - oy) + 'px';
+              panel.style.right = 'auto';
+          } else if (mode === 'size') {
+              const w = Math.max(MIN_W, Math.min(window.innerWidth * 0.96, startW + (e.clientX - ox)));
+              const h = Math.max(MIN_H, Math.min(window.innerHeight * 0.92, startH + (e.clientY - oy)));
+              panel.style.width = w + 'px';
+              panel.style.height = h + 'px';
+          }
+      });
+      document.addEventListener('mouseup', () => {
+          if (!mode) return;
+          mode = '';
+          keepOnScreen();
+          save();
+      });
+  }
+
   function initOmniscienceUI() {
       console.log('[Omniscience] Создание UI...');
 
       if (document.getElementById('mw-omniscience-panel')) {
           console.log('[Omniscience] Панель уже существует');
+          bindOmniscienceFrame(document.getElementById('mw-omniscience-panel'));
           ModuleSessionRegistry.restartIntervals('omniscience');
           return;
       }
@@ -24388,7 +24738,7 @@ body.mw-helper-tip-on .simple-tooltip {
               style.id = styleId;
               style.textContent = `
                   .omni-round-icon {
-                      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+                      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
                       background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
                       border-radius: 50%;
                       box-shadow: inset 0 0 8px rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.2);
@@ -24429,6 +24779,26 @@ body.mw-helper-tip-on .simple-tooltip {
                       text-align: center;
                       z-index: 5;
                   }
+                  .omni-ability-item {
+                      min-width: 0;
+                      width: 100%;
+                      padding: 1px 0;
+                  }
+                  .omni-ability-label {
+                      font-size: 9px;
+                      font-weight: 600;
+                      margin-top: 1px;
+                      text-align: center;
+                      line-height: 1.1;
+                      white-space: nowrap;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      width: 100%;
+                      color: #1a1410;
+                  }
+                  .omni-ability-label.is-fallback {
+                      color: #9a6a10;
+                  }
               `;
               document.head.appendChild(style);
           }
@@ -24449,7 +24819,7 @@ body.mw-helper-tip-on .simple-tooltip {
               display: flex;
               flex-direction: column;
               box-shadow: 0 22px 50px rgba(30,20,10,0.16), inset 0 1px 0 rgba(255,255,255,0.55);
-              cursor: move;
+              cursor: default;
               user-select: none;
               overflow: hidden;
           `;
@@ -24463,7 +24833,7 @@ body.mw-helper-tip-on .simple-tooltip {
                   </span>
               </div>
               <div class="panel-body" style="padding: 10px; overflow-y: auto; flex: 1;">
-                  <div id="omniscience-abilities" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;"></div>
+                  <div id="omniscience-abilities" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 3px 2px;"></div>
               </div>
           `;
 
@@ -24478,31 +24848,7 @@ body.mw-helper-tip-on .simple-tooltip {
           });
           console.log('[Omniscience] Панель создана');
 
-          const toggle = panel.querySelector('.toggle-btn');
-          const body = panel.querySelector('.panel-body');
-          let collapsed = false;
-
-          toggle.onclick = () => {
-              collapsed = !collapsed;
-              body.style.display = collapsed ? 'none' : 'block';
-              toggle.textContent = collapsed ? '▸' : '▾';
-          };
-
-          // Dragging logic
-          let isDragging = false, offsetX, offsetY;
-          panel.onmousedown = (e) => {
-              if (e.target.classList.contains('toggle-btn') || e.target.closest('.mw-panel-chrome')) return;
-              isDragging = true;
-              offsetX = e.clientX - panel.offsetLeft;
-              offsetY = e.clientY - panel.offsetTop;
-          };
-          document.onmousemove = (e) => {
-              if (!isDragging) return;
-              panel.style.left = (e.clientX - offsetX) + 'px';
-              panel.style.top = (e.clientY - offsetY) + 'px';
-              panel.style.right = 'auto';
-          };
-          document.onmouseup = () => isDragging = false;
+          bindOmniscienceFrame(panel);
 
           // === СЛОВАРЬ СПОСОБНОСТЕЙ (ОКО ПРОВИДЕНИЯ) ===
           const OMNISCIENCE_ABILITIES = {
@@ -24590,6 +24936,20 @@ body.mw-helper-tip-on .simple-tooltip {
               return OMNISCIENCE_ABILITIES;
           }
 
+          // Короткая подпись под иконкой. Полное имя остаётся во всплывающей подсказке.
+          function shortAbilityName(name) {
+              let s = String(name || '').replace(/\s+/g, ' ').trim();
+              s = s.replace(/\s+(?:Ультра|[IVX]{1,6})$/u, '').trim();
+              const quoted = s.match(/«([^»]+)»/);
+              if (quoted && quoted[1]) s = quoted[1].trim();
+              s = s.replace(/^(?:Призвать|Скинуть|Стать)\s+/i, '').trim();
+              if (s.length <= 9) return s;
+              const parts = s.split(' ').filter(Boolean);
+              const fit = parts.filter(part => part.length <= 9).sort((a, b) => b.length - a.length);
+              if (fit.length) return fit[0];
+              return s.slice(0, 8) + '…';
+          }
+
           // Получить имя абилки по ID
           function getAbilityName(id) {
               const abilities = getAbilitiesList();
@@ -24605,52 +24965,149 @@ body.mw-helper-tip-on .simple-tooltip {
               return null;
           }
 
+          // Блок «Стимуляторы» в текущем бою.
+          // В рейде картинка лежит внутри подписи и имеет data-id.
+          // В стенке сетка другая: номер часто только у кнопки useabl- или в groupFightSwitchHit(-2, …).
+          function stimulantRoots() {
+              const slotSel = 'input[id^="useabl-"], img[data-type="ability"], li.ability, [onclick*="groupFightSwitchHit"]';
+              const titles = [...document.querySelectorAll('.log-panel-title')].filter(el => !el.closest('#mw-omniscience-panel'));
+              const title = titles.find(el => (el.textContent || '').replace(/\s+/g, ' ').trim() === 'Стимуляторы');
+              if (!title) {
+                  const fallback = document.querySelector('.fight-slots-ability');
+                  return fallback ? [fallback] : [];
+              }
+              let box = title.parentElement;
+              while (box && box !== document.body && !box.querySelector(slotSel)) {
+                  box = box.parentElement;
+              }
+              if (box && box !== document.body && box.querySelectorAll('.log-panel-title').length <= 1) return [box];
+              if (box && box !== document.body && (box.classList.contains('fight-slots') || box.classList.contains('fight-slots-ability'))) return [box];
+              const chunks = [];
+              let node = title.nextElementSibling;
+              while (node && !(node.classList && node.classList.contains('log-panel-title'))) {
+                  chunks.push(node);
+                  node = node.nextElementSibling;
+              }
+              if (chunks.length) return chunks;
+              const fallback = document.querySelector('.fight-slots-ability');
+              return fallback ? [fallback] : [];
+          }
+
+          function imageUrl(img) {
+              if (!img || img.closest('#mw-omniscience-panel')) return '';
+              const attr = img.getAttribute('src') || '';
+              if (attr && attr.indexOf('data:') !== 0) return attr;
+              const bg = window.getComputedStyle(img).backgroundImage || '';
+              const match = bg.match(/url\(["']?([^"')]+)/);
+              return match ? match[1] : '';
+          }
+
+          function abilityFromOnclick(onclick) {
+              const text = String(onclick || '');
+              const match = text.match(/groupFightSwitchHit\(\s*-2\s*,\s*\d+\s*,\s*['"]([^'"]*)['"]\s*,\s*(-?\d+)\s*\)/);
+              if (!match) return null;
+              return { name: match[1], id: match[2] };
+          }
+
+          function collectStimulants() {
+              const found = new Map();
+              const remember = (id, name, src, input) => {
+                  id = String(id || '').trim();
+                  if (!id) return;
+                  const prev = found.get(id);
+                  if (!prev) {
+                      found.set(id, { id: id, name: name || '', src: src || '', input: input || null });
+                      return;
+                  }
+                  if (!prev.name && name) prev.name = name;
+                  if (!prev.src && src) prev.src = src;
+                  if (!prev.input && input) prev.input = input;
+              };
+
+              const roots = stimulantRoots();
+              const useablId = (input) => (input && input.id.indexOf('useabl-') === 0) ? input.id.slice('useabl-'.length) : '';
+              const scanRoot = (root) => {
+                  if (!root) return;
+                  root.querySelectorAll('input[id^="useabl-"]').forEach(input => {
+                      if (input.closest('#mw-omniscience-panel')) return;
+                      if (input.closest('.superhits-menu') && !input.closest('.fight-slots-ability, li.ability')) return;
+                      const scope = input.closest('label, li, td') || input.parentElement;
+                      const img = scope && scope.querySelector('img');
+                      remember(useablId(input), input.getAttribute('rel') || '', imageUrl(img), input);
+                  });
+                  root.querySelectorAll('img').forEach(img => {
+                      if (img.closest('#mw-omniscience-panel')) return;
+                      const scope = img.closest('label, li, td') || img.parentElement;
+                      const input = scope && scope.querySelector('input[id^="useabl-"]');
+                      const fromClick = abilityFromOnclick((input && input.getAttribute('onclick')) || (scope && scope.getAttribute('onclick')) || img.getAttribute('onclick'));
+                      const dataId = img.getAttribute('data-id') || '';
+                      const id = dataId || useablId(input) || (fromClick && fromClick.id) || '';
+                      if (!id) return;
+                      const foreign = img.getAttribute('data-type') && img.getAttribute('data-type') !== 'ability';
+                      const typed = img.getAttribute('data-type') === 'ability' || !!img.closest('li.ability, .fight-slots-ability') || !!input || !!fromClick;
+                      if (foreign && !typed) return;
+                      const name = (input && input.getAttribute('rel')) || (fromClick && fromClick.name) || '';
+                      remember(id, name, imageUrl(img), input);
+                  });
+                  root.querySelectorAll('[onclick*="groupFightSwitchHit"]').forEach(el => {
+                      if (el.closest('#mw-omniscience-panel')) return;
+                      const parsed = abilityFromOnclick(el.getAttribute('onclick'));
+                      if (!parsed) return;
+                      const holder = el.closest('label, li, td') || el;
+                      const img = holder.querySelector('img');
+                      const input = el.matches('input') ? el : holder.querySelector('input[id^="useabl-"]');
+                      remember(parsed.id, parsed.name, imageUrl(img), input);
+                  });
+              };
+
+              roots.forEach(scanRoot);
+              return [...found.values()];
+          }
+
           // Обновление абилок
           let lastAbilitiesHash = '';
+          let emptyFightLogged = false;
           const updateAbilities = () => {
               const container = document.getElementById('omniscience-abilities');
               if (!container) return;
 
-              const slots = document.querySelectorAll('.fight-slots-ability img[data-id]');
+              const slots = collectStimulants();
               if (slots.length === 0) {
+                  if (!emptyFightLogged) {
+                      emptyFightLogged = true;
+                      console.log('[Omniscience] В этом бою блок стимуляторов пуст или не найден');
+                  }
                   container.innerHTML = '';
+                  lastAbilitiesHash = '';
                   return;
               }
+              emptyFightLogged = false;
 
-              // Создаем хеш для проверки изменений
-              const currentHash = Array.from(slots).map(img => img.dataset.id).join(',');
-              if (currentHash === lastAbilitiesHash) return; // Нет изменений
+              const currentHash = slots.map(slot => slot.id + ':' + (slot.src ? '1' : '0') + ':' + (slot.name || '')).join(',');
+              if (currentHash === lastAbilitiesHash) return;
               lastAbilitiesHash = currentHash;
+              console.log('[Omniscience] Стимуляторов в бою:', slots.length);
 
-              // Очищаем и пересоздаем кнопки
               container.innerHTML = '';
 
-              slots.forEach(img => {
-                  const id = img.dataset.id;
-                  const label = img.closest('label');
-                  if (!label) return;
-                  const input = label.querySelector('input[type="radio"]');
-                  if (!input) return;
-
-                  // Пытаемся взять имя из DOM, если пустое/вопрос — берём из fallback
-                  let name = input.getAttribute('rel') || '';
+              slots.forEach(slot => {
+                  const id = slot.id;
+                  let name = slot.name || '';
                   if (!name || name === 'Абилка' || name.includes('?')) {
-                      name = getAbilityName(id) || `Абилка ${id}`;
+                      name = getAbilityName(id) || name || ('Абилка ' + id);
                   }
 
-                  const iconSrc = img.src || '';
                   const isNameFallback = (!name || name === 'Абилка' || name.includes('?'));
 
                   const btn = document.createElement('div');
                   btn.className = 'omni-ability-item';
                   btn.dataset.id = id;
-                  btn.title = name;
+                  btn.title = name && !String(name).includes('?') ? (name + ' · ' + id) : ('ID ' + id);
                   btn.style.cssText = `
                       display: flex;
                       flex-direction: column;
                       align-items: center;
                       justify-content: center;
-                      padding: 4px;
                       border-radius: 8px;
                       cursor: pointer;
                       transition: all 0.2s;
@@ -24658,13 +25115,13 @@ body.mw-helper-tip-on .simple-tooltip {
                       border: 1px solid transparent;
                   `;
 
-                  // Круглая обертка для иконки
                   const iconWrapper = document.createElement('div');
                   iconWrapper.className = 'omni-round-icon';
                   iconWrapper.style.marginBottom = '0';
 
                   const iconImg = document.createElement('img');
-                  iconImg.src = iconSrc;
+                  if (slot.src) iconImg.src = slot.src;
+                  iconImg.alt = '';
                   iconImg.style.cssText = `
                       width: 70%; height: 70%; object-fit: contain;
                       pointer-events: none;
@@ -24673,44 +25130,26 @@ body.mw-helper-tip-on .simple-tooltip {
                   iconWrapper.appendChild(iconImg);
                   btn.appendChild(iconWrapper);
 
-                  // ТЕКСТОВЫЙ ЛЕЙБЛ ПОД ИКОНКОЙ (Название + ID)
                   const labelDiv = document.createElement('div');
-                  labelDiv.style.cssText = `
-                      font-size: 10px;
-                      font-weight: 500;
-                      opacity: 0.95;
-                      margin-top: 2px;
-                      text-align: center;
-                      line-height: 1.2;
-                      word-break: break-word;
-                      max-width: 100%;
-                      color: ${isNameFallback ? '#ffca28' : '#fff'};
-                  `;
-
-                  if (name && name !== 'Абилка' && !name.includes('?')) {
-                      // Если имя известно (из DOM или словаря) — показываем его
-                      labelDiv.innerHTML = `<span style="font-weight:600;">${name}</span><br><span style="opacity:0.6; font-size:8px;">ID: ${id}</span>`;
+                  labelDiv.className = 'omni-ability-label' + (isNameFallback ? ' is-fallback' : '');
+                  if (name && name !== 'Абилка' && !String(name).includes('?')) {
+                      labelDiv.textContent = shortAbilityName(name);
                   } else {
-                      // Если имя неизвестно — показываем ID
-                      labelDiv.textContent = `ID: ${id}`;
+                      labelDiv.textContent = String(id);
                   }
                   btn.appendChild(labelDiv);
 
                   btn.onclick = () => {
-                      // Убираем выделение со всех
                       container.querySelectorAll('.omni-ability-item').forEach(item => {
                           item.classList.remove('selected');
                       });
-
-                      // Выделяем текущую
                       btn.classList.add('selected');
 
                       try {
-                          const id = btn.dataset.id;
-                          const radio = document.querySelector(`input[type="radio"][value="${id}"]`);
-                          if (radio) {
-                              radio.click();
-                              const li = radio.closest('li');
+                          const picked = document.getElementById('useabl-' + id) || slot.input;
+                          if (picked) {
+                              picked.click();
+                              const li = picked.closest('li');
                               if (li) {
                                   li.style.transition = 'all 0.3s';
                                   li.style.background = 'rgba(100, 255, 150, 0.5)';
@@ -24720,19 +25159,11 @@ body.mw-helper-tip-on .simple-tooltip {
                                       li.style.borderRadius = '';
                                   }, 1000);
                               }
-                          }
-
-                          // КЛИКАЕМ ПО КНОПКЕ ДЕЙСТВИЯ (useabl-{id})
-                          const actionBtn = document.getElementById(`useabl-${id}`);
-                          if (actionBtn) {
-                              console.log('[Omniscience] Нажимаю кнопку действия:', actionBtn);
-                              actionBtn.click();
+                              console.log('[Omniscience] Выбрана абилка:', name, id);
                           } else {
-                              console.log('[Omniscience] Кнопка действия не найдена для id:', id);
+                              console.log('[Omniscience] Кнопка абилки не найдена:', id);
                           }
-
-                          console.log('[Omniscience] Выбрана и применена абилка:', name, id);
-                      } catch(e) {
+                      } catch (e) {
                           console.error('[Omniscience] Ошибка выбора:', e);
                       }
                   };
@@ -24748,29 +25179,6 @@ body.mw-helper-tip-on .simple-tooltip {
                   console.error('[Omniscience] Ошибка обновления:', e);
               }
           }, 1500, 'main');
-
-          // Обработка клика на строку модуля в меню - сворачивание/разворачивание панели
-          const observerMenu = new MutationObserver(() => {
-              const modRow = document.querySelector('.mw-mod-row[data-id="omniscience"]');
-              if (modRow && !modRow._omniscienceBound) {
-                  modRow._omniscienceBound = true;
-                  modRow.addEventListener('click', () => {
-                      setTimeout(() => {
-                          const panel = document.getElementById('mw-omniscience-panel');
-                          if (panel) {
-                              const body = panel.querySelector('.panel-body');
-                              const toggle = panel.querySelector('.toggle-btn');
-                              if (body && toggle) {
-                                  const isHidden = body.style.display === 'none';
-                                  body.style.display = isHidden ? 'block' : 'none';
-                                  toggle.textContent = isHidden ? '▾' : '▸';
-                              }
-                          }
-                      }, 100);
-                  });
-              }
-          });
-          observerMenu.observe(document.body, { childList: true, subtree: true });
 
           console.log('[Omniscience] Модуль инициализирован успешно');
       } catch(e) {
